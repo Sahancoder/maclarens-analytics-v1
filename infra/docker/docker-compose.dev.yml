@@ -1,0 +1,117 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: maclarens-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: maclarens_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: maclarens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+
+  # MailHog - Local email testing server
+  # SMTP: localhost:1025 | Web UI: http://localhost:8025
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: maclarens-mailhog
+    ports:
+      - "1025:1025" # SMTP server
+      - "8025:8025" # Web UI
+    networks:
+      - maclarens-network
+    logging:
+      driver: "none" # Reduce log noise
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    container_name: maclarens-api
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/maclarens_analytics
+      REDIS_URL: redis://redis:6379
+
+      # App Settings
+      PYTHON_ENV: development
+      DEBUG: "true"
+      ENVIRONMENT: development
+      APP_URL: http://localhost:3000
+
+      # Auth Mode: "dev" or "entra"
+      AUTH_MODE: dev
+      JWT_SECRET: maclarens-dev-secret-change-in-production
+
+      # Email Settings
+      EMAIL_ENABLED: "true"
+      EMAIL_PROVIDER: mailhog
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_USE_TLS: "false"
+      SENDER_EMAIL: no-reply@maclarens.local
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    volumes:
+      - ../../apps/api/src:/app/src
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000/graphql
+    container_name: maclarens-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/graphql
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  maclarens-network:
+    driver: bridge

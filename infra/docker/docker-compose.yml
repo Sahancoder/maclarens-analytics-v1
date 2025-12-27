@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: maclarens-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-maclarens_analytics}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: maclarens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    container_name: maclarens-api
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-maclarens_analytics}
+      REDIS_URL: redis://redis:6379
+      
+      # App Settings
+      PYTHON_ENV: production
+      DEBUG: "false"
+      ENVIRONMENT: production
+      APP_URL: ${APP_URL:-https://your-domain.com}
+      
+      # Auth Mode: "dev" or "entra"
+      AUTH_MODE: ${AUTH_MODE:-entra}
+      JWT_SECRET: ${JWT_SECRET}
+      
+      # Microsoft Entra ID (Azure AD)
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+      
+      # Email Settings
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-true}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-graph}
+      
+      # Microsoft Graph Email
+      GRAPH_SENDER_EMAIL: ${GRAPH_SENDER_EMAIL}
+      SENDER_EMAIL: ${SENDER_EMAIL:-no-reply@yourdomain.com}
+      
+      # Optional: Resend (if using as alternative)
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-["https://your-domain.com"]}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8000/graphql}
+    container_name: maclarens-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8000/graphql}
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - maclarens-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  maclarens-network:
+    driver: bridge
+

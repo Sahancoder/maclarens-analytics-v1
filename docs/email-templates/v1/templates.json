@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "templates": {
+    "report-submitted": {
+      "subject": "[McLarens] Report Submitted - {{companyName}} - {{period}}",
+      "recipients": ["company_director"],
+      "variables": ["companyName", "period", "submittedBy", "submittedAt", "reportLink"]
+    },
+    "report-approved": {
+      "subject": "[McLarens] Report Approved - {{companyName}} - {{period}}",
+      "recipients": ["data_officer"],
+      "variables": ["companyName", "period", "approvedBy", "approvedAt", "reportLink"]
+    },
+    "report-rejected": {
+      "subject": "[McLarens] Action Required: Report Rejected - {{companyName}}",
+      "recipients": ["data_officer"],
+      "variables": ["companyName", "period", "rejectedBy", "rejectionReason", "reportLink"]
+    },
+    "comment-added": {
+      "subject": "[McLarens] New Comment on Report - {{companyName}}",
+      "recipients": ["other_party"],
+      "variables": ["companyName", "period", "commentBy", "commentText", "reportLink"]
+    }
+  }
+}
