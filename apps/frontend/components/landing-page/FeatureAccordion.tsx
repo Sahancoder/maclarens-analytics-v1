@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
+import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 
 interface FeatureItem {
   title: string;
@@ -22,7 +23,7 @@ const features: FeatureItem[] = [
   {
     title: "Multi-Level Granularity",
     description:
-      "Delivers financial insights at multiple organizational levels—company, cluster, and group—allowing users to drill down from high-level summaries to detailed company-specific performance data.",
+      "Delivers financial insights at multiple organizational levels company, cluster, and group allowing users to drill down from high level summaries to detailed company-specific performance data.",
   },
   {
     title: "Strategic Decision Support",
@@ -109,6 +110,13 @@ function AccordionItem({
 
 export function FeatureAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const { ref: titleRef, isVisible: titleVisible } = useScrollAnimation();
+  const { ref: leftRef, isVisible: leftVisible } = useScrollAnimation({
+    threshold: 0.15,
+  });
+  const { ref: rightRef, isVisible: rightVisible } = useScrollAnimation({
+    threshold: 0.15,
+  });
 
   const leftFeatures = features.slice(0, 2);
   const rightFeatures = features.slice(2, 4);
@@ -116,7 +124,14 @@ export function FeatureAccordion() {
   return (
     <section className="bg-[#0b1f3a] py-16 md:py-24 lg:py-32">
       <div className="w-full px-4 md:px-8 lg:px-16">
-        <div className="mb-10 md:mb-16">
+        <div
+          ref={titleRef}
+          className={`mb-10 md:mb-16 transition-all duration-700 ${
+            titleVisible
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-10"
+          }`}
+        >
           <h2 className="font-sansation text-3xl md:text-4xl lg:text-5xl font-bold text-white">
             Platform Capabilities
           </h2>
@@ -126,7 +141,14 @@ export function FeatureAccordion() {
         </div>
 
         <div className="grid gap-8 md:gap-12 lg:gap-20 md:grid-cols-2">
-          <div>
+          <div
+            ref={leftRef}
+            className={`transition-all duration-700 delay-200 ${
+              leftVisible
+                ? "opacity-100 translate-x-0"
+                : "opacity-0 -translate-x-10"
+            }`}
+          >
             {leftFeatures.map((feature, index) => (
               <AccordionItem
                 key={feature.title}
@@ -136,7 +158,14 @@ export function FeatureAccordion() {
               />
             ))}
           </div>
-          <div>
+          <div
+            ref={rightRef}
+            className={`transition-all duration-700 delay-300 ${
+              rightVisible
+                ? "opacity-100 translate-x-0"
+                : "opacity-0 translate-x-10"
+            }`}
+          >
             {rightFeatures.map((feature, index) => (
               <AccordionItem
                 key={feature.title}

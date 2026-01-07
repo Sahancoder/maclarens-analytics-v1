@@ -22,6 +22,7 @@ export function LoginForm({
   alternateLoginHref,
   callbackUrl = "/auth/callback",
 }: LoginFormProps) {
+  const isLocalLogin = typeof onSubmit === "function";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -106,63 +107,62 @@ export function LoginForm({
               </h1>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit}>
-              {/* Email */}
-              <div className="mb-5">
-                <label className="block text-[13px] font-medium text-gray-600 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="user@mclarens.com"
-                  className="w-full h-[46px] px-4 text-[14px] text-gray-700 bg-white border border-gray-300 rounded-md focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-gray-400"
-                  required={!!onSubmit}
-                />
-              </div>
-
-              {/* Password */}
-              <div className="mb-5">
-                <label className="block text-[13px] font-medium text-gray-600 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full h-[46px] px-4 text-[14px] text-gray-700 bg-white border border-gray-300 rounded-md focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-gray-400"
-                  required={!!onSubmit}
-                />
-              </div>
-
-              {/* Remember & Forgot */}
-              <div className="flex items-center justify-between mb-6">
-                <label className="flex items-center gap-2 cursor-pointer">
+            {isLocalLogin && (
+              <form onSubmit={handleSubmit}>
+                {/* Email */}
+                <div className="mb-5">
+                  <label className="block text-[13px] font-medium text-gray-600 mb-2">
+                    Email
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded-full border-gray-300 text-gray-400 focus:ring-0"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="user@mclarens.com"
+                    className="w-full h-[46px] px-4 text-[14px] text-gray-700 bg-white border border-gray-300 rounded-md focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-gray-400"
+                    required
                   />
-                  <span className="text-[13px] text-gray-500">Remember me</span>
-                </label>
-                <button type="button" className="text-[13px] text-emerald-500 hover:text-emerald-600">
-                  Forgot password?
-                </button>
-              </div>
-
-              {/* Error */}
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-[13px] text-red-600">{error}</p>
                 </div>
-              )}
 
-              {/* Login Button - Green (only if onSubmit provided) */}
-              {onSubmit && (
+                {/* Password */}
+                <div className="mb-5">
+                  <label className="block text-[13px] font-medium text-gray-600 mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full h-[46px] px-4 text-[14px] text-gray-700 bg-white border border-gray-300 rounded-md focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-gray-400"
+                    required
+                  />
+                </div>
+
+                {/* Remember & Forgot */}
+                <div className="flex items-center justify-between mb-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded-full border-gray-300 text-gray-400 focus:ring-0"
+                    />
+                    <span className="text-[13px] text-gray-500">Remember me</span>
+                  </label>
+                  <button type="button" className="text-[13px] text-emerald-500 hover:text-emerald-600">
+                    Forgot password?
+                  </button>
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-[13px] text-red-600">{error}</p>
+                  </div>
+                )}
+
+                {/* Login Button - Green (only if onSubmit provided) */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -170,19 +170,32 @@ export function LoginForm({
                 >
                   {loading ? "Signing in..." : "Login now"}
                 </button>
-              )}
+              </form>
+            )}
 
-              {/* Microsoft Login - Dark Gray */}
-              <button
-                type="button"
-                onClick={handleMicrosoftLogin}
-                disabled={microsoftLoading}
-                className="w-full h-[46px] bg-[#3f3f46] text-white text-[14px] font-medium rounded-md hover:bg-[#27272a] transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                <MicrosoftIcon />
-                <span>{microsoftLoading ? "Redirecting..." : "Sign in with Microsoft"}</span>
-              </button>
-            </form>
+            {!isLocalLogin && (
+              <p className="text-[13px] text-gray-500 mb-4">
+                Use your McLarens Microsoft account to continue.
+              </p>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-[13px] text-red-600">{error}</p>
+              </div>
+            )}
+
+            {/* Microsoft Login - Dark Gray */}
+            <button
+              type="button"
+              onClick={handleMicrosoftLogin}
+              disabled={microsoftLoading}
+              className="w-full h-[46px] bg-[#3f3f46] text-white text-[14px] font-medium rounded-md hover:bg-[#27272a] transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
+            >
+              <MicrosoftIcon />
+              <span>{microsoftLoading ? "Redirecting..." : "Sign in with Microsoft"}</span>
+            </button>
 
             {/* Create Account Link */}
             {alternateLoginText && alternateLoginHref && (

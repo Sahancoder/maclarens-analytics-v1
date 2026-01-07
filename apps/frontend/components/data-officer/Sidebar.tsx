@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Bell, FolderOpen, User, MessageSquare } from "lucide-react";
+import { FileText, Bell, FolderOpen, XCircle } from "lucide-react";
 
 const navItems = [
   { href: "/data-officer/dashboard", label: "Data Entry", icon: FileText },
+  { href: "/data-officer/rejected-reports", label: "Rejected Reports", icon: XCircle, badge: 3 },
   { href: "/data-officer/notifications", label: "Notifications", icon: Bell },
   { href: "/data-officer/drafts", label: "Drafts", icon: FolderOpen },
-  { href: "/data-officer/profile", label: "Profile", icon: User },
-  { href: "/data-officer/comments", label: "Comments", icon: MessageSquare },
 ];
 
 export function Sidebar() {
@@ -32,7 +31,16 @@ export function Sidebar() {
               }`}
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.badge && item.badge > 0 && (
+                <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold rounded-full ${
+                  isActive 
+                    ? "bg-white text-[#0b1f3a]" 
+                    : "bg-red-500 text-white"
+                }`}>
+                  {item.badge}
+                </span>
+              )}
             </Link>
           );
         })}

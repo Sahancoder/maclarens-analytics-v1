@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 
 const partners = [
   { name: "MMA", src: "/Company Logos/mma-logo-320.png" },
@@ -17,9 +18,15 @@ interface PartnerLogosProps {
 
 export function PartnerLogos({ showLabel = true }: PartnerLogosProps) {
   const allLogos = [...partners, ...partners, ...partners];
+  const { ref, isVisible } = useScrollAnimation({ threshold: 0.3 });
 
   return (
-    <section className="border-y border-slate-200 bg-slate-50 py-6 md:py-8 overflow-hidden">
+    <section
+      ref={ref}
+      className={`border-y border-slate-200 bg-slate-50 py-6 md:py-8 overflow-hidden transition-all duration-700 ${
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+      }`}
+    >
       {showLabel && (
         <p className="mb-4 md:mb-6 text-center text-xs md:text-sm font-medium uppercase tracking-wider text-slate-500">
           Trusted by leading organizations

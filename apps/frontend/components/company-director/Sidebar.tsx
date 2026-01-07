@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, FileText, BarChart3, User, MessageSquare, Bell } from "lucide-react";
+import { ClipboardList, FileText, BarChart3, Bell } from "lucide-react";
 
 const navItems = [
   { href: "/company-director/dashboard", label: "Budget Entry", icon: ClipboardList },
   { href: "/company-director/reports", label: "View Report", icon: FileText },
   { href: "/company-director/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/company-director/profile", label: "User Profile", icon: User },
-  { href: "/company-director/comments", label: "Comments", icon: MessageSquare },
   { href: "/company-director/notifications", label: "Notifications", icon: Bell },
 ];
 

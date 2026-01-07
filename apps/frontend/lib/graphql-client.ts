@@ -2,7 +2,7 @@
  * GraphQL Client for McLarens Analytics
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/graphql';
+const API_URL = process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || 'http://localhost:8000/graphql';
 
 interface GraphQLResponse<T> {
   data?: T;

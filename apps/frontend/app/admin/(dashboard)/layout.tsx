@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/admin";
+import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
 
 export default function AdminDashboardLayout({
   children,
@@ -13,12 +14,29 @@ export default function AdminDashboardLayout({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const auth = localStorage.getItem("admin-auth");
-    if (!auth) {
-      router.push("/admin/login");
-    } else {
-      setIsAuthenticated(true);
+    const token = localStorage.getItem("mclarens_token");
+    const userRaw = localStorage.getItem("mclarens_user");
+
+    if (!token || !userRaw) {
+      router.push("/login");
+      return;
     }
+
+    try {
+      const user = JSON.parse(userRaw) as { role?: string };
+      const role = normalizeRole(user.role);
+      const target = getDashboardRoute(role);
+
+      if (target && target !== "/admin/dashboard") {
+        router.push(target);
+        return;
+      }
+    } catch {
+      router.push("/login");
+      return;
+    }
+
+    setIsAuthenticated(true);
   }, [router]);
 
   if (!isAuthenticated) {

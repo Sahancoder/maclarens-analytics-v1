@@ -1,0 +1,69 @@
+# =============================================================================
+# McLarens Analytics - Infrastructure Services Only
+# =============================================================================
+# Use this for hybrid development: run stable services in Docker,
+# run Frontend (Next.js) and Backend (FastAPI) locally with hot reload.
+#
+# Start: docker compose -f docker-compose.infra.yml up -d
+# Stop:  docker compose -f docker-compose.infra.yml down
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: maclarens-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: maclarens_analytics
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+
+  # Redis Cache/Queue
+  redis:
+    image: redis:7-alpine
+    container_name: maclarens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maclarens-network
+
+  # MailHog - Local Email Testing
+  # SMTP: localhost:1025 | Web UI: http://localhost:8025
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: maclarens-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI - view emails at http://localhost:8025
+    networks:
+      - maclarens-network
+    logging:
+      driver: "none"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  maclarens-network:
+    driver: bridge

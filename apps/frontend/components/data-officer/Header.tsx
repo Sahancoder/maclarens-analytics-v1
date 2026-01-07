@@ -6,14 +6,13 @@ import { useState, useEffect } from "react";
 import { Menu, X, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Bell, FolderOpen, User, MessageSquare } from "lucide-react";
+import { FileText, Bell, FolderOpen, XCircle } from "lucide-react";
 
 const navItems = [
   { href: "/data-officer/dashboard", label: "Data entry", icon: FileText },
+  { href: "/data-officer/rejected-reports", label: "Rejected Reports", icon: XCircle, badge: 3 },
   { href: "/data-officer/notifications", label: "Notifications", icon: Bell },
   { href: "/data-officer/drafts", label: "Drafts", icon: FolderOpen },
-  { href: "/data-officer/profile", label: "User Profile", icon: User },
-  { href: "/data-officer/comments", label: "Comments", icon: MessageSquare },
 ];
 
 export function Header() {
@@ -23,15 +22,22 @@ export function Header() {
   const [user, setUser] = useState<{ email: string } | null>(null);
 
   useEffect(() => {
-    const auth = localStorage.getItem("auth");
+    const auth =
+      localStorage.getItem("mclarens_user") ||
+      localStorage.getItem("auth");
     if (auth) {
       setUser(JSON.parse(auth));
     }
   }, []);
 
   const handleLogout = () => {
+    localStorage.removeItem("mclarens_token");
+    localStorage.removeItem("mclarens_user");
     localStorage.removeItem("auth");
-    router.push("/data-officer/login");
+    localStorage.removeItem("director-auth");
+    localStorage.removeItem("admin-auth");
+    localStorage.removeItem("ceo-auth");
+    router.push("/login");
   };
 
   const getInitials = (email: string) => {
@@ -58,13 +64,15 @@ export function Header() {
           >
             {mobileMenuOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Menu className="h-5 w-5 sm:h-6 sm:w-6" />}
           </button>
-          <Image
-            src="/jubilee-logo-lock-up.svg"
-            alt="McLarens Group"
-            width={220}
-            height={70}
-            className="h-8 sm:h-10 md:h-14 lg:h-16 w-auto"
-          />
+          <button onClick={() => router.push("/")} className="cursor-pointer hover:opacity-80 transition-opacity">
+            <Image
+              src="/jubilee-logo-lock-up.svg"
+              alt="McLarens Group"
+              width={220}
+              height={70}
+              className="h-8 sm:h-10 md:h-14 lg:h-16 w-auto"
+            />
+          </button>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 md:gap-5">
@@ -113,7 +121,16 @@ export function Header() {
                   }`}
                 >
                   <Icon className="h-5 w-5" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && item.badge > 0 && (
+                    <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold rounded-full ${
+                      isActive 
+                        ? "bg-[#0b1f3a] text-white" 
+                        : "bg-red-500 text-white"
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

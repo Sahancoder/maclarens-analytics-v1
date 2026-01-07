@@ -16,8 +16,9 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
+  getRedirectPath: (user: User) => string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await graphqlRequest<{ me: User }>(ME_QUERY, {}, authToken);
       if (data.me) {
         setUser(data.me);
+        localStorage.setItem('mclarens_user', JSON.stringify(data.me));
       }
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -63,7 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(data.login.token);
         setUser(data.login.user);
         localStorage.setItem('mclarens_token', data.login.token);
-        return { success: true };
+        localStorage.setItem('mclarens_user', JSON.stringify(data.login.user));
+        return { success: true, user: data.login.user };
       }
       return { success: false, error: 'Invalid credentials' };
     } catch (error) {
@@ -71,14 +74,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const getRedirectPath = (user: User): string => {
+    switch (user.role) {
+      case 'DATA_OFFICER':
+        return '/data-officer/dashboard';
+      case 'COMPANY_DIRECTOR':
+        return '/company-director/dashboard';
+      case 'ADMIN':
+        return '/admin/dashboard';
+      case 'CEO':
+        return '/ceo/dashboard';
+      default:
+        return '/';
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem('mclarens_token');
+    localStorage.removeItem('mclarens_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, getRedirectPath }}>
       {children}
     </AuthContext.Provider>
   );

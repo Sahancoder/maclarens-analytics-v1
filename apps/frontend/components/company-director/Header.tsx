@@ -11,15 +11,22 @@ export function Header() {
   const [user, setUser] = useState<{ email: string; role: string } | null>(null);
 
   useEffect(() => {
-    const auth = localStorage.getItem("director-auth");
+    const auth =
+      localStorage.getItem("mclarens_user") ||
+      localStorage.getItem("director-auth");
     if (auth) {
       setUser(JSON.parse(auth));
     }
   }, []);
 
   const handleLogout = () => {
+    localStorage.removeItem("mclarens_token");
+    localStorage.removeItem("mclarens_user");
+    localStorage.removeItem("auth");
     localStorage.removeItem("director-auth");
-    router.push("/company-director/login");
+    localStorage.removeItem("admin-auth");
+    localStorage.removeItem("ceo-auth");
+    router.push("/login");
   };
 
   const getInitials = (email: string) => {
@@ -38,7 +45,9 @@ export function Header() {
         <button className="md:hidden p-1.5" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
-        <Image src="/jubilee-logo-lock-up.svg" alt="McLarens Group" width={180} height={60} className="h-10 md:h-12 w-auto" />
+        <button onClick={() => router.push("/")} className="cursor-pointer hover:opacity-80 transition-opacity">
+          <Image src="/jubilee-logo-lock-up.svg" alt="McLarens Group" width={180} height={60} className="h-10 md:h-12 w-auto" />
+        </button>
       </div>
 
       <div className="flex items-center gap-4">

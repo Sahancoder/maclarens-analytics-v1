@@ -2,16 +2,27 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
 
 export default function AdminRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    const auth = localStorage.getItem("admin-auth");
-    if (auth) {
-      router.push("/admin/dashboard");
-    } else {
-      router.push("/admin/login");
+    const token = localStorage.getItem("mclarens_token");
+    const userRaw = localStorage.getItem("mclarens_user");
+
+    if (!token || !userRaw) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userRaw) as { role?: string };
+      const role = normalizeRole(user.role);
+      const target = getDashboardRoute(role);
+      router.replace(target || "/login");
+    } catch {
+      router.replace("/login");
     }
   }, [router]);
 

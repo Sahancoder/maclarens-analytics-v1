@@ -3,18 +3,36 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/company-director";
+import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
 
 export default function DirectorDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const auth = localStorage.getItem("director-auth");
-    if (!auth) {
-      router.push("/company-director/login");
-    } else {
-      setIsAuthenticated(true);
+    const token = localStorage.getItem("mclarens_token");
+    const userRaw = localStorage.getItem("mclarens_user");
+
+    if (!token || !userRaw) {
+      router.push("/login");
+      return;
     }
+
+    try {
+      const user = JSON.parse(userRaw) as { role?: string };
+      const role = normalizeRole(user.role);
+      const target = getDashboardRoute(role);
+
+      if (target && target !== "/company-director/dashboard") {
+        router.push(target);
+        return;
+      }
+    } catch {
+      router.push("/login");
+      return;
+    }
+
+    setIsAuthenticated(true);
   }, [router]);
 
   if (!isAuthenticated) {

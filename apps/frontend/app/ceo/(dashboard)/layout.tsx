@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/ceo";
+import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
 
 export default function CEODashboardLayout({
   children,
@@ -13,12 +14,29 @@ export default function CEODashboardLayout({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const auth = localStorage.getItem("ceo-auth");
-    if (!auth) {
-      router.push("/ceo/login");
-    } else {
-      setIsAuthenticated(true);
+    const token = localStorage.getItem("mclarens_token");
+    const userRaw = localStorage.getItem("mclarens_user");
+
+    if (!token || !userRaw) {
+      router.push("/login");
+      return;
     }
+
+    try {
+      const user = JSON.parse(userRaw) as { role?: string };
+      const role = normalizeRole(user.role);
+      const target = getDashboardRoute(role);
+
+      if (target && target !== "/ceo/dashboard") {
+        router.push(target);
+        return;
+      }
+    } catch {
+      router.push("/login");
+      return;
+    }
+
+    setIsAuthenticated(true);
   }, [router]);
 
   if (!isAuthenticated) {

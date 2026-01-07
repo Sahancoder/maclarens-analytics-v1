@@ -218,11 +218,42 @@ export default function DataOfficerDashboard() {
   const [company, setCompany] = useState("");
   const [month, setMonth] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [editingRejectedReport, setEditingRejectedReport] = useState<any>(null);
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
     provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
   });
+
+  // Check for rejected report data on component mount
+  useEffect(() => {
+    const storedReport = sessionStorage.getItem('editingRejectedReport');
+    if (storedReport) {
+      try {
+        const reportData = JSON.parse(storedReport);
+        setEditingRejectedReport(reportData);
+        
+        // Pre-fill form data
+        setFormData(reportData.formData);
+        
+        // Pre-select company and month
+        const companyInfo = COMPANIES_DATA.find(c => c.code === reportData.companyCode);
+        if (companyInfo) {
+          setCluster(reportData.cluster);
+          setCompany(reportData.companyName);
+        }
+        
+        // Extract month from period (e.g., "November 2024" -> "November")
+        const monthName = reportData.period.split(' ')[0];
+        setMonth(monthName);
+        
+        // Clear from sessionStorage after loading
+        sessionStorage.removeItem('editingRejectedReport');
+      } catch (error) {
+        console.error('Error loading rejected report:', error);
+      }
+    }
+  }, []);
 
   const clusters = useMemo(() => Array.from(new Set(COMPANIES_DATA.filter(c => c.isActive).map(c => c.cluster))).sort(), []);
   const companies = useMemo(() => cluster ? COMPANIES_DATA.filter(c => c.isActive && c.cluster === cluster) : [], [cluster]);
@@ -249,7 +280,9 @@ export default function DataOfficerDashboard() {
     const pbtBefore = (gp + otherIncome) - totalOverheads + provisions + exchange;
     const npMargin = revenue > 0 ? ((pbtBefore / revenue) * 100).toFixed(2) : "0.00";
     const pbtAfter = pbtBefore + nonOpsInc - nonOpsExp;
-    const ebit = pbtAfter + financial;
+    // EBIT = PBT before financial expenses (pbtBefore already excludes financial expenses in totalOverheads, so add them back)
+    const ebit = pbtBefore + financial;
+    // EBITDA = EBIT before depreciation (add back depreciation)
     const ebitda = ebit + depreciation;
 
     return { gpMargin, totalOverheads: totalOverheads.toFixed(2), pbtBefore: pbtBefore.toFixed(2), npMargin, pbtAfter: pbtAfter.toFixed(2), ebit: ebit.toFixed(2), ebitda: ebitda.toFixed(2) };
@@ -289,6 +322,23 @@ export default function DataOfficerDashboard() {
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
+      {/* Rejected Report Alert Banner */}
+      {editingRejectedReport && (
+        <div className="bg-amber-50 border-b-2 border-amber-200 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-amber-800">
+              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-sm font-semibold">Editing Rejected Report</span>
+            </div>
+            <div className="flex-1 text-sm text-amber-700">
+              <span className="font-medium">{editingRejectedReport.companyName}</span> - {editingRejectedReport.period} 
+              <span className="mx-2">•</span>
+              <span className="italic">Rejection: {editingRejectedReport.rejectionReason.substring(0, 80)}...</span>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Selection Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

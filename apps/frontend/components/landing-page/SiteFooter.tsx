@@ -1,12 +1,22 @@
+"use client";
+
 import Image from "next/image";
+import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 
 export function SiteFooter() {
+  const { ref, isVisible } = useScrollAnimation({ threshold: 0.2 });
+
   return (
     <footer className="bg-[#0b1f3a] py-12 md:py-20 lg:py-24 text-white">
       <div className="w-full px-4 md:px-8 lg:px-16">
         <div className="mb-10 md:mb-16 h-px bg-white/20" />
 
-        <div className="flex flex-col items-center gap-6 md:gap-10 text-center">
+        <div
+          ref={ref}
+          className={`flex flex-col items-center gap-6 md:gap-10 text-center transition-all duration-700 ${
+            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          }`}
+        >
           <Image
             src="/75-years-footer-logo.svg"
             alt="McLarens Group 75 Years"

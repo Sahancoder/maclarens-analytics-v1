@@ -3,7 +3,8 @@ Authentication Service
 Supports both custom JWT tokens and Microsoft Entra ID (Azure AD) tokens
 """
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Iterable
+from uuid import UUID
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,8 +128,12 @@ class AuthService:
     @staticmethod
     async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
         """Get user by ID"""
+        try:
+            user_uuid = UUID(user_id)
+        except (ValueError, TypeError):
+            return None
         result = await db.execute(
-            select(User).where(User.id == user_id)
+            select(User).where(User.id == user_uuid)
         )
         return result.scalar_one_or_none()
     
@@ -160,6 +165,9 @@ class AuthService:
         # Try to find by Azure OID first
         user = await AuthService.get_user_by_azure_oid(db, azure_oid)
         if user:
+            if role and user.role != role:
+                user.role = role
+                await db.commit()
             return user
         
         # Try to find by email
@@ -167,6 +175,8 @@ class AuthService:
         if user:
             # Update Azure OID
             user.azure_oid = azure_oid
+            if role and user.role != role:
+                user.role = role
             await db.commit()
             return user
         
@@ -183,3 +193,27 @@ class AuthService:
         await db.commit()
         await db.refresh(user)
         return user
+
+    @staticmethod
+    def role_from_entra_claims(payload: dict) -> Optional[UserRole]:
+        """Map Entra app roles claim to internal UserRole."""
+        roles = payload.get("roles") or payload.get("role")
+        if not roles:
+            return None
+
+        if isinstance(roles, str):
+            roles_list: Iterable[str] = [roles]
+        else:
+            roles_list = roles
+
+        normalized = {str(role).upper() for role in roles_list}
+        if "SYSTEM_ADMIN" in normalized or "ADMIN" in normalized:
+            return UserRole.ADMIN
+        if "CEO" in normalized:
+            return UserRole.CEO
+        if "COMPANY_DIRECTOR" in normalized:
+            return UserRole.COMPANY_DIRECTOR
+        if "DATA_OFFICER" in normalized:
+            return UserRole.DATA_OFFICER
+
+        return None

@@ -188,7 +188,9 @@ export default function BudgetEntryPage() {
     const pbtBefore = gp + otherIncome - totalOverheads + provisions + exchange;
     const npMargin = revenue > 0 ? ((pbtBefore / revenue) * 100).toFixed(2) : "0.00";
     const pbtAfter = pbtBefore + nonOpsInc - nonOpsExp;
-    const ebit = pbtAfter + financial;
+    // EBIT = PBT before financial expenses (pbtBefore already excludes financial expenses in totalOverheads, so add them back)
+    const ebit = pbtBefore + financial;
+    // EBITDA = EBIT before depreciation (add back depreciation)
     const ebitda = ebit + depreciation;
 
     return {

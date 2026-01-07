@@ -2,16 +2,27 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
 
-export default function CompanyDirectorRedirect() {
+export default function CompanyDirectorPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const auth = localStorage.getItem("director-auth");
-    if (auth) {
-      router.push("/company-director/dashboard");
-    } else {
-      router.push("/company-director/login");
+    const token = localStorage.getItem("mclarens_token");
+    const userRaw = localStorage.getItem("mclarens_user");
+
+    if (!token || !userRaw) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userRaw) as { role?: string };
+      const role = normalizeRole(user.role);
+      const target = getDashboardRoute(role);
+      router.replace(target || "/login");
+    } catch {
+      router.replace("/login");
     }
   }, [router]);
 
