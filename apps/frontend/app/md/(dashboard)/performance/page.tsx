@@ -27,15 +27,45 @@ import {
 
 // ============ DATA ============
 
-interface Company {
+// ============ DATA MODELS & MOCKS ============
+
+interface FinanceDetails {
+  revenueUsd: number;
+  revenueLkr: number;
+  gpLkr: number;
+  gpMargin: number;
+  otherIncome: number;
+  personnelExpenses: number;
+  adminExpenses: number;
+  sellingExpenses: number;
+  financeExpenses: number;
+  depreciation: number;
+  totalOverheads: number;
+  provisions: number;
+  exchangeGain: number; // or loss (negative)
+  pbtBeforeNonOps: number;
+  npMargin: number; // Net Profit Margin
+  nonOpsExpenses: number;
+  nonOpsIncome: number;
+  pbtAfterNonOps: number;
+  ebit: number;
+  ebitda: number;
+}
+
+interface Company extends FinanceDetails {
   id: string;
   name: string;
-  monthActual: number;
-  monthBudget: number;
+  clusterId: string;
+  fiscalYearStartMonth: 1 | 4; // 1 = Jan, 4 = Apr
+  
+  // High-level Metrics for Table
+  monthActualPbt: number;
+  monthBudgetPbt: number;
   monthAchievement: number;
-  yearActual: number;
-  yearBudget: number;
+  yearActualPbt: number; // YTD based on fiscal year
+  yearBudgetPbt: number; // YTD based on fiscal year
   yearAchievement: number;
+
   uploadedBy: string;
   uploadedAt: string;
   lastUpdated: string;
@@ -44,79 +74,134 @@ interface Company {
 interface Cluster {
   id: string;
   name: string;
-  monthActual: number;
-  monthBudget: number;
-  monthAchievement: number;
-  yearActual: number;
-  yearBudget: number;
-  yearAchievement: number;
   companies: Company[];
+  
+  // Aggregated Metrics
+  monthActualPbt: number;
+  monthBudgetPbt: number;
+  monthAchievement: number;
+  yearActualPbt: number;
+  yearBudgetPbt: number;
+  yearAchievement: number;
 }
 
-// Helper to generate mock financial data
-const generateFinancials = (base: number) => {
-  const monthActual = Math.floor(base / 12);
-  const monthBudget = Math.floor(monthActual * 0.95);
-  const yearActual = base;
-  const yearBudget = Math.floor(base * 0.95);
+// Helpers
+const formatCurrencyLKR = (val: number, compact = false) => {
+  if (compact) {
+    if (Math.abs(val) >= 1000000) return `LKR ${(val / 1000000).toFixed(1)}M`;
+    if (Math.abs(val) >= 1000) return `LKR ${(val / 1000).toFixed(0)}K`;
+  }
+  return `LKR ${val.toLocaleString()}`;
+};
+const formatLKR000 = (val: number) => val.toLocaleString(); // Just comma separated
+const formatUSD = (val: number) => `USD ${val.toLocaleString()}`;
+const formatPercent = (val: number) => `${val.toFixed(1)}%`;
+
+// Mock Data Generator
+const generateCompanyData = (id: string, name: string, clusterId: string, fiscalStart: 1 | 4): Company => {
+  // Base PBT ~10m - 50m
+  const basePbt = Math.floor(Math.random() * 40000000) + 10000000;
+  
+  // Granular details
+  const revenueLkr = basePbt * 4;
+  const gpLkr = revenueLkr * 0.4;
+  const totalOverheads = gpLkr * 0.5;
+  
+  const personnelExpenses = totalOverheads * 0.4;
+  const adminExpenses = totalOverheads * 0.3;
+  const sellingExpenses = totalOverheads * 0.2;
+  const financeExpenses = totalOverheads * 0.05;
+  const depreciation = totalOverheads * 0.05;
+
+  const pbtBeforeNonOps = gpLkr - totalOverheads;
   
   return {
-    monthActual,
-    monthBudget,
-    monthAchievement: (monthActual / monthBudget) * 100,
-    yearActual,
-    yearBudget,
-    yearAchievement: (yearActual / yearBudget) * 100,
+    id, name, clusterId, fiscalYearStartMonth: fiscalStart,
+    
+    // Finance Details (Mocked for single month view)
+    revenueUsd: revenueLkr / 300,
+    revenueLkr,
+    gpLkr,
+    gpMargin: (gpLkr / revenueLkr) * 100,
+    otherIncome: Math.floor(Math.random() * 500000),
+    personnelExpenses,
+    adminExpenses,
+    sellingExpenses,
+    financeExpenses,
+    depreciation,
+    totalOverheads,
+    provisions: -50000,
+    exchangeGain: 120000,
+    pbtBeforeNonOps,
+    npMargin: (pbtBeforeNonOps / revenueLkr) * 100,
+    nonOpsExpenses: 0,
+    nonOpsIncome: 0,
+    pbtAfterNonOps: pbtBeforeNonOps, // Assuming simplified for mock
+    ebit: pbtBeforeNonOps + financeExpenses,
+    ebitda: pbtBeforeNonOps + financeExpenses + depreciation,
+
+    // Table Metrics
+    monthActualPbt: pbtBeforeNonOps / 12,
+    monthBudgetPbt: (pbtBeforeNonOps / 12) * 0.9, // 110% achievement
+    monthAchievement: 111.1,
+    
+    // Different YTD scaling based on fiscal start
+    // If Jan start (1), and we act like it's Oct -> 10 months.
+    // If Apr start (4), and we act like it's Oct -> 7 months.
+    yearActualPbt: pbtBeforeNonOps * (fiscalStart === 1 ? 0.8 : 0.6), 
+    yearBudgetPbt: (pbtBeforeNonOps * (fiscalStart === 1 ? 0.8 : 0.6)) * 0.95,
+    yearAchievement: 105.2,
+
+    uploadedBy: "Finance Officer",
+    uploadedAt: "2025-10-15 14:30",
+    lastUpdated: "v1.0"
   };
 };
 
-const clusters: Cluster[] = [
-  {
-    id: "liner", name: "Liner", ...generateFinancials(1258000),
-    companies: [
-      { id: "c1", name: "Liner Shipping", ...generateFinancials(850000), uploadedBy: "John Doe", uploadedAt: "2025-10-15 10:30 AM", lastUpdated: "v1.2" },
-      { id: "c2", name: "Liner Logistics", ...generateFinancials(408000), uploadedBy: "Jane Smith", uploadedAt: "2025-10-14 02:15 PM", lastUpdated: "v1.1" },
-    ]
-  },
-  {
-    id: "lube01", name: "Lube 01", ...generateFinancials(1146000),
-    companies: [
-      { id: "c3", name: "MLL-Automotive", ...generateFinancials(580000), uploadedBy: "Mike Brown", uploadedAt: "2025-10-15 09:45 AM", lastUpdated: "v1.0" },
-      { id: "c4", name: "MLL-Industrial", ...generateFinancials(310000), uploadedBy: "Sarah Lee", uploadedAt: "2025-10-15 11:00 AM", lastUpdated: "v1.0" },
-      { id: "c5", name: "Mckupler", ...generateFinancials(153600), uploadedBy: "John Doe", uploadedAt: "2025-10-14 04:30 PM", lastUpdated: "v1.1" },
-      { id: "c6", name: "3M Distribution", ...generateFinancials(102400), uploadedBy: "Jane Smith", uploadedAt: "2025-10-15 08:30 AM", lastUpdated: "v1.0" },
-    ]
-  },
-  {
-    id: "gac", name: "GAC Group", ...generateFinancials(1097000),
-    companies: [
-      { id: "c8", name: "GSL", ...generateFinancials(510000), uploadedBy: "Global Finance", uploadedAt: "2025-10-16 09:00 AM", lastUpdated: "v2.0" },
-      { id: "c9", name: "MSL", ...generateFinancials(375000), uploadedBy: "Global Finance", uploadedAt: "2025-10-16 09:15 AM", lastUpdated: "v2.0" },
-      { id: "c10", name: "GAC Tug", ...generateFinancials(347000), uploadedBy: "Global Finance", uploadedAt: "2025-10-16 09:30 AM", lastUpdated: "v2.0" },
-    ]
-  },
-   {
-    id: "shipping", name: "Shipping Services", ...generateFinancials(970000),
-    companies: [
-      { id: "c13", name: "MSS Shipping", ...generateFinancials(780000), uploadedBy: "Shipping Team", uploadedAt: "2025-10-15 02:45 PM", lastUpdated: "v1.0" },
-      { id: "c14", name: "MMA Training", ...generateFinancials(190000), uploadedBy: "Shipping Team", uploadedAt: "2025-10-15 03:00 PM", lastUpdated: "v1.0" },
-    ]
-  },
-  // ... other clusters would be similar, simplifying for brevity
-];
+const aggregateCluster = (id: string, name: string, companies: Company[]): Cluster => {
+  const sum = (key: keyof Company) => companies.reduce((acc, c) => acc + (c[key] as number), 0);
+  
+  const mAct = sum("monthActualPbt");
+  const mBud = sum("monthBudgetPbt");
+  const yAct = sum("yearActualPbt");
+  const yBud = sum("yearBudgetPbt");
 
-const formatCurrency = (num: number) => {
-  if (Math.abs(num) >= 1000000) return `LKR ${(num / 1000000).toFixed(1)}M`;
-  if (Math.abs(num) >= 1000) return `LKR ${(num / 1000).toFixed(0)}K`;
-  return `LKR ${num.toLocaleString()}`;
+  return {
+    id, name, companies,
+    monthActualPbt: mAct,
+    monthBudgetPbt: mBud,
+    monthAchievement: mBud ? (mAct / mBud) * 100 : 0,
+    yearActualPbt: yAct,
+    yearBudgetPbt: yBud,
+    yearAchievement: yBud ? (yAct / yBud) * 100 : 0,
+  };
 };
 
-const formatPercent = (num: number) => `${num.toFixed(1)}%`;
+// FULL DATA SET
+const rawClusters = [
+  { id: "liner", name: "Liner", count: 2 },
+  { id: "lube01", name: "Lube 01", count: 3 },
+  { id: "gac", name: "GAC Group", count: 3 },
+  { id: "shipping", name: "Shipping Services", count: 2 },
+  { id: "shipsupply", name: "Ship Supply", count: 2 },
+  { id: "property", name: "Property", count: 1 },
+  { id: "warehouse", name: "Warehouse", count: 1 },
+  { id: "manufacturing", name: "Manufacturing", count: 1 },
+  { id: "hotel", name: "Hotel & Leisure", count: 1 },
+  { id: "strategic", name: "Strategic Inv.", count: 1 },
+  { id: "lube02", name: "Lube 02", count: 2 },
+  { id: "bunkering", name: "Bunkering", count: 1 },
+];
+
+const clusters: Cluster[] = rawClusters.map(rc => {
+  const companies = Array.from({ length: rc.count }).map((_, i) => 
+    generateCompanyData(`${rc.id}-c${i+1}`, `${rc.name} Co. ${i+1}`, rc.id, i % 2 === 0 ? 1 : 4) // Alternate Jan/Apr fiscal
+  );
+  return aggregateCluster(rc.id, rc.name, companies);
+});
 
 const getAchievementColor = (achievement: number) => {
-  if (achievement >= 100) return "text-emerald-600 bg-emerald-50";
-  if (achievement >= 90) return "text-amber-600 bg-amber-50";
-  return "text-red-600 bg-red-50";
+  return achievement >= 100 ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50";
 };
 
 // ============ COMPONENTS ============
@@ -133,124 +218,90 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
   if (!isOpen || !company) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200 flex flex-col max-h-[90vh]">
+        
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{company.name}</h3>
-            <p className="text-sm text-slate-500">Finance Upload Details — {monthName} {year}</p>
+            <h3 className="text-xl font-bold text-slate-900">{company.name}</h3>
+            <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+               <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-medium">
+                 Fiscal: {company.fiscalYearStartMonth === 1 ? "Jan-Dec" : "Apr-Mar"}
+               </span>
+               <span>•</span>
+               <span>{monthName} {year}</span>
+            </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        {/* Modal Content */}
-        <div className="p-6">
-          {/* 1. Period & Status Info */}
-          <div className="flex items-center gap-4 mb-6 text-sm">
-            <div className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-100">
-              Period: {monthName} {year}
-            </div>
-            <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-100">
-              Status: Approved
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 2. Uploaded Values (Raw) */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Uploaded Values (Raw)</h4>
-              
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
-                 <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-medium">Actual PBT</span>
-                    <span className="text-slate-900 font-bold font-mono">{company.monthActual.toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-medium">Budget PBT</span>
-                    <span className="text-slate-900 font-bold font-mono">{company.monthBudget.toLocaleString()}</span>
-                 </div>
-                  <div className="w-full h-px bg-slate-200 my-2" />
-                 <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-medium">Revenue</span>
-                    <span className="text-slate-400 italic">--</span>
-                 </div>
-                 <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-medium">Direct Costs</span>
-                    <span className="text-slate-400 italic">--</span>
-                 </div>
-              </div>
-            </div>
-
-            {/* 3. Derived Metrics */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Derived Performance</h4>
-
-              <div className="grid grid-cols-2 gap-3">
-                 <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
-                    <p className="text-xs text-slate-500 mb-1">Achievement</p>
-                    <p className={`text-xl font-bold ${company.monthAchievement >= 100 ? "text-emerald-600" : "text-red-600"}`}>
-                      {company.monthAchievement.toFixed(1)}%
-                    </p>
-                 </div>
-                 <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
-                    <p className="text-xs text-slate-500 mb-1">Variance</p>
-                    <p className={`text-xl font-bold ${company.monthActual >= company.monthBudget ? "text-emerald-600" : "text-red-600"}`}>
-                      {(company.monthActual - company.monthBudget).toLocaleString()}
-                    </p>
-                 </div>
-              </div>
-
-               <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                  <p className="text-xs text-blue-600 mb-1 font-medium">Year To Date (YTD)</p>
-                  <div className="flex justify-between items-end">
-                    <div>
-                       <span className="text-slate-500 text-xs">Actual: </span>
-                       <span className="font-semibold text-slate-900">{formatCurrency(company.yearActual)}</span>
-                    </div>
-                     <span className={`text-sm font-bold ${company.yearAchievement >= 100 ? "text-emerald-600" : "text-red-600"}`}>
-                        {company.yearAchievement.toFixed(1)}%
-                     </span>
-                  </div>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            
+            {/* GROUP 1: Revenue & GP */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
+               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Revenue & Gross Profit</h4>
+               <div className="space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-600">Revenue (USD)</span><span className="font-mono font-medium">{formatUSD(company.revenueUsd)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Revenue (LKR)</span><span className="font-mono font-medium">{formatCurrencyLKR(company.revenueLkr)}</span></div>
+                  <div className="border-t border-slate-100 my-1" />
+                  <div className="flex justify-between"><span className="text-slate-600 font-medium">Gross Profit (LKR)</span><span className="font-mono font-bold text-slate-800">{formatCurrencyLKR(company.gpLkr)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 italic">GP Margin</span><span className="font-mono text-slate-600">{formatPercent(company.gpMargin)}</span></div>
                </div>
             </div>
-          </div>
 
-          {/* 4. Audit / Metadata */}
-          <div className="mt-8 pt-5 border-t border-slate-100 text-xs text-slate-500 flex flex-wrap gap-6">
-            <div className="flex items-center gap-2">
-               <span className="font-semibold text-slate-700">Uploaded By:</span>
-               <span>{company.uploadedBy}</span>
+            {/* GROUP 2: Expenses */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
+               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Expenses Breakdown (LKR '000)</h4>
+               <div className="space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-600">Personnel Related/HR</span><span className="font-mono">{formatLKR000(company.personnelExpenses)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Admin & Establishment</span><span className="font-mono">{formatLKR000(company.adminExpenses)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Selling & Distribution</span><span className="font-mono">{formatLKR000(company.sellingExpenses)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Finance Expenses</span><span className="font-mono">{formatLKR000(company.financeExpenses)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Depreciation</span><span className="font-mono">{formatLKR000(company.depreciation)}</span></div>
+                  <div className="border-t border-slate-100 my-1" />
+                  <div className="flex justify-between"><span className="text-slate-600 font-medium">Total Overheads</span><span className="font-mono font-bold text-red-600">-{formatLKR000(company.totalOverheads)}</span></div>
+               </div>
             </div>
-            <div className="flex items-center gap-2">
-               <span className="font-semibold text-slate-700">Timestamp:</span>
-               <span>{company.uploadedAt}</span>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="font-semibold text-slate-700">Version:</span>
-               <span>{company.lastUpdated}</span>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="font-semibold text-slate-700">Ref ID:</span>
-               <span className="font-mono">F-2025-10-{company.id}</span>
-            </div>
-          </div>
 
-        </div>
-        
-        {/* Footer Actions */}
-        <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
-           <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
-              Close
-           </button>
-           <button className="px-4 py-2 bg-[#0b1f3a] text-white rounded-lg text-sm font-medium hover:bg-[#1a2f4d] transition-colors shadow-sm">
-              View Full Report
-           </button>
+            {/* GROUP 3: Non-Ops & Provisions */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
+               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Other Items (LKR '000)</h4>
+               <div className="space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-600">Other Income</span><span className="font-mono">{formatLKR000(company.otherIncome)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Provisions / Reversal</span><span className="font-mono">{formatLKR000(company.provisions)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Exchange (Loss) / Gain</span><span className={`font-mono ${company.exchangeGain >=0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatLKR000(company.exchangeGain)}</span></div>
+                  <div className="border-t border-slate-100 my-1" />
+                  <div className="flex justify-between"><span className="text-slate-600">Non Ops Income</span><span className="font-mono">{formatLKR000(company.nonOpsIncome)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Non Ops Expenses</span><span className="font-mono">{formatLKR000(company.nonOpsExpenses)}</span></div>
+               </div>
+            </div>
+
+             {/* GROUP 4: Profitability */}
+             <div className="bg-[#f8fafc] p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
+               <h4 className="text-sm font-bold text-[#0b1f3a] uppercase tracking-wide mb-4 border-b border-slate-200 pb-2">Key Profit Metrics (LKR '000)</h4>
+               <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center"><span className="text-slate-700 font-medium">EBITDA</span><span className="font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-100">{formatLKR000(company.ebitda)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-700 font-medium">EBIT</span><span className="font-mono font-bold text-slate-900">{formatLKR000(company.ebit)}</span></div>
+                  <div className="border-t border-slate-200 my-1" />
+                  <div className="flex justify-between items-center"><span className="text-slate-700">PBT (Before Non-Ops)</span><span className="font-mono text-slate-900">{formatLKR000(company.pbtBeforeNonOps)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-slate-700 font-bold bg-yellow-50 px-1">PBT (After Non-Ops)</span><span className="font-mono font-bold text-[#0b1f3a] text-lg">{formatLKR000(company.pbtAfterNonOps)}</span></div>
+                  <div className="flex justify-between items-center mt-2"><span className="text-slate-500 text-xs italic">Net Profit Margin</span><span className="font-mono text-xs font-semibold">{formatPercent(company.npMargin)}</span></div>
+               </div>
+            </div>
+
+          </div>
+          
+          {/* Metadata Footer */}
+          <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap gap-6 text-xs text-slate-500">
+             <div><span className="font-semibold text-slate-700">Uploaded By: </span>{company.uploadedBy}</div>
+             <div><span className="font-semibold text-slate-700">Timestamp: </span>{company.uploadedAt}</div>
+             <div><span className="font-semibold text-slate-700">Version: </span>{company.lastUpdated}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -281,22 +332,21 @@ export default function PerformancePage() {
 
   const filteredClusters = useMemo(() => {
     return clusters.filter(c => {
-      if (filter === "positive") return c.monthActual > 0;
-      if (filter === "negative") return c.monthActual < 0;
+      if (filter === "positive") return c.monthActualPbt > 0;
+      if (filter === "negative") return c.monthActualPbt < 0;
       return true;
     });
   }, [filter]);
 
   const sortedClusters = useMemo(() => 
-    [...filteredClusters].sort((a, b) => b.monthActual - a.monthActual), [filteredClusters]);
+    [...filteredClusters].sort((a, b) => b.monthActualPbt - a.monthActualPbt), [filteredClusters]);
 
   const chartData = useMemo(() => 
     sortedClusters.map(c => ({
       name: c.name.length > 10 ? c.name.substring(0, 8) + "..." : c.name,
       fullName: c.name,
-      value: viewMode === "contribution" ? c.monthActual : c.monthAchievement, // Reusing chart for now with different metrics
-      pbt: c.monthActual,
-      momentum: "stable", // Placeholder
+      value: viewMode === "contribution" ? c.monthActualPbt : c.monthAchievement, 
+      pbt: c.monthActualPbt,
     })), [sortedClusters, viewMode]);
 
   const toggleCluster = (clusterId: string) => {
@@ -444,16 +494,16 @@ export default function PerformancePage() {
           
           <div className="divide-y divide-slate-100">
             {/* STICKY HEADER for Metrics */}
-            <div className="sticky top-0 bg-slate-50 z-10 flex border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <div className="sticky top-0 bg-slate-50 z-10 flex border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider shadow-sm">
                <div className="flex-1 px-5 py-3">Cluster / Company</div>
                {/* Month Group */}
-               <div className="flex">
+               <div className="hidden md:flex">
                   <div className="w-24 px-2 py-3 text-right bg-slate-100/50 border-l border-slate-200">M. Actual</div>
                   <div className="w-24 px-2 py-3 text-right bg-slate-100/50">M. Budget</div>
                   <div className="w-20 px-2 py-3 text-right bg-slate-100/50">M. Achv</div>
                </div>
                {/* Year Group */}
-               <div className="flex">
+               <div className="hidden lg:flex">
                   <div className="w-24 px-2 py-3 text-right border-l border-slate-200">Y. Actual</div>
                   <div className="w-24 px-2 py-3 text-right">Y. Budget</div>
                   <div className="w-20 px-2 py-3 text-right">Y. Achv</div>
@@ -484,31 +534,31 @@ export default function PerformancePage() {
                     </div>
 
                     {/* Month Metrics */}
-                    <div className="flex items-center bg-slate-50/30">
+                    <div className="hidden md:flex items-center bg-slate-50/30">
                        <div className="w-24 px-2 py-4 text-right border-l border-slate-100">
-                          <span className="font-semibold text-slate-900">{formatCurrency(cluster.monthActual)}</span>
+                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.monthActualPbt, true)}</span>
                        </div>
                        <div className="w-24 px-2 py-4 text-right">
-                          <span className="text-slate-500 text-sm">{formatCurrency(cluster.monthBudget)}</span>
+                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.monthBudgetPbt, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                          <span className={`text-xs px-2 py-1 rounded font-bold ${getAchievementColor(cluster.monthAchievement)}`}>
-                             {cluster.monthAchievement.toFixed(0)}%
+                          <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.monthAchievement)}`}>
+                             {formatPercent(cluster.monthAchievement)}
                           </span>
                        </div>
                     </div>
 
                     {/* Year Metrics */}
-                    <div className="flex items-center">
+                    <div className="hidden lg:flex items-center">
                        <div className="w-24 px-2 py-4 text-right border-l border-slate-100">
-                          <span className="font-semibold text-slate-900">{formatCurrency(cluster.yearActual)}</span>
+                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.yearActualPbt, true)}</span>
                        </div>
                        <div className="w-24 px-2 py-4 text-right">
-                          <span className="text-slate-500 text-sm">{formatCurrency(cluster.yearBudget)}</span>
+                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.yearBudgetPbt, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                           <span className={`text-xs px-2 py-1 rounded font-bold ${getAchievementColor(cluster.yearAchievement)}`}>
-                             {cluster.yearAchievement.toFixed(0)}%
+                           <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.yearAchievement)}`}>
+                             {formatPercent(cluster.yearAchievement)}
                           </span>
                        </div>
                     </div>
@@ -521,42 +571,44 @@ export default function PerformancePage() {
                         <div 
                           key={company.id}
                           onClick={() => handleCompanyClick(company)}
-                          className="flex items-center hover:bg-blue-50/50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer group"
+                          className="flex items-center hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer group bg-slate-50/10 relative"
                         >
-                           <div className="flex-1 px-5 py-3 pl-12 min-w-0">
-                              <div className="flex items-center gap-2">
-                                 <div className="h-1.5 w-1.5 rounded-full bg-slate-300 group-hover:bg-[#0b1f3a]" />
+                           {/* Blue Accent Strip */}
+                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#1e40af] opacity-50" />
+
+                           <div className="flex-1 px-5 py-3 pl-8 min-w-0">
+                              <div className="flex items-center gap-2 pl-2">
                                  <span className="text-sm font-medium text-slate-600 group-hover:text-[#0b1f3a] truncate">{company.name}</span>
                                  <ArrowUpRight className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                               </div>
                            </div>
 
                            {/* Month Metrics */}
-                           <div className="flex items-center bg-slate-50/30">
+                           <div className="hidden md:flex items-center bg-slate-50/30">
                               <div className="w-24 px-2 py-3 text-right border-l border-slate-100">
-                                 <span className="text-sm font-semibold text-slate-800">{formatCurrency(company.monthActual)}</span>
+                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.monthActualPbt, true)}</span>
                               </div>
                               <div className="w-24 px-2 py-3 text-right">
-                                 <span className="text-slate-400 text-xs">{formatCurrency(company.monthBudget)}</span>
+                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.monthBudgetPbt, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                  <span className={`text-xs font-semibold ${company.monthAchievement >= 100 ? "text-emerald-600" : "text-red-500"}`}>
-                                    {company.monthAchievement.toFixed(1)}%
+                                  <span className={`text-xs font-bold font-mono ${company.monthAchievement >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(company.monthAchievement)}
                                   </span>
                               </div>
                            </div>
 
                            {/* Year Metrics */}
-                           <div className="flex items-center">
+                           <div className="hidden lg:flex items-center">
                               <div className="w-24 px-2 py-3 text-right border-l border-slate-100">
-                                 <span className="text-sm font-semibold text-slate-800">{formatCurrency(company.yearActual)}</span>
+                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.yearActualPbt, true)}</span>
                               </div>
                               <div className="w-24 px-2 py-3 text-right">
-                                 <span className="text-slate-400 text-xs">{formatCurrency(company.yearBudget)}</span>
+                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.yearBudgetPbt, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                 <span className={`text-xs font-semibold ${company.yearAchievement >= 100 ? "text-emerald-600" : "text-red-500"}`}>
-                                    {company.yearAchievement.toFixed(1)}%
+                                 <span className={`text-xs font-bold font-mono ${company.yearAchievement >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(company.yearAchievement)}
                                  </span>
                               </div>
                            </div>
