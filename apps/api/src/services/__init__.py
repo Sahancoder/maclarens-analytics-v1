@@ -7,6 +7,7 @@ from src.services.cluster_service import ClusterService
 from src.services.company_service import CompanyService
 from src.services.financial_service import FinancialService
 from src.services.report_service import ReportService
+from src.services.export_service import ExportService
 
 __all__ = [
     "AuthService",
@@ -14,5 +15,7 @@ __all__ = [
     "ClusterService",
     "CompanyService",
     "FinancialService",
-    "ReportService"
+    "ReportService",
+    "ExportService"
 ]
+

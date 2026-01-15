@@ -14,27 +14,27 @@ interface RoleCard {
 
 const roles: RoleCard[] = [
   {
-    title: "Budget Officer",
-    description: "Enter and submit financial data",
-    href: "/data-officer/login",
+    title: "Finance Officer",
+    description: "Enter actual & budget financial data",
+    href: "/finance-officer/login",
     icon: "/Data_entry.png",
   },
   {
-    title: "Company Director",
-    description: "Review and approve submissions",
-    href: "/company-director/login",
+    title: "Finance Director",
+    description: "Review reports and submit to MD",
+    href: "/finance-director/login",
     icon: "/Data_validation.png",
   },
   {
     title: "System Administrator",
     description: "Manage users and configurations",
-    href: "/admin/login",
+    href: "/system-admin/login",
     icon: "/System_administrator.png",
   },
   {
-    title: "Executive Dashboard",
+    title: "MD's Dashboard",
     description: "View group-wide analytics",
-    href: "/ceo/login",
+    href: "/md/login",
     icon: "/Analytics.png",
   },
 ];

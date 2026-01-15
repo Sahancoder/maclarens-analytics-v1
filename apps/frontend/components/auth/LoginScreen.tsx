@@ -73,17 +73,25 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
     
     // TEMPORARY: Direct redirect based on role prop (no authentication)
     const roleRedirects: { [key: string]: string } = {
-      "data-officer": "/data-officer/dashboard",
-      "company-director": "/company-director/dashboard",
-      "admin": "/admin/dashboard",
-      "ceo": "/ceo/dashboard",
+      "finance-officer": "/finance-officer/dashboard",
+      "data-officer": "/finance-officer/dashboard",  // backward compatibility
+      "finance-director": "/finance-director/dashboard",
+      "company-director": "/finance-director/dashboard",  // backward compatibility
+      "system-admin": "/system-admin/dashboard",
+      "admin": "/system-admin/dashboard",  // backward compatibility
+      "md": "/md/dashboard",
+      "ceo": "/md/dashboard",  // backward compatibility
     };
 
     const roleToDbRole: { [key: string]: string } = {
-      "data-officer": "DATA_OFFICER",
-      "company-director": "COMPANY_DIRECTOR",
-      "admin": "ADMIN",
-      "ceo": "CEO",
+      "finance-officer": "FINANCE_OFFICER",
+      "data-officer": "FINANCE_OFFICER",  // backward compatibility
+      "finance-director": "FINANCE_DIRECTOR",
+      "company-director": "FINANCE_DIRECTOR",  // backward compatibility
+      "system-admin": "SYSTEM_ADMIN",
+      "admin": "SYSTEM_ADMIN",  // backward compatibility
+      "md": "MD",
+      "ceo": "MD",  // backward compatibility
     };
 
     // TEMPORARY: Set fake auth data in localStorage to bypass dashboard auth checks

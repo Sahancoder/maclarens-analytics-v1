@@ -25,13 +25,12 @@ export function SiteFooter() {
             className="h-20 md:h-28 lg:h-32 w-auto"
           />
 
-          <p className="text-base md:text-xl lg:text-2xl text-white/80 max-w-2xl">
-            McLarens Group #284, Vauxhall Street, Colombo 02, Sri Lanka.
+          <p className="text-base md:text-xl lg:text-2xl text-white/80 max-w-4xl">
+            McLarens Group #284, Vauxhall Street, Colombo 02, <span className="whitespace-nowrap">Sri Lanka.</span>
           </p>
 
           <div className="flex flex-col md:flex-row items-center gap-3 md:gap-8 text-base md:text-xl lg:text-2xl text-white/80">
             <span>+94 11 479 9100</span>
-            <span className="hidden md:block h-1.5 w-1.5 rounded-full bg-white/40" />
             <a href="mailto:info@mclarens.lk">info@mclarens.lk</a>
           </div>
 

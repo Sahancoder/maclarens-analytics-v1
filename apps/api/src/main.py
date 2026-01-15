@@ -2,7 +2,8 @@
 McLarens Analytics API - FastAPI Entry Point
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, Query
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
@@ -12,6 +13,7 @@ from src.gql_schema.schema import schema
 from src.services.auth_service import AuthService
 from src.services.health_service import HealthService
 from src.db.models import UserRole
+from src.services.export_service import ExportService
 
 
 @asynccontextmanager
@@ -190,3 +192,41 @@ async def health_full():
 async def health_config():
     """Get current configuration (non-sensitive)"""
     return HealthService.get_config_summary()
+
+
+# ============ EXPORT ENDPOINTS ============
+
+@app.get("/api/export/financial-summary")
+async def export_financial_summary(
+    year: int = Query(default=2025, description="Year for the report"),
+    month: int = Query(default=10, description="Month for the report (1-12)")
+):
+    """
+    Export Group Financial Summary as Excel file.
+    Downloads P&L Template with data from the database.
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            excel_bytes = await ExportService.generate_excel_report(db, year, month)
+            
+            filename = f"Group_Financial_Summary_{year}_{month:02d}.xlsx"
+            
+            return Response(
+                content=excel_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "Access-Control-Expose-Headers": "Content-Disposition"
+                }
+            )
+        except Exception as e:
+            return {"error": str(e), "status": "export_failed"}
+
+
+@app.get("/api/export/available-periods")
+async def get_available_periods():
+    """Get list of periods with financial data available for export."""
+    async with AsyncSessionLocal() as db:
+        periods = await ExportService.get_available_periods(db)
+        return {"periods": periods}
+

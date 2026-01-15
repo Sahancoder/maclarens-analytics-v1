@@ -63,3 +63,19 @@ h3 {
 .animate-pulse-once {
   animation: pulse-once 0.3s ease-out;
 }
+
+/* Cloth Wave animation */
+/* Simulates a gentle breeze affecting only the fabric */
+@keyframes cloth-wave {
+  0%, 100% {
+    transform: scaleX(1) skewY(0deg);
+  }
+  50% {
+    transform: scaleX(0.92) skewY(3deg);
+  }
+}
+
+.animate-cloth-wave {
+  transform-origin: top left; /* Anchors the cloth to the pole */
+  animation: cloth-wave 3s ease-in-out infinite;
+}

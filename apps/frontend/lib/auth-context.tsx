@@ -77,13 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getRedirectPath = (user: User): string => {
     switch (user.role) {
       case 'DATA_OFFICER':
-        return '/data-officer/dashboard';
+      case 'FINANCE_OFFICER':
+        return '/finance-officer/dashboard';
       case 'COMPANY_DIRECTOR':
-        return '/company-director/dashboard';
+      case 'FINANCE_DIRECTOR':
+        return '/finance-director/dashboard';
       case 'ADMIN':
-        return '/admin/dashboard';
+      case 'SYSTEM_ADMIN':
+        return '/system-admin/dashboard';
       case 'CEO':
-        return '/ceo/dashboard';
+      case 'MD':
+        return '/md/dashboard';
       default:
         return '/';
     }
