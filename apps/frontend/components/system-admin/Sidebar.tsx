@@ -14,7 +14,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 
-const navItems = [
+export const navItems = [
   { href: "/system-admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/system-admin/users", label: "User Management", icon: Users },
   { href: "/system-admin/companies", label: "Companies", icon: Building2 },

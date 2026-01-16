@@ -74,9 +74,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Pending Reports List */}
-        <div className="w-72 bg-white border-r border-slate-200 flex flex-col">
+        <div className="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col h-64 md:h-auto border-b md:border-b-0">
           <div className="p-4 border-b border-slate-200">
             <h3 className="text-sm font-semibold text-slate-800">Pending Approval</h3>
             <p className="text-xs text-slate-500 mt-1">{pendingReports.length} reports waiting</p>
@@ -99,7 +99,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Report Details */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {/* Report Info */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5">
             <div className="flex items-start justify-between">

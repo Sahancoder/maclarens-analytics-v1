@@ -21,18 +21,20 @@ export default function DraftsPage() {
     const draft = localStorage.getItem("dataEntryDraft");
     if (draft) {
       const draftData = JSON.parse(draft);
-      const filledFields = Object.values(draftData).filter(
-        (v) => v !== "" && v !== "positive" && v !== "gain"
+      // Determine completion based on filled fields
+      const filledFields = Object.values(draftData.formData || {}).filter(
+        (v) => v !== "" && v !== "positive" && v !== "gain" && v !== "+" && v !== "-"
       ).length;
-      const totalFields = 12; // Number of input fields
-      const completionPercent = Math.round((filledFields / totalFields) * 100);
+      
+      const totalFields = 12; // Approximation
+      const completionPercent = Math.min(100, Math.round((filledFields / totalFields) * 100));
 
       setDrafts([
         {
           id: "1",
-          date: new Date().toISOString().split("T")[0],
-          company: "McLarens Marchitime Academy (Pvt) Ltd",
-          lastModified: "Just now",
+          date: draftData.lastModified ? draftData.lastModified.split("T")[0] : new Date().toISOString().split("T")[0],
+          company: draftData.company || "Unknown Company",
+          lastModified: draftData.lastModified ? new Date(draftData.lastModified).toLocaleString() : "Recently",
           completionPercent,
         },
       ]);
@@ -40,7 +42,7 @@ export default function DraftsPage() {
   }, []);
 
   const handleResume = () => {
-    router.push("/data-officer/dashboard");
+    router.push("/finance-officer/dashboard");
   };
 
   const handleDelete = (id: string) => {

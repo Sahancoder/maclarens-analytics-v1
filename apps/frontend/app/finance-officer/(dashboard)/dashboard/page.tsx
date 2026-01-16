@@ -226,31 +226,43 @@ export default function ActualEntryPage() {
   });
 
   // Check for rejected report data on component mount
+  // Check for rejected report data OR draft data on component mount
   useEffect(() => {
     const storedReport = sessionStorage.getItem('editingRejectedReport');
     if (storedReport) {
       try {
         const reportData = JSON.parse(storedReport);
         setEditingRejectedReport(reportData);
-        
-        // Pre-fill form data
         setFormData(reportData.formData);
         
-        // Pre-select company and month
         const companyInfo = COMPANIES_DATA.find(c => c.code === reportData.companyCode);
         if (companyInfo) {
           setCluster(reportData.cluster);
           setCompany(reportData.companyName);
         }
         
-        // Extract month from period (e.g., "November 2024" -> "November")
         const monthName = reportData.period.split(' ')[0];
         setMonth(monthName);
-        
-        // Clear from sessionStorage after loading
         sessionStorage.removeItem('editingRejectedReport');
       } catch (error) {
         console.error('Error loading rejected report:', error);
+      }
+    } else {
+      // Check for saved draft if not editing a rejected report
+      const savedDraft = localStorage.getItem("dataEntryDraft");
+      if (savedDraft) {
+        try {
+          const draftData = JSON.parse(savedDraft);
+          // Only load if it looks like our data
+          if (draftData.formData) {
+            setFormData(draftData.formData);
+            if (draftData.cluster) setCluster(draftData.cluster);
+            if (draftData.company) setCompany(draftData.company);
+            if (draftData.month) setMonth(draftData.month);
+          }
+        } catch (e) {
+          console.error("Error loading draft", e);
+        }
       }
     }
   }, []);
@@ -260,11 +272,46 @@ export default function ActualEntryPage() {
   const companyData = useMemo(() => COMPANIES_DATA.find(c => c.name === company), [company]);
   const financialYear = useMemo(() => companyData ? (companyData.yearEnd === "December" ? "FY 2025" : "FY 2025-26") : "", [companyData]);
 
-  useEffect(() => { setCompany(""); }, [cluster]);
+  useEffect(() => { 
+    // Only reset company if the new cluster doesn't contain the current company
+    // But since companies is derived from cluster, if cluster changes, companies changes.
+    // We should check if current company is valid for new cluster.
+    const isValid = COMPANIES_DATA.some(c => c.name === company && c.cluster === cluster);
+    if (!isValid) setCompany(""); 
+  }, [cluster, company]); // Added company dependency to satisfy exhaustive-deps, though logic slighty changed from original `useEffect(() => { setCompany(""); }, [cluster]);` which blindly reset.
+  // Actually, let's keep original behavior but strictly cleaner if needed. 
+  // The original was: useEffect(() => { setCompany(""); }, [cluster]); 
+  // If we behave like original:
+  // useEffect(() => { setCompany(""); }, [cluster]); 
+  // using saved draft might set cluster then company. If we strictly follow react, setting cluster triggers this.
+  // We need to be careful not to clear company immediately after loading draft.
+  // The loading logic sets both. React batching might help, or we might need a ref to skip first reset.
+  
+  // Ref to track if initial load happened to avoid clearing company
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    setCompany("");
+  }, [cluster]);
 
   const update = useCallback((field: keyof FormData, value: string | "+" | "-") => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
+
+  const handleSaveDraft = () => {
+    const draftData = {
+      cluster,
+      company,
+      month,
+      formData,
+      lastModified: new Date().toISOString()
+    };
+    localStorage.setItem("dataEntryDraft", JSON.stringify(draftData));
+    alert("Draft saved successfully!");
+  };
 
   const handleClear = () => {
     if (window.confirm("Are you sure you want to clear all data? This cannot be undone.")) {
@@ -461,7 +508,7 @@ export default function ActualEntryPage() {
             Clear
           </button>
           <div className="flex gap-3">
-            <button type="button" className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors">
+            <button type="button" onClick={handleSaveDraft} className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors">
               Save Draft
             </button>
             <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !company || !month}
@@ -472,7 +519,7 @@ export default function ActualEntryPage() {
         </div>
       </div>
 
-      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={() => { setShowModal(false); alert("Actual data submitted to Finance Director for review!"); }} company={company} month={month} />
+      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={() => { setShowModal(false); localStorage.removeItem("dataEntryDraft"); alert("Actual data submitted to Finance Director for review!"); }} company={company} month={month} />
     </div>
   );
 }

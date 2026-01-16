@@ -22,6 +22,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  LineChart,
   Area,
 } from "recharts";
 
@@ -97,7 +98,18 @@ const formatLKR000 = (val: number) => val.toLocaleString(); // Just comma separa
 const formatUSD = (val: number) => `USD ${val.toLocaleString()}`;
 const formatPercent = (val: number) => `${val.toFixed(1)}%`;
 
-// Mock Data Generator
+
+
+// Mock Series generator for Trend Chart
+const getPbdtSeries = (companyId: string) => {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const baseValue = Math.floor(Math.random() * 40000000) + 10000000; 
+  
+  return months.map(m => ({
+    month: m,
+    value: baseValue + Math.floor(Math.random() * 10000000) - 5000000
+  }));
+};
 const generateCompanyData = (id: string, name: string, clusterId: string, fiscalStart: 1 | 4): Company => {
   // Base PBT ~10m - 50m
   const basePbt = Math.floor(Math.random() * 40000000) + 10000000;
@@ -332,22 +344,50 @@ export default function PerformancePage() {
 
   const filteredClusters = useMemo(() => {
     return clusters.filter(c => {
-      if (filter === "positive") return c.monthActualPbt > 0;
-      if (filter === "negative") return c.monthActualPbt < 0;
+      // Basic mock filtering logic if needed (can be removed if chart doesn't use it)
       return true;
     });
-  }, [filter]);
+  }, []); // removed filter dependency as filter state is removed
 
   const sortedClusters = useMemo(() => 
     [...filteredClusters].sort((a, b) => b.monthActualPbt - a.monthActualPbt), [filteredClusters]);
 
-  const chartData = useMemo(() => 
-    sortedClusters.map(c => ({
-      name: c.name.length > 10 ? c.name.substring(0, 8) + "..." : c.name,
-      fullName: c.name,
-      value: viewMode === "contribution" ? c.monthActualPbt : c.monthAchievement, 
-      pbt: c.monthActualPbt,
-    })), [sortedClusters, viewMode]);
+  // Drilldown State
+  const [drilldownClusterId, setDrilldownClusterId] = useState<string>(clusters[0]?.id || "");
+  const [drilldownCompanyId, setDrilldownCompanyId] = useState<string>("");
+  const [drilldownTimeRange, setDrilldownTimeRange] = useState<"6M" | "12M">("12M");
+
+  // Initialize company when cluster changes
+  useMemo(() => {
+    const cluster = clusters.find(c => c.id === drilldownClusterId);
+    if (cluster && cluster.companies.length > 0) {
+      const currentCompanyInCluster = cluster.companies.find(c => c.id === drilldownCompanyId);
+      if (!currentCompanyInCluster) {
+         setDrilldownCompanyId(cluster.companies[0].id);
+      }
+    } else {
+      setDrilldownCompanyId("");
+    }
+  }, [drilldownClusterId, drilldownCompanyId, sortedClusters]); // Added sortedClusters dependency as stable source
+
+  // Derive Drilldown Data
+  const drilldownData = useMemo(() => {
+    if (!drilldownCompanyId) return [];
+    
+    // Generate data on the fly (mock)
+    const series = getPbdtSeries(drilldownCompanyId);
+    
+    // Filter by time range
+    if (drilldownTimeRange === "6M") {
+      return series.slice(-6);
+    }
+    return series;
+  }, [drilldownCompanyId, drilldownTimeRange]);
+
+  const availableDrilldownCompanies = useMemo(() => {
+    const c = clusters.find(cl => cl.id === drilldownClusterId);
+    return c ? c.companies : [];
+  }, [drilldownClusterId]);
 
   const toggleCluster = (clusterId: string) => {
     const newExpanded = new Set(expandedClusters);
@@ -409,79 +449,128 @@ export default function PerformancePage() {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-5 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-400" />
-            <span className="text-sm font-medium text-slate-600">View:</span>
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-              <button
-                onClick={() => setViewMode("contribution")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  viewMode === "contribution" ? "bg-[#0b1f3a] text-white" : "text-slate-600"
-                }`}
-              >
-                Contribution %
-              </button>
-              <button
-                onClick={() => setViewMode("momentum")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  viewMode === "momentum" ? "bg-[#0b1f3a] text-white" : "text-slate-600"
-                }`}
-              >
-                MoM Change
-              </button>
-            </div>
-          </div>
-          <div className="h-6 w-px bg-slate-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-600">Filter:</span>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as "all" | "positive" | "negative")}
-              className="h-8 px-3 text-sm border border-slate-200 rounded-lg"
-            >
-              <option value="all">All Clusters</option>
-              <option value="positive">Profitable Only</option>
-              <option value="negative">Loss-making Only</option>
-            </select>
-          </div>
-        </div>
+        {/* Controls & Chart Container */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+             <div>
+                <h3 className="text-base font-semibold text-slate-900">Cluster Drilldown</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Company PBT Trend</p>
+             </div>
 
-        {/* Chart */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
-          <h3 className="text-base font-semibold text-slate-900 mb-4">
-            {viewMode === "contribution" ? "Cluster Contribution to Group PBT" : "Month-over-Month Momentum"}
-          </h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fontSize: 10 }} 
-                  angle={-45} 
-                  textAnchor="end" 
-                  height={70} 
-                />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
-                <Tooltip 
-                  formatter={(value: number, name: string, props: any) => [
-                    `${value.toFixed(1)}%`,
-                    viewMode === "contribution" ? "Contribution" : "MoM Change"
-                  ]}
-                  labelFormatter={(label, payload: any) => payload?.[0]?.payload?.fullName || label}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.value >= 0 ? "#0b1f3a" : "#ef4444"} 
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+             <div className="flex flex-wrap items-center gap-3">
+                {/* Cluster Select */}
+                <div className="relative">
+                  <select
+                    value={drilldownClusterId}
+                    onChange={(e) => {
+                      setDrilldownClusterId(e.target.value);
+                      setDrilldownCompanyId(""); 
+                    }}
+                    className="h-8 pl-3 pr-8 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 appearance-none min-w-[140px]"
+                  >
+                    {clusters.map(cluster => (
+                      <option key={cluster.id} value={cluster.id}>{cluster.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+
+                {/* Company Select */}
+                <div className="relative">
+                  <select
+                     value={drilldownCompanyId}
+                     onChange={(e) => setDrilldownCompanyId(e.target.value)}
+                     disabled={!drilldownClusterId}
+                     className="h-8 pl-3 pr-8 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 appearance-none min-w-[160px] disabled:opacity-50"
+                  >
+                     {availableDrilldownCompanies.length === 0 ? (
+                        <option value="">No Companies</option>
+                     ) : (
+                        availableDrilldownCompanies.map(company => (
+                          <option key={company.id} value={company.id}>{company.name}</option>
+                        ))
+                     )}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+
+                <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
+
+                {/* Time Range Toggle */}
+                 <div className="flex bg-slate-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setDrilldownTimeRange("6M")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      drilldownTimeRange === "6M" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Last 6M
+                  </button>
+                  <button
+                    onClick={() => setDrilldownTimeRange("12M")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      drilldownTimeRange === "12M" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    12M
+                  </button>
+                </div>
+             </div>
+          </div>
+
+          <div className="p-5">
+            <div className="h-[380px] w-full">
+              {drilldownCompanyId ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={drilldownData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="#64748b" 
+                        tick={{ fontSize: 11 }}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickLine={false}
+                        dy={10}
+                      />
+                      <YAxis 
+                        stroke="#64748b"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => {
+                           if (value >= 1000000) return `LKR ${(value / 1000000).toFixed(1)}M`;
+                           return `LKR ${(value / 1000).toFixed(0)}K`;
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                        dx={-10}
+                      />
+                      <Tooltip
+                        contentStyle={{ 
+                          backgroundColor: '#fff',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                          fontSize: '12px' 
+                        }}
+                        itemStyle={{ color: '#0b1f3a', fontWeight: 600 }}
+                        formatter={(value: number) => [`LKR ${value.toLocaleString()}`, 'PBDT']}
+                        cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                      />
+                      <Line 
+                        type="linear" 
+                        dataKey="value" 
+                        stroke="#0b1f3a" 
+                        strokeWidth={2.5} 
+                        dot={{ r: 4, fill: "#0b1f3a", strokeWidth: 2, stroke: "#fff" }}
+                        activeDot={{ r: 6, fill: "#0b1f3a", strokeWidth: 0 }}
+                      />
+                    </LineChart>
+                   </ResponsiveContainer>
+              ) : (
+                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                    <p className="text-sm">Select a company to view trend data</p>
+                 </div>
+              )}
+            </div>
           </div>
         </div>
 

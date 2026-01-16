@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 // Unified hierarchy: Group → Clusters → Risk → Forecast
-const navItems = [
+export const navItems = [
   { href: "/md/dashboard", label: "Group Overview", icon: LayoutDashboard, description: "Strategic snapshot" },
   { href: "/md/performance", label: "Cluster Drilldown", icon: Building2, description: "Cluster → Company" },
   { href: "/md/risks", label: "Risk Analysis", icon: AlertTriangle, description: "Variance intelligence" },

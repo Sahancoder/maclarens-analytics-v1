@@ -30,6 +30,9 @@ export default function CompaniesPage() {
   const [clusterFilter, setClusterFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
 
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [assigningCompany, setAssigningCompany] = useState<Company | null>(null);
+
   const clusters = Array.from(new Set(companiesData.map((c) => c.cluster)));
 
   const filteredCompanies = companies.filter((company) => {
@@ -144,10 +147,16 @@ export default function CompaniesPage() {
               </div>
 
               <div className="flex gap-2 mt-4">
-                <button className="flex-1 h-9 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                <button 
+                  onClick={() => setEditingCompany(company)}
+                  className="flex-1 h-9 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
                   Edit
                 </button>
-                <button className="flex-1 h-9 text-sm font-medium text-[#0b1f3a] bg-[#0b1f3a]/10 rounded-lg hover:bg-[#0b1f3a]/20 transition-colors">
+                <button 
+                  onClick={() => setAssigningCompany(company)}
+                  className="flex-1 h-9 text-sm font-medium text-[#0b1f3a] bg-[#0b1f3a]/10 rounded-lg hover:bg-[#0b1f3a]/20 transition-colors"
+                >
                   Assign Users
                 </button>
               </div>
@@ -156,26 +165,37 @@ export default function CompaniesPage() {
         </div>
       </div>
 
-      {/* Add Company Modal */}
-      {showAddModal && (
+      {/* Edit Company Modal */}
+      {editingCompany && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Add New Company</h3>
+            <h3 className="text-xl font-semibold text-slate-900 mb-6">Edit Company</h3>
             <div className="space-y-5">
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-1">
                   <label className="block text-sm font-medium text-slate-700 mb-2">Code</label>
-                  <input type="text" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" placeholder="ABC" />
+                  <input 
+                    type="text" 
+                    defaultValue={editingCompany.code}
+                    className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg bg-slate-50" 
+                    readOnly
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
-                  <input type="text" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" />
+                  <input 
+                    type="text" 
+                    defaultValue={editingCompany.name}
+                    className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" 
+                  />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Cluster</label>
-                <select className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg">
-                  <option>Select Cluster</option>
+                <select 
+                  defaultValue={editingCompany.cluster}
+                  className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg"
+                >
                   {clusters.map((cluster) => (
                     <option key={cluster}>{cluster}</option>
                   ))}
@@ -183,18 +203,93 @@ export default function CompaniesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Financial Year End</label>
-                <select className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg">
+                <select 
+                  defaultValue={editingCompany.yearEnd}
+                  className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg"
+                >
                   <option>March</option>
                   <option>December</option>
                 </select>
               </div>
             </div>
             <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowAddModal(false)} className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
+              <button 
+                onClick={() => setEditingCompany(null)} 
+                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+              >
                 Cancel
               </button>
-              <button className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90">
-                Create Company
+              <button 
+                onClick={() => {
+                  alert("Company updated successfully!");
+                  setEditingCompany(null);
+                }}
+                className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Users Modal */}
+      {assigningCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">Assign Users</h3>
+            <p className="text-sm text-slate-500 mb-6">Assign key personnel for <span className="font-semibold text-slate-800">{assigningCompany.name}</span></p>
+            
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Finance Director</label>
+                <div className="relative">
+                  <select 
+                    defaultValue={assigningCompany.director === "—" ? "" : assigningCompany.director}
+                    className="w-full h-11 pl-4 pr-10 text-sm border border-slate-300 rounded-lg appearance-none"
+                  >
+                    <option value="">Select Director...</option>
+                    <option value="Sahan Viranga">Sahan Viranga</option>
+                    <option value="Orlando Diggs">Orlando Diggs</option>
+                    <option value="Sarah Smith">Sarah Smith</option>
+                  </select>
+                  <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Data Officer</label>
+                <div className="relative">
+                  <select 
+                    defaultValue={assigningCompany.dataOfficer === "—" ? "" : assigningCompany.dataOfficer}
+                    className="w-full h-11 pl-4 pr-10 text-sm border border-slate-300 rounded-lg appearance-none"
+                  >
+                    <option value="">Select Officer...</option>
+                    <option value="Sahan Hettiarachchi">Sahan Hettiarachchi</option>
+                    <option value="Natali Craig">Natali Craig</option>
+                    <option value="Drew Cano">Drew Cano</option>
+                    <option value="John Doe">John Doe</option>
+                  </select>
+                  <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end mt-8">
+              <button 
+                onClick={() => setAssigningCompany(null)} 
+                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  alert("Users assigned successfully!");
+                  setAssigningCompany(null);
+                }}
+                className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90"
+              >
+                Save Assignments
               </button>
             </div>
           </div>

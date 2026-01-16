@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, FileText, BarChart3, Bell, Send } from "lucide-react";
 
-const navItems = [
+export const navItems = [
   { href: "/finance-director/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/finance-director/reports", label: "Review Reports", icon: FileText },
   { href: "/finance-director/analytics", label: "Company Analytics", icon: BarChart3 },

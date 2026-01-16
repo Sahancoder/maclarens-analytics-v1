@@ -31,10 +31,10 @@ const pendingApprovals = [
 export default function AdminDashboard() {
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">System Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">System Dashboard</h1>
           <p className="text-base text-slate-500 mt-2">Platform overview and system health monitoring</p>
         </div>
 

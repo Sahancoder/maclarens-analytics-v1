@@ -35,7 +35,7 @@ export function Header() {
     localStorage.removeItem("director-auth");
     localStorage.removeItem("admin-auth");
     localStorage.removeItem("ceo-auth");
-    router.push("/login");
+    router.push("/");
   };
 
   const getInitials = (email: string) => {
