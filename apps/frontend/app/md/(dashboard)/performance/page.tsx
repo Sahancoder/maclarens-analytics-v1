@@ -10,6 +10,9 @@ import {
   Building2,
   Filter,
   CheckCircle2,
+  Plus,
+  X,
+  Check,
 } from "lucide-react";
 import { 
   BarChart, 
@@ -24,6 +27,7 @@ import {
   Line,
   LineChart,
   Area,
+  Legend,
 } from "recharts";
 
 // ============ DATA ============
@@ -70,6 +74,9 @@ interface Company extends FinanceDetails {
   uploadedBy: string;
   uploadedAt: string;
   lastUpdated: string;
+  
+  // YTD Data Container (Mirrors root FinanceDetails)
+  ytd: FinanceDetails;
 }
 
 interface Cluster {
@@ -166,7 +173,31 @@ const generateCompanyData = (id: string, name: string, clusterId: string, fiscal
 
     uploadedBy: "Finance Officer",
     uploadedAt: "2025-10-15 14:30",
-    lastUpdated: "v1.0"
+    lastUpdated: "v1.0",
+    
+    // Mock YTD Data (Multiplying monthly by duration for simulation)
+    ytd: {
+      revenueUsd: (revenueLkr / 300) * (fiscalStart === 1 ? 10 : 7),
+      revenueLkr: revenueLkr * (fiscalStart === 1 ? 10 : 7),
+      gpLkr: gpLkr * (fiscalStart === 1 ? 10 : 7),
+      gpMargin: (gpLkr / revenueLkr) * 100, // Margin typically stays similar or weighted avg
+      otherIncome: Math.floor(Math.random() * 500000) * (fiscalStart === 1 ? 10 : 7),
+      personnelExpenses: personnelExpenses * (fiscalStart === 1 ? 10 : 7),
+      adminExpenses: adminExpenses * (fiscalStart === 1 ? 10 : 7),
+      sellingExpenses: sellingExpenses * (fiscalStart === 1 ? 10 : 7),
+      financeExpenses: financeExpenses * (fiscalStart === 1 ? 10 : 7),
+      depreciation: depreciation * (fiscalStart === 1 ? 10 : 7),
+      totalOverheads: totalOverheads * (fiscalStart === 1 ? 10 : 7),
+      provisions: -50000 * (fiscalStart === 1 ? 10 : 7),
+      exchangeGain: 120000 * (fiscalStart === 1 ? 10 : 7),
+      pbtBeforeNonOps: pbtBeforeNonOps * (fiscalStart === 1 ? 10 : 7),
+      npMargin: (pbtBeforeNonOps / revenueLkr) * 100,
+      nonOpsExpenses: 0,
+      nonOpsIncome: 0,
+      pbtAfterNonOps: pbtBeforeNonOps * (fiscalStart === 1 ? 10 : 7),
+      ebit: (pbtBeforeNonOps + financeExpenses) * (fiscalStart === 1 ? 10 : 7),
+      ebitda: (pbtBeforeNonOps + financeExpenses + depreciation) * (fiscalStart === 1 ? 10 : 7),
+    }
   };
 };
 
@@ -245,7 +276,104 @@ const getApprovedComments = (companyId: string): Comment[] => {
   ];
 };
 
-// ============ COMPONENTS ============
+// ============ SUB-COMPONENTS ============
+
+// --- Multi-Select Component ---
+interface MultiSelectProps {
+  options: Company[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  colors: Record<string, string>;
+}
+
+const MultiSelect = ({ options, selectedIds, onChange, colors }: MultiSelectProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const toggleOption = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent closing dropdown
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(i => i !== id));
+    } else {
+      if (selectedIds.length >= 5) return; // Limit to 5
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const removeOption = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange(selectedIds.filter(i => i !== id));
+  };
+
+  return (
+    <div className="relative">
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="min-h-[32px] pl-2 pr-8 py-1 text-xs font-medium bg-white border border-slate-200 rounded-lg hover:border-slate-300 cursor-pointer flex flex-wrap gap-1 items-center min-w-[200px]"
+      >
+        {selectedIds.length === 0 && <span className="text-slate-500">Select companies...</span>}
+        {selectedIds.map(id => {
+          const company = options.find(o => o.id === id);
+          if (!company) return null;
+          return (
+            <span 
+              key={id} 
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200"
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[id] }} />
+              <span className="max-w-[80px] truncate">{company.name}</span>
+              <X 
+                className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-pointer" 
+                onClick={(e) => removeOption(id, e)}
+              />
+            </span>
+          );
+        })}
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+      </div>
+
+      {isOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)} 
+          />
+          <div className="absolute top-full left-0 mt-1 w-full min-w-[240px] bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-[300px] overflow-y-auto">
+            {options.map(option => {
+              const isSelected = selectedIds.includes(option.id);
+              const isDisabled = !isSelected && selectedIds.length >= 5;
+              
+              return (
+                <div
+                  key={option.id}
+                  onClick={(e) => !isDisabled && toggleOption(option.id, e)}
+                  className={`px-3 py-2 flex items-center justify-between text-xs cursor-pointer ${
+                    isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      isSelected ? "bg-[#0b1f3a] border-[#0b1f3a]" : "border-slate-300 bg-white"
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <span className="text-slate-700">{option.name}</span>
+                  </div>
+                  {isSelected && (
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[option.id] }} />
+                  )}
+                </div>
+              );
+            })}
+            {options.length === 0 && (
+              <div className="px-3 py-2 text-xs text-slate-400 text-center">No companies available</div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 
 interface FinanceUploadModalProps {
   company: Company | null;
@@ -258,80 +386,156 @@ interface FinanceUploadModalProps {
 const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: FinanceUploadModalProps) => {
   if (!isOpen || !company) return null;
 
+  // Calculate YTD Range Logic
+  const getYtdRangeLabel = () => {
+    // Current assumption: Selected month is calculated from outside (Oct 2025)
+    // Fiscal Start: 1 (Jan) or 4 (Apr)
+    
+    const monthIndex = 10; // October (1-indexed for logic clarity)
+    const fiscalStart = company.fiscalYearStartMonth;
+    let startMonthName = "";
+    let duration = 0;
+    
+    if (fiscalStart === 1) {
+      startMonthName = "Jan";
+      duration = monthIndex; // Jan to Oct = 10 months
+    } else {
+      startMonthName = "Apr";
+      // If Oct (10) >= Apr (4), simple diff
+      duration = monthIndex - fiscalStart + 1; // 10 - 4 + 1 = 7 months
+    }
+    
+    return {
+      label: `${startMonthName}–${monthName.substring(0, 3)} ${year}`,
+      duration
+    };
+  };
+
+  const ytdInfo = getYtdRangeLabel();
+  
+  // Helper for 3-col Grid Row
+  // Helper for 3-col Grid Row with better visual separation
+  const GridRow = ({ label, monthly, ytd, isBold = false, isHeader = false, isAccent = false, isNegative = false }: any) => {
+    if (isHeader) {
+      return (
+        <div className="grid grid-cols-[1fr_140px_140px] items-center border-b-2 border-slate-100 pb-2 mb-2">
+           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-2">{label || "Metric"}</div>
+           <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider px-3 border-l border-slate-100">Monthly</div>
+           <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider px-3 border-l border-slate-100">YTD</div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="grid grid-cols-[1fr_140px_140px] items-center py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 rounded-sm">
+         <div className={`pl-2 pr-4 ${isBold ? 'font-semibold text-slate-800' : 'text-slate-600 font-medium'} text-sm`}>
+           {label}
+         </div>
+         
+         {/* Monthly Value */}
+         <div className={`text-right px-3 border-l border-slate-100 font-mono text-sm tracking-tight
+           ${isBold ? 'font-bold' : 'font-medium'} 
+           ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
+         `}>
+           {monthly}
+         </div>
+         
+         {/* YTD Value */}
+         <div className={`text-right px-3 border-l border-slate-100 font-mono text-sm tracking-tight
+           ${isBold ? 'font-bold' : 'font-medium'} 
+           ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
+           bg-slate-50/50 -my-2.5 py-2.5
+         `}>
+           {ytd}
+         </div>
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200 flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
             <h3 className="text-xl font-bold text-slate-900">{company.name}</h3>
-            <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-1 text-xs text-slate-500">
                <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-medium">
                  Fiscal: {company.fiscalYearStartMonth === 1 ? "Jan-Dec" : "Apr-Mar"}
                </span>
-               <span>•</span>
-               <span>{monthName} {year}</span>
+               <span className="flex items-center gap-2">
+                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                 <span className="font-semibold text-slate-700">Monthly:</span> {monthName} {year}
+               </span>
+               <span className="flex items-center gap-2">
+                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                 <span className="font-semibold text-slate-700">YTD:</span> {ytdInfo.label} ({ytdInfo.duration} Mo.)
+               </span>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-6">
             
             {/* GROUP 1: Revenue & GP */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
                <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Revenue & Gross Profit</h4>
-               <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-600">Revenue (USD)</span><span className="font-mono font-medium">{formatUSD(company.revenueUsd)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Revenue (LKR)</span><span className="font-mono font-medium">{formatCurrencyLKR(company.revenueLkr)}</span></div>
-                  <div className="border-t border-slate-100 my-1" />
-                  <div className="flex justify-between"><span className="text-slate-600 font-medium">Gross Profit (LKR)</span><span className="font-mono font-bold text-slate-800">{formatCurrencyLKR(company.gpLkr)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 italic">GP Margin</span><span className="font-mono text-slate-600">{formatPercent(company.gpMargin)}</span></div>
+               <div className="space-y-1">
+                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
+                  <GridRow label="Revenue (USD)" monthly={formatLKR000(company.revenueUsd)} ytd={formatLKR000(company.ytd.revenueUsd)} />
+                  <GridRow label="Revenue (LKR)" monthly={formatCurrencyLKR(company.revenueLkr)} ytd={formatCurrencyLKR(company.ytd.revenueLkr)} />
+                  <div className="border-t border-slate-100 my-2" />
+                  <GridRow label="Gross Profit (LKR)" isBold monthly={formatCurrencyLKR(company.gpLkr)} ytd={formatCurrencyLKR(company.ytd.gpLkr)} />
+                  <GridRow label="GP Margin" monthly={formatPercent(company.gpMargin)} ytd={formatPercent(company.ytd.gpMargin)} />
                </div>
             </div>
 
             {/* GROUP 2: Expenses */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
-               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Expenses Breakdown (LKR '000)</h4>
-               <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-600">Personnel Related/HR</span><span className="font-mono">{formatLKR000(company.personnelExpenses)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Admin & Establishment</span><span className="font-mono">{formatLKR000(company.adminExpenses)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Selling & Distribution</span><span className="font-mono">{formatLKR000(company.sellingExpenses)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Finance Expenses</span><span className="font-mono">{formatLKR000(company.financeExpenses)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Depreciation</span><span className="font-mono">{formatLKR000(company.depreciation)}</span></div>
-                  <div className="border-t border-slate-100 my-1" />
-                  <div className="flex justify-between"><span className="text-slate-600 font-medium">Total Overheads</span><span className="font-mono font-bold text-red-600">-{formatLKR000(company.totalOverheads)}</span></div>
+               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Expenses Breakdown (LKR)</h4>
+               <div className="space-y-1">
+                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
+                  <GridRow label="Personnel Related/HR" monthly={formatLKR000(company.personnelExpenses)} ytd={formatLKR000(company.ytd.personnelExpenses)} />
+                  <GridRow label="Admin & Establishment" monthly={formatLKR000(company.adminExpenses)} ytd={formatLKR000(company.ytd.adminExpenses)} />
+                  <GridRow label="Selling & Distribution" monthly={formatLKR000(company.sellingExpenses)} ytd={formatLKR000(company.ytd.sellingExpenses)} />
+                  <GridRow label="Finance Expenses" monthly={formatLKR000(company.financeExpenses)} ytd={formatLKR000(company.ytd.financeExpenses)} />
+                  <GridRow label="Depreciation" monthly={formatLKR000(company.depreciation)} ytd={formatLKR000(company.ytd.depreciation)} />
+                  <div className="border-t border-slate-100 my-2" />
+                  <GridRow label="Total Overheads" isBold isNegative monthly={`-${formatLKR000(company.totalOverheads)}`} ytd={`-${formatLKR000(company.ytd.totalOverheads)}`} />
                </div>
             </div>
 
             {/* GROUP 3: Non-Ops & Provisions */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
-               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Other Items (LKR '000)</h4>
-               <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-600">Other Income</span><span className="font-mono">{formatLKR000(company.otherIncome)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Provisions / Reversal</span><span className="font-mono">{formatLKR000(company.provisions)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Exchange (Loss) / Gain</span><span className={`font-mono ${company.exchangeGain >=0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatLKR000(company.exchangeGain)}</span></div>
-                  <div className="border-t border-slate-100 my-1" />
-                  <div className="flex justify-between"><span className="text-slate-600">Non Ops Income</span><span className="font-mono">{formatLKR000(company.nonOpsIncome)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-600">Non Ops Expenses</span><span className="font-mono">{formatLKR000(company.nonOpsExpenses)}</span></div>
+               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Other Items (LKR)</h4>
+               <div className="space-y-1">
+                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
+                  <GridRow label="Other Income" monthly={formatLKR000(company.otherIncome)} ytd={formatLKR000(company.ytd.otherIncome)} />
+                  <GridRow label="Provisions / Reversal" monthly={formatLKR000(company.provisions)} ytd={formatLKR000(company.ytd.provisions)} />
+                  <GridRow label="Exchange (Loss) / Gain" monthly={formatLKR000(company.exchangeGain)} ytd={formatLKR000(company.ytd.exchangeGain)} />
+                  <div className="border-t border-slate-100 my-2" />
+                  <GridRow label="Non Ops Income" monthly={formatLKR000(company.nonOpsIncome)} ytd={formatLKR000(company.ytd.nonOpsIncome)} />
+                  <GridRow label="Non Ops Expenses" monthly={formatLKR000(company.nonOpsExpenses)} ytd={formatLKR000(company.ytd.nonOpsExpenses)} />
                </div>
             </div>
 
              {/* GROUP 4: Profitability */}
              <div className="bg-[#f8fafc] p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
-               <h4 className="text-sm font-bold text-[#0b1f3a] uppercase tracking-wide mb-4 border-b border-slate-200 pb-2">Key Profit Metrics (LKR '000)</h4>
-               <div className="space-y-3 text-sm">
-                  <div className="flex justify-between items-center"><span className="text-slate-700 font-medium">EBITDA</span><span className="font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-100">{formatLKR000(company.ebitda)}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-slate-700 font-medium">EBIT</span><span className="font-mono font-bold text-slate-900">{formatLKR000(company.ebit)}</span></div>
-                  <div className="border-t border-slate-200 my-1" />
-                  <div className="flex justify-between items-center"><span className="text-slate-700">PBT (Before Non-Ops)</span><span className="font-mono text-slate-900">{formatLKR000(company.pbtBeforeNonOps)}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-slate-700 font-bold bg-yellow-50 px-1">PBT (After Non-Ops)</span><span className="font-mono font-bold text-[#0b1f3a] text-lg">{formatLKR000(company.pbtAfterNonOps)}</span></div>
-                  <div className="flex justify-between items-center mt-2"><span className="text-slate-500 text-xs italic">Net Profit Margin</span><span className="font-mono text-xs font-semibold">{formatPercent(company.npMargin)}</span></div>
+               <h4 className="text-sm font-bold text-[#0b1f3a] uppercase tracking-wide mb-4 border-b border-slate-200 pb-2">Key Profit Metrics (LKR)</h4>
+               <div className="space-y-1">
+                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
+                  <GridRow label="EBITDA" isBold monthly={formatLKR000(company.ebitda)} ytd={formatLKR000(company.ytd.ebitda)} />
+                  <GridRow label="EBIT" isBold monthly={formatLKR000(company.ebit)} ytd={formatLKR000(company.ytd.ebit)} />
+                  <div className="border-t border-slate-200 my-2" />
+                  <GridRow label="PBT (Before Non-Ops)" monthly={formatLKR000(company.pbtBeforeNonOps)} ytd={formatLKR000(company.ytd.pbtBeforeNonOps)} />
+                  <GridRow label="PBT (After Non-Ops)" isBold isAccent monthly={formatLKR000(company.pbtAfterNonOps)} ytd={formatLKR000(company.ytd.pbtAfterNonOps)} />
+                  <GridRow label="Net Profit Margin" monthly={formatPercent(company.npMargin)} ytd={formatPercent(company.ytd.npMargin)} />
                </div>
             </div>
 
@@ -421,35 +625,72 @@ export default function PerformancePage() {
 
   // Drilldown State
   const [drilldownClusterId, setDrilldownClusterId] = useState<string>(clusters[0]?.id || "");
-  const [drilldownCompanyId, setDrilldownCompanyId] = useState<string>("");
+  const [drilldownCompanyIds, setDrilldownCompanyIds] = useState<string[]>([]);
   const [drilldownTimeRange, setDrilldownTimeRange] = useState<"6M" | "12M">("12M");
 
-  // Initialize company when cluster changes
+  // Colors for multi-selection (Fixed order: Blue, Green, Red, Purple, Orange)
+  const COLOR_PALETTE = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c"];
+  
+  // Assign colors to selected companies based on order
+  const companyColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    drilldownCompanyIds.forEach((id, index) => {
+      colors[id] = COLOR_PALETTE[index % COLOR_PALETTE.length];
+    });
+    return colors;
+  }, [drilldownCompanyIds]);
+
+  // Initialize companies when cluster changes
   useMemo(() => {
     const cluster = clusters.find(c => c.id === drilldownClusterId);
     if (cluster && cluster.companies.length > 0) {
-      const currentCompanyInCluster = cluster.companies.find(c => c.id === drilldownCompanyId);
-      if (!currentCompanyInCluster) {
-         setDrilldownCompanyId(cluster.companies[0].id);
+      // Logic: If previously selected companies are NOT in the new cluster, reset selection.
+      // If we want to auto-select the first 1 or 2 companies, we can do that here.
+      // For now, let's auto-select the first 2 companies for a quick view.
+      const firstTwo = cluster.companies.slice(0, 2).map(c => c.id);
+      
+      // Check if current selection is valid for this cluster
+      const allExist = drilldownCompanyIds.every(id => cluster.companies.find(c => c.id === id));
+      
+      if (!allExist || drilldownCompanyIds.length === 0) {
+         setDrilldownCompanyIds(firstTwo);
       }
     } else {
-      setDrilldownCompanyId("");
+      setDrilldownCompanyIds([]);
     }
-  }, [drilldownClusterId, drilldownCompanyId, sortedClusters]); // Added sortedClusters dependency as stable source
+  }, [drilldownClusterId]); // Deliberately limited deps to prevent cycles
 
-  // Derive Drilldown Data
+  // Derive Drilldown Data - Multi Series
   const drilldownData = useMemo(() => {
-    if (!drilldownCompanyId) return [];
+    if (drilldownCompanyIds.length === 0) return [];
     
-    // Generate data on the fly (mock)
-    const series = getPbdtSeries(drilldownCompanyId);
+    // We need to merge series from multiple companies into a single array of objects:
+    // [{ month: "Jan", company1: 100, company2: 120 }, ...]
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    // Generate data for each company
+    const companiesData = drilldownCompanyIds.map(id => {
+       return { id, series: getPbdtSeries(id) };
+    });
+
+    const mergedData = months.map(month => {
+       const row: any = { month };
+       companiesData.forEach(cd => {
+          const point = cd.series.find(s => s.month === month);
+          if (point) {
+             row[cd.id] = point.value;
+          }
+       });
+       return row;
+    });
     
     // Filter by time range
     if (drilldownTimeRange === "6M") {
-      return series.slice(-6);
+      return mergedData.slice(-6);
     }
-    return series;
-  }, [drilldownCompanyId, drilldownTimeRange]);
+    return mergedData;
+  }, [drilldownCompanyIds, drilldownTimeRange]);
 
   const availableDrilldownCompanies = useMemo(() => {
     const c = clusters.find(cl => cl.id === drilldownClusterId);
@@ -531,7 +772,7 @@ export default function PerformancePage() {
                     value={drilldownClusterId}
                     onChange={(e) => {
                       setDrilldownClusterId(e.target.value);
-                      setDrilldownCompanyId(""); 
+                      // Reset companies will be handled by useMemo effect
                     }}
                     className="h-8 pl-3 pr-8 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 appearance-none min-w-[140px]"
                   >
@@ -542,23 +783,14 @@ export default function PerformancePage() {
                   <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 </div>
 
-                {/* Company Select */}
-                <div className="relative">
-                  <select
-                     value={drilldownCompanyId}
-                     onChange={(e) => setDrilldownCompanyId(e.target.value)}
-                     disabled={!drilldownClusterId}
-                     className="h-8 pl-3 pr-8 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 appearance-none min-w-[160px] disabled:opacity-50"
-                  >
-                     {availableDrilldownCompanies.length === 0 ? (
-                        <option value="">No Companies</option>
-                     ) : (
-                        availableDrilldownCompanies.map(company => (
-                          <option key={company.id} value={company.id}>{company.name}</option>
-                        ))
-                     )}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                {/* Multi-Select Company Dropdown */}
+                <div className="min-w-[220px] max-w-[400px]">
+                  <MultiSelect 
+                    options={availableDrilldownCompanies}
+                    selectedIds={drilldownCompanyIds}
+                    onChange={setDrilldownCompanyIds}
+                    colors={companyColors}
+                  />
                 </div>
 
                 <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
@@ -587,7 +819,7 @@ export default function PerformancePage() {
 
           <div className="p-5">
             <div className="h-[380px] w-full">
-              {drilldownCompanyId ? (
+              {drilldownCompanyIds.length > 0 ? (
                    <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={drilldownData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -618,23 +850,40 @@ export default function PerformancePage() {
                           boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                           fontSize: '12px' 
                         }}
-                        itemStyle={{ color: '#0b1f3a', fontWeight: 600 }}
-                        formatter={(value: number) => [`LKR ${value.toLocaleString()}`, 'PBDT']}
+                        itemStyle={{ fontWeight: 600 }}
+                        formatter={(value: number, name: string) => {
+                           const company = availableDrilldownCompanies.find(c => c.id === name);
+                           return [`LKR ${value.toLocaleString()}`, company ? company.name : name];
+                        }}
                         cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
                       />
-                      <Line 
-                        type="linear" 
-                        dataKey="value" 
-                        stroke="#0b1f3a" 
-                        strokeWidth={2.5} 
-                        dot={{ r: 4, fill: "#0b1f3a", strokeWidth: 2, stroke: "#fff" }}
-                        activeDot={{ r: 6, fill: "#0b1f3a", strokeWidth: 0 }}
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={36} 
+                        iconType="circle"
+                        formatter={(value, entry: any) => {
+                           const company = availableDrilldownCompanies.find(c => c.id === entry.dataKey);
+                           return <span className="text-slate-600 font-medium ml-1">{company ? company.name : value}</span>;
+                        }}
                       />
+                      
+                      {drilldownCompanyIds.map((id) => (
+                        <Line 
+                          key={id}
+                          type="linear" 
+                          dataKey={id} 
+                          stroke={companyColors[id]} 
+                          strokeWidth={2.5} 
+                          dot={{ r: 3, fill: companyColors[id], strokeWidth: 2, stroke: "#fff" }}
+                          activeDot={{ r: 6, fill: companyColors[id], strokeWidth: 0 }}
+                          isAnimationActive={true}
+                        />
+                      ))}
                     </LineChart>
                    </ResponsiveContainer>
               ) : (
                  <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                    <p className="text-sm">Select a company to view trend data</p>
+                    <p className="text-sm">Select one or more companies to view trend comparison</p>
                  </div>
               )}
             </div>
