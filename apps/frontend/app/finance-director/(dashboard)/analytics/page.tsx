@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -18,19 +18,33 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { TrendingUp, TrendingDown, Download, Building2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Download, Building2, ChevronDown } from "lucide-react";
 
-// Finance Director's assigned company
-const ASSIGNED_COMPANY = {
-  code: "MMA",
+// Finance Director's assigned company (Default/Fallback)
+const DEFAULT_COMPANY = {
+  id: "mclarens-maritime",
   name: "McLarens Maritime Academy",
   cluster: "Shipping Services & Logistics",
   financialYear: "FY 2025-26",
 };
 
+interface Company {
+  id: string;
+  name: string;
+}
+
+interface AnalyticsData {
+  monthlyData: any[];
+  yearlyData: any[];
+  expenseBreakdown: any[];
+  monthlyKpiData: any[];
+  yearlyKpiData: any[];
+  profitabilityData: any[];
+}
+
 // Monthly data for charts
 // Monthly data for charts - PBT Comparison
-const monthlyData = [
+const DEFAULT_monthlyData = [
   { month: "Jan", pbtBefore: 850000, pbtAfter: 845000 },
   { month: "Feb", pbtBefore: 920000, pbtAfter: 920000 },
   { month: "Mar", pbtBefore: 880000, pbtAfter: 860000 },
@@ -45,14 +59,14 @@ const monthlyData = [
   { month: "Dec", pbtBefore: 1180000, pbtAfter: 1150000 },
 ];
 
-const yearlyData = [
+const DEFAULT_yearlyData = [
   { year: "2023", pbtBefore: 12500000, pbtAfter: 12400000 },
   { year: "2024", pbtBefore: 13800000, pbtAfter: 13750000 },
   { year: "2025", pbtBefore: 14200000, pbtAfter: 14100000 },
 ];
 
 // Expense breakdown for pie chart
-const expenseBreakdown = [
+const DEFAULT_expenseBreakdown = [
   { name: "Personal", value: 35, color: "#0b1f3a" },
   { name: "Admin", value: 25, color: "#1e40af" },
   { name: "Selling", value: 20, color: "#3b82f6" },
@@ -62,14 +76,14 @@ const expenseBreakdown = [
 
 // KPI data
 // KPI data split
-const monthlyKpiData = [
+const DEFAULT_monthlyKpiData = [
   { label: "GP Margin", value: "34.0%", change: "+1.5%", trend: "up" },
   { label: "GP", value: "4.2M", change: "+12.1%", trend: "up" },
   { label: "PBT Before", value: "1.1M", change: "+5.4%", trend: "up" },
   { label: "PBT Achievement", value: "105.2%", change: "+3.2%", trend: "up" },
 ];
 
-const yearlyKpiData = [
+const DEFAULT_yearlyKpiData = [
   { label: "YTD GP Margin", value: "35.2%", change: "+8.5%", trend: "up" },
   { label: "YTD GP", value: "44.2M", change: "+12.3%", trend: "up" },
   { label: "YTD PBT Before", value: "12.5M", change: "+5.4%", trend: "up" },
@@ -77,7 +91,7 @@ const yearlyKpiData = [
 ];
 
 // Profitability trend
-const profitabilityData = [
+const DEFAULT_profitabilityData = [
   { month: "Apr", gpMargin: 32.5, npMargin: 8.2 },
   { month: "May", gpMargin: 33.1, npMargin: 8.8 },
   { month: "Jun", gpMargin: 31.8, npMargin: 7.5 },
@@ -125,9 +139,119 @@ export default function AnalyticsPage() {
   const [month, setMonth] = useState("December");
   const [pbtViewMode, setPbtViewMode] = useState("monthly");
 
+  // Company Selector State
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(false);
+
   // Table comparison state
   const [tableMonth, setTableMonth] = useState("Dec");
   const [tableYear, setTableYear] = useState("2025");
+
+  // Initial Load: Fetch Companies
+  useEffect(() => {
+    // Mock API Call: GET /api/finance-director/companies
+    const fetchCompanies = async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const mockCompanies = [
+        { id: "mclarens-maritime", name: "McLarens Maritime Academy" },
+        { id: "mclarens-logistics", name: "McLarens Logistics" },
+        // { id: "inter-ocean", name: "Inter Ocean Services" }, 
+      ];
+
+      setCompanies(mockCompanies);
+
+      // Persistence Logic
+      const savedId = localStorage.getItem("fd_selected_company");
+      const validSavedId = mockCompanies.find(c => c.id === savedId)?.id;
+      
+      if (validSavedId) {
+        setSelectedCompanyId(validSavedId);
+      } else if (mockCompanies.length > 0) {
+        setSelectedCompanyId(mockCompanies[0].id);
+      }
+    };
+
+    fetchCompanies();
+  }, []);
+
+  // Fetch Analytics when Company Changes
+  useEffect(() => {
+    if (!selectedCompanyId) return;
+
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Mock API Call: GET /api/analytics/company?companyId=...
+      // Generate slightly different data based on company to show the switch works
+      const isLogistics = selectedCompanyId === "mclarens-logistics";
+      
+      const multiplier = isLogistics ? 1.2 : 1.0; // Logistics is 20% bigger
+      
+      const mockData: AnalyticsData = {
+        monthlyData: DEFAULT_monthlyData.map(d => ({
+          ...d,
+          pbtBefore: d.pbtBefore * multiplier,
+          pbtAfter: d.pbtAfter * multiplier
+        })),
+        yearlyData: DEFAULT_yearlyData.map(d => ({
+          ...d,
+          pbtBefore: d.pbtBefore * multiplier,
+          pbtAfter: d.pbtAfter * multiplier
+        })),
+        expenseBreakdown: isLogistics ? [
+           { name: "Personal", value: 40, color: "#0b1f3a" },
+           { name: "Admin", value: 20, color: "#1e40af" },
+           { name: "Selling", value: 25, color: "#3b82f6" }, 
+           { name: "Finance", value: 10, color: "#60a5fa" },
+           { name: "Depreciation", value: 5, color: "#93c5fd" },
+        ] : DEFAULT_expenseBreakdown,
+        monthlyKpiData: DEFAULT_monthlyKpiData.map(k => ({
+          ...k,
+          value: k.label.includes("%") ? k.value : ((parseFloat(k.value) * multiplier).toFixed(1) + "M")
+        })),
+        yearlyKpiData: DEFAULT_yearlyKpiData.map(k => ({
+          ...k,
+          value: k.label.includes("%") ? k.value : ((parseFloat(k.value) * multiplier).toFixed(1) + "M")
+        })),
+        profitabilityData: DEFAULT_profitabilityData.map(d => ({
+           ...d,
+           gpMargin: isLogistics ? d.gpMargin + 2 : d.gpMargin,
+           npMargin: isLogistics ? d.npMargin + 1 : d.npMargin
+        }))
+      };
+
+      setAnalyticsData(mockData);
+      setLoading(false);
+      localStorage.setItem("fd_selected_company", selectedCompanyId);
+    };
+
+    fetchAnalytics();
+  }, [selectedCompanyId]);
+
+  // Use fetched data or fallbacks (initially)
+  const {
+    monthlyData,
+    yearlyData,
+    expenseBreakdown,
+    monthlyKpiData,
+    yearlyKpiData,
+    profitabilityData 
+  } = analyticsData || {
+    monthlyData: DEFAULT_monthlyData,
+    yearlyData: DEFAULT_yearlyData,
+    expenseBreakdown: DEFAULT_expenseBreakdown,
+    monthlyKpiData: DEFAULT_monthlyKpiData,
+    yearlyKpiData: DEFAULT_yearlyKpiData,
+    profitabilityData: DEFAULT_profitabilityData
+  };
+
+  const selectedCompany = companies.find(c => c.id === selectedCompanyId) || DEFAULT_COMPANY;
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -145,11 +269,34 @@ export default function AnalyticsPage() {
               <Building2 className="h-6 w-6 text-[#0b1f3a]" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">{ASSIGNED_COMPANY.name}</h1>
-              <p className="text-sm text-slate-500">Analytics Dashboard - {ASSIGNED_COMPANY.financialYear}</p>
+              <h1 className="text-xl font-semibold text-slate-900">{selectedCompany.name}</h1>
+              <p className="text-sm text-slate-500">Analytics Dashboard - {DEFAULT_COMPANY.financialYear}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            
+            {/* Company Selector */}
+            {companies.length > 1 && (
+              <div className="relative">
+                <select
+                  value={selectedCompanyId || ""}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="h-10 pl-3 pr-8 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 appearance-none cursor-pointer min-w-[200px]"
+                  disabled={loading}
+                >
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            )}
+            
+            {loading && (
+              <div className="h-5 w-5 border-2 border-[#0b1f3a] border-t-transparent rounded-full animate-spin" />
+            )}
             <button className="flex items-center gap-2 h-10 px-4 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90">
               <Download className="h-4 w-4" /> Export
             </button>

@@ -1,17 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { Building2, TrendingUp, TrendingDown, FileText, Clock, CheckCircle, Send, BarChart3, Flag } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Building2, TrendingUp, TrendingDown, FileText, Clock, CheckCircle, Send, BarChart3, Flag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
-// Finance Director's assigned company (from auth/session in real app)
-const ASSIGNED_COMPANY = {
-  code: "MMA",
+// Finance Director's assigned company (Default/Fallback)
+const DEFAULT_COMPANY = {
+  id: "mclarens-maritime",
   name: "McLarens Maritime Academy",
   cluster: "Shipping Services & Logistics",
   yearEnd: "March",
   financialYear: "FY 2025-26",
 };
+
+interface Company {
+  id: string;
+  name: string;
+}
+
+interface DashboardData {
+  company: {
+    name: string;
+    cluster: string;
+    financialYear: string;
+  };
+  kpis: {
+    ytdGPMargin: string;
+    ytdGPMarginChange: string;
+    ytdGP: string;
+    ytdGPChange: string;
+    ytdPBTBefore: string;
+    ytdPBTBeforeChange: string;
+    pbtAchievement: string;
+  };
+}
 
 // Mock pending reports from Finance Officers
 const PENDING_REPORTS = [
@@ -46,7 +68,8 @@ const PENDING_REPORTS = [
 ];
 
 // Mock KPI data for the company
-const COMPANY_KPIS = {
+// Mock KPI data for the company
+const DEFAULT_COMPANY_KPIS = {
   ytdGPMargin: "35.2%",
   ytdGPMarginChange: "+8.5%",
   ytdGP: "44,176,000",
@@ -90,6 +113,83 @@ function StatCard({ title, value, change, positive, icon: Icon }: {
 export default function FinanceDirectorDashboard() {
   const [selectedReport, setSelectedReport] = useState<typeof PENDING_REPORTS[0] | null>(null);
 
+  // Company Selector State
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Initial Load: Fetch Companies
+  useEffect(() => {
+    // Mock API Call
+    const fetchCompanies = async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const mockCompanies = [
+        { id: "mclarens-maritime", name: "McLarens Maritime Academy" },
+        { id: "mclarens-logistics", name: "McLarens Logistics" },
+      ];
+
+      setCompanies(mockCompanies);
+
+      // Persistence Logic
+      const savedId = localStorage.getItem("fd_selected_company");
+      const validSavedId = mockCompanies.find(c => c.id === savedId)?.id;
+      
+      if (validSavedId) {
+        setSelectedCompanyId(validSavedId);
+      } else if (mockCompanies.length > 0) {
+        setSelectedCompanyId(mockCompanies[0].id);
+      }
+    };
+
+    fetchCompanies();
+  }, []);
+
+  // Fetch Dashboard Data when Company Changes
+  useEffect(() => {
+    if (!selectedCompanyId) return;
+
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      const isLogistics = selectedCompanyId === "mclarens-logistics";
+      const multiplier = isLogistics ? 1.2 : 1.0;
+
+      const mockData: DashboardData = {
+        company: {
+          name: isLogistics ? "McLarens Logistics" : DEFAULT_COMPANY.name,
+          cluster: isLogistics ? "Logistics & Transport" : DEFAULT_COMPANY.cluster,
+          financialYear: DEFAULT_COMPANY.financialYear,
+        },
+        kpis: {
+          ytdGPMargin: isLogistics ? "38.5%" : DEFAULT_COMPANY_KPIS.ytdGPMargin,
+          ytdGPMarginChange: DEFAULT_COMPANY_KPIS.ytdGPMarginChange,
+          ytdGP: isLogistics ? "53,011,200" : DEFAULT_COMPANY_KPIS.ytdGP, // x1.2 approx
+          ytdGPChange: DEFAULT_COMPANY_KPIS.ytdGPChange,
+          ytdPBTBefore: isLogistics ? "14,940,000" : DEFAULT_COMPANY_KPIS.ytdPBTBefore, // x1.2 approx
+          ytdPBTBeforeChange: DEFAULT_COMPANY_KPIS.ytdPBTBeforeChange,
+          pbtAchievement: isLogistics ? "22.1%" : DEFAULT_COMPANY_KPIS.pbtAchievement,
+        }
+      };
+
+      setDashboardData(mockData);
+      setLoading(false);
+      localStorage.setItem("fd_selected_company", selectedCompanyId);
+    };
+
+    fetchDashboardData();
+  }, [selectedCompanyId]);
+
+  // Derived State
+  const currentData = dashboardData || {
+    company: DEFAULT_COMPANY,
+    kpis: DEFAULT_COMPANY_KPIS
+  };
+
   const pendingCount = PENDING_REPORTS.filter(r => r.status === "pending_review").length;
 
   return (
@@ -102,15 +202,33 @@ export default function FinanceDirectorDashboard() {
               <Building2 className="h-6 w-6 text-[#0b1f3a]" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">{ASSIGNED_COMPANY.name}</h2>
-              <p className="text-sm text-slate-500">{ASSIGNED_COMPANY.cluster} • {ASSIGNED_COMPANY.financialYear}</p>
+              <h2 className="text-lg font-semibold text-slate-900">{currentData.company.name}</h2>
+              <p className="text-sm text-slate-500">{currentData.company.cluster} • {currentData.company.financialYear}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500">Role:</span>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-              Finance Director
-            </span>
+            {/* Company Selector */}
+            {companies.length > 1 && (
+              <div className="relative">
+                <select
+                  value={selectedCompanyId || ""}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="h-10 pl-3 pr-8 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 appearance-none cursor-pointer min-w-[200px]"
+                  disabled={loading}
+                >
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            )}
+            
+            {loading && (
+              <div className="h-5 w-5 border-2 border-[#0b1f3a] border-t-transparent rounded-full animate-spin" />
+            )}
           </div>
         </div>
       </div>
@@ -122,29 +240,29 @@ export default function FinanceDirectorDashboard() {
           <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Company Performance (YTD)</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard 
-              title="YTD GP Margin" 
-              value={COMPANY_KPIS.ytdGPMargin}
-              change={COMPANY_KPIS.ytdGPMarginChange}
+              title="YTD GPMargin" 
+              value={currentData.kpis.ytdGPMargin}
+              change={currentData.kpis.ytdGPMarginChange}
               positive={true}
               icon={BarChart3}
             />
             <StatCard 
               title="YTD GP" 
-              value={`LKR ${COMPANY_KPIS.ytdGP}`}
-              change={COMPANY_KPIS.ytdGPChange}
+              value={`LKR ${currentData.kpis.ytdGP}`}
+              change={currentData.kpis.ytdGPChange}
               positive={true}
               icon={TrendingUp}
             />
             <StatCard 
               title="YTD PBT Before" 
-              value={`LKR ${COMPANY_KPIS.ytdPBTBefore}`}
-              change={COMPANY_KPIS.ytdPBTBeforeChange}
+              value={`LKR ${currentData.kpis.ytdPBTBefore}`}
+              change={currentData.kpis.ytdPBTBeforeChange}
               positive={true}
               icon={BarChart3}
             />
             <StatCard 
               title="PBT Before Achievement (YTD)" 
-              value={COMPANY_KPIS.pbtAchievement}
+              value={currentData.kpis.pbtAchievement}
               icon={Clock}
             />
           </div>
