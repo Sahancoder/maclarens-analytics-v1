@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Send, X, ChevronDown, AlertCircle, Mail } from "lucide-react";
+import { Download, Send, X, ChevronDown, AlertCircle, Mail, MessageSquare, Edit2, Save, History } from "lucide-react";
 
 const reportData = [
   { metric: "Revenue (LKR)", monthlyActual: "12,500,000", monthlyBudget: "12,000,000", monthlyVariance: "500,000", monthlyAchievement: "104.17%", ytdActual: "145,000,000", ytdBudget: "140,000,000", ytdAchievement: "103.57%" },
@@ -32,6 +32,38 @@ const pendingReports = [
   { id: 3, company: "Spectra Logistics", month: "November 2025", submittedBy: "Drew Cano", submittedAt: "Dec 18, 2025" },
 ];
 
+interface Comment {
+  id: string;
+  authorRole: 'FINANCE_OFFICER' | 'SYSTEM_ADMIN' | 'FINANCE_DIRECTOR';
+  authorName: string;
+  message: string;
+  createdAt: string;
+  type: 'SUBMISSION' | 'FD_EDIT';
+  parentCommentId?: string;
+  timestamp?: string; // ISO string for sorting if needed, or keeping simple string for demo
+}
+
+const MOCK_COMMENTS: Comment[] = [
+  {
+    id: "c1",
+    authorRole: "FINANCE_OFFICER",
+    authorName: "Sahan Hettiarachchi",
+    message: "Revenue is slightly higher due to unexpected short courses run this month. However, repairs on the simulator caused a spike in maintenance costs.",
+    createdAt: "Dec 20, 2025 • 4:30 PM",
+    type: "SUBMISSION",
+    timestamp: "2025-12-20T16:30:00"
+  },
+  {
+    id: "c2",
+    authorRole: "SYSTEM_ADMIN",
+    authorName: "System",
+    message: "Budget data for FY2025-26 imported successfully from master budget file v4.",
+    createdAt: "Dec 20, 2025 • 4:35 PM",
+    type: "SUBMISSION",
+    timestamp: "2025-12-20T16:35:00"
+  }
+];
+
 export default function ReportsPage() {
   const router = useRouter();
   const [selectedReport, setSelectedReport] = useState(pendingReports[0]);
@@ -39,10 +71,55 @@ export default function ReportsPage() {
   const [rejectComment, setRejectComment] = useState("");
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
+  // Comment System State
+  const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+
+  const handleEditClick = (comment: Comment) => {
+    // If we are editing an existing edit, prepopulate that. 
+    // If editing a submission, prepopulate with its message.
+    setEditingCommentId(comment.id);
+    setEditMessage(comment.message);
+  };
+
+  const handleSaveEdit = (parentComment: Comment) => {
+    if (!editMessage.trim()) return;
+
+    // Remove existing edit if any (to replace it) or add new
+    // For this list-based approach, let's filter out old edits for this parent first
+    const cleanComments = comments.filter(c => c.parentCommentId !== parentComment.id);
+
+    const newEditComment: Comment = {
+      id: `edit-${Date.now()}`,
+      authorRole: "FINANCE_DIRECTOR",
+      authorName: "Finance Director",
+      message: editMessage,
+      createdAt: new Date().toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', hour12: true }),
+      type: "FD_EDIT",
+      parentCommentId: parentComment.id,
+      timestamp: new Date().toISOString()
+    };
+
+    setComments([...cleanComments, newEditComment]);
+    setEditingCommentId(null);
+    setEditMessage("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditMessage("");
+  };
+
   const handleSubmitToMD = () => {
     setShowApproveConfirm(false);
-    // In real app: API call to submit report to MD dashboard
-    alert(`Report for ${selectedReport.company} - ${selectedReport.month} has been submitted to MD Dashboard.`);
+    
+    // Check if we have edits
+    const hasEdits = comments.some(c => c.type === "FD_EDIT");
+    const submissionNote = hasEdits ? " (with FD corrected comments)" : "";
+
+    // In real app: API call to submit report to MD dashboard with the comment payload
+    alert(`Report for ${selectedReport.company} - ${selectedReport.month} has been submitted to MD Dashboard${submissionNote}.`);
     router.push("/finance-director/dashboard");
   };
 
@@ -163,6 +240,130 @@ export default function ReportsPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Comments & Review Section */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-5">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-8 w-8 rounded-full bg-[#0b1f3a]/10 flex items-center justify-center">
+                <MessageSquare className="h-4 w-4 text-[#0b1f3a]" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Comments & Analysis</h3>
+                <p className="text-sm text-slate-500">Review and verify comments from Finance Officer</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {comments.filter(c => c.type === "SUBMISSION").map((comment) => {
+                const fdEdit = comments.find(c => c.type === "FD_EDIT" && c.parentCommentId === comment.id);
+                const isEditing = editingCommentId === comment.id;
+
+                return (
+                  <div key={comment.id} className="relative pl-4 border-l-2 border-slate-200">
+                    {/* Author Header */}
+                    <div className="flex items-center justify-between mb-2">
+                       <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-900">{comment.authorName}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            comment.authorRole === 'SYSTEM_ADMIN' 
+                             ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                             : 'bg-blue-50 text-blue-700 border-blue-100'
+                          }`}>
+                            {comment.authorRole === 'SYSTEM_ADMIN' ? 'SYSTEM' : 'FINANCE OFFICER'}
+                          </span>
+                       </div>
+                       <span className="text-xs text-slate-400">{comment.createdAt}</span>
+                    </div>
+
+                    {/* Original Message (Read Only) */}
+                    <div className={`text-sm text-slate-700 leading-relaxed p-3 rounded-lg ${fdEdit ? 'bg-slate-50 opacity-70 italic border border-slate-100' : ''}`}>
+                      {comment.message}
+                      {fdEdit && (
+                         <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                            <History className="h-3 w-3" />
+                            <span>Corrected below by Finance Director</span>
+                         </div>
+                      )}
+                    </div>
+
+                    {/* Edit Button (Only visible if not currently editing and no existing edit - or allows re-edit) */}
+                    {!isEditing && !fdEdit && (
+                      <button 
+                         onClick={() => handleEditClick(comment)}
+                         className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#0b1f3a] hover:text-blue-700 transition-colors"
+                      >
+                         <Edit2 className="h-3 w-3" />
+                         Edit / Correct Comment
+                      </button>
+                    )}
+
+                    {/* FD Edit View */}
+                    {fdEdit && !isEditing && (
+                       <div className="mt-3 pl-4 relative">
+                          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-purple-200"></div>
+                          <div className="flex items-center justify-between mb-1.5">
+                             <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-slate-900">{fdEdit.authorName}</span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+                                   FINANCE DIRECTOR
+                                </span>
+                             </div>
+                             <span className="text-xs text-slate-400">{fdEdit.createdAt}</span>
+                          </div>
+                          <div className="text-sm text-slate-800 bg-purple-50 border border-purple-100 p-3 rounded-lg shadow-sm">
+                             {fdEdit.message}
+                          </div>
+                          <button 
+                             onClick={() => {
+                               setEditingCommentId(comment.id); // We edit "against" the parent
+                               setEditMessage(fdEdit.message);  // But load the current edit content
+                             }}
+                             className="mt-2 flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900 transition-colors"
+                          >
+                             <Edit2 className="h-3 w-3" />
+                             Modify Correction
+                          </button>
+                       </div>
+                    )}
+
+                    {/* Edit Form (Active) */}
+                    {isEditing && (
+                      <div className="mt-3 bg-white border border-blue-200 rounded-lg p-3 shadow-md ring-1 ring-blue-500/20 animate-in fade-in slide-in-from-top-2 duration-200">
+                         <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
+                               <Edit2 className="h-3 w-3" />
+                               Editing Comment
+                            </span>
+                         </div>
+                         <textarea
+                            value={editMessage}
+                            onChange={(e) => setEditMessage(e.target.value)}
+                            className="w-full text-sm p-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-h-[80px]"
+                            placeholder="Enter corrected version..."
+                            autoFocus
+                         />
+                         <div className="flex justify-end gap-2 mt-3">
+                            <button 
+                               onClick={handleCancelEdit}
+                               className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded"
+                            >
+                               Cancel
+                            </button>
+                            <button 
+                               onClick={() => handleSaveEdit(comment)}
+                               className="px-3 py-1.5 text-xs font-medium text-white bg-[#0b1f3a] hover:bg-blue-800 rounded flex items-center gap-1.5"
+                            >
+                               <Save className="h-3 w-3" />
+                               Save Correction
+                            </button>
+                         </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

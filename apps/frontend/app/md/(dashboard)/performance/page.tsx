@@ -7,9 +7,9 @@ import {
   TrendingUp, 
   TrendingDown, 
   ArrowUpRight, 
-  ArrowDownRight,
   Building2,
   Filter,
+  CheckCircle2,
 } from "lucide-react";
 import { 
   BarChart, 
@@ -216,6 +216,35 @@ const getAchievementColor = (achievement: number) => {
   return achievement >= 100 ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50";
 };
 
+// Mock Comment Data Service
+interface Comment {
+  id: string;
+  authorRole: 'FINANCE_OFFICER' | 'SYSTEM_ADMIN' | 'FINANCE_DIRECTOR'; 
+  authorName: string;
+  message: string;
+  reviewedAt: string;
+}
+
+const getApprovedComments = (companyId: string): Comment[] => {
+  // Simulating fetching only FD Approved comments
+  return [
+    {
+      id: "c1",
+      authorRole: "FINANCE_OFFICER",
+      authorName: "Sahan Hettiarachchi",
+      message: "Revenue increase driven by higher volume in Q3. Operational costs were kept within budget despite fuel price volatility.",
+      reviewedAt: "Oct 16, 2025 • 10:45 AM"
+    },
+    {
+      id: "c2",
+      authorRole: "SYSTEM_ADMIN",
+      authorName: "System",
+      message: "Budget variance aligned with revised forecast v2. No significant anomalies detected in overhead allocation.",
+      reviewedAt: "Oct 16, 2025 • 10:48 AM"
+    }
+  ];
+};
+
 // ============ COMPONENTS ============
 
 interface FinanceUploadModalProps {
@@ -304,6 +333,44 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
                   <div className="flex justify-between items-center"><span className="text-slate-700 font-bold bg-yellow-50 px-1">PBT (After Non-Ops)</span><span className="font-mono font-bold text-[#0b1f3a] text-lg">{formatLKR000(company.pbtAfterNonOps)}</span></div>
                   <div className="flex justify-between items-center mt-2"><span className="text-slate-500 text-xs italic">Net Profit Margin</span><span className="font-mono text-xs font-semibold">{formatPercent(company.npMargin)}</span></div>
                </div>
+            </div>
+
+
+            {/* GROUP 5: FD Approved Comments */}
+            <div className="md:col-span-2 mt-2">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-50 to-white px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                   <h4 className="text-sm font-bold text-[#0b1f3a] uppercase tracking-wide flex items-center gap-2">
+                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                     Finance Director Reviewed & Approved Comments
+                   </h4>
+                   <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100">
+                     Verified
+                   </span>
+                </div>
+                <div className="p-5 space-y-4">
+                  {getApprovedComments(company.id).map((comment) => (
+                    <div key={comment.id} className="relative pl-4 border-l-2 border-slate-200">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-slate-800">{comment.authorRole === 'FINANCE_OFFICER' ? 'Finance Officer' : 'System Admin'}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-xs text-slate-500">{comment.reviewedAt}</span>
+                      </div>
+                      <p className="text-sm text-slate-600 leading-relaxed italic">
+                        "{comment.message}"
+                      </p>
+                      <div className="mt-2 flex items-center gap-1.5">
+                         <div className="h-4 w-4 rounded-full bg-purple-100 flex items-center justify-center">
+                            <svg className="w-2.5 h-2.5 text-purple-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                         </div>
+                         <span className="text-[10px] font-medium text-purple-700 uppercase tracking-wide">Approved by Finance Director</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
           </div>
