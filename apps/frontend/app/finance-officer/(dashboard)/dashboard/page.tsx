@@ -47,6 +47,7 @@ interface FormData {
   provisions: string; provisionsSign: "+" | "-";
   exchange: string; exchangeSign: "+" | "-";
   nonOpsExpenses: string; nonOpsIncome: string;
+  comment: string;
 }
 
 
@@ -223,6 +224,7 @@ export default function ActualEntryPage() {
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
     provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+    comment: "",
   });
 
   // Check for rejected report data on component mount
@@ -319,6 +321,7 @@ export default function ActualEntryPage() {
         revenue: "", gp: "", otherIncome: "",
         personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
         provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+        comment: "",
       });
     }
   };
@@ -460,6 +463,17 @@ export default function ActualEntryPage() {
                 <CalcField label="PBT After Non-Ops" value={calc.pbtAfter} isCompleted={pbtAfterOk} />
                 <CalcField label="EBIT" value={calc.ebit} isCompleted={pbtAfterOk} />
                 <CalcField label="EBITDA" value={calc.ebitda} isCompleted={pbtAfterOk} />
+              </div>
+            </Section>
+
+            <Section title="Additional Comments">
+              <div className="pt-5">
+                <textarea
+                  value={formData.comment}
+                  onChange={(e) => update("comment", e.target.value)}
+                  placeholder="Add any relevant notes or comments for the Finance Director..."
+                  className="w-full h-32 px-4 py-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] resize-none placeholder:text-slate-400"
+                />
               </div>
             </Section>
           </div>

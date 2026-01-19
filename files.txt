@@ -1,0 +1,36 @@
+﻿commit 9a6d257e7d6e81f676e398191441636436746582
+Author: Sahan Viranga Hettiarachchi <hmsvhettiarachchi@std.foc.sab.ac.lk>
+Date:   Fri Jan 16 13:14:11 2026 +0530
+
+    feat: enhance mobile responsiveness and admin company management
+
+apps/frontend/app/finance-director/(dashboard)/reports/page.tsx
+apps/frontend/app/finance-officer/(dashboard)/dashboard/page.tsx
+apps/frontend/app/finance-officer/(dashboard)/drafts/page.tsx
+apps/frontend/app/md/(dashboard)/performance/page.tsx
+apps/frontend/app/system-admin/(dashboard)/companies/page.tsx
+apps/frontend/app/system-admin/(dashboard)/dashboard/page.tsx
+apps/frontend/components/finance-director/Header.tsx
+apps/frontend/components/finance-director/Sidebar.tsx
+apps/frontend/components/finance-officer/Header.tsx
+apps/frontend/components/md/Header.tsx
+apps/frontend/components/md/Sidebar.tsx
+apps/frontend/components/system-admin/Header.tsx
+apps/frontend/components/system-admin/Sidebar.tsx
+skills/00-skill-index.md
+skills/01-repo-bootstrap.md
+skills/02-infra-local-docker.md
+skills/03-database-schema-migrations.md
+skills/04-api-foundation-fastapi-strawberry.md
+skills/05-auth-nextauth-entra.md
+skills/06-api-auth-rbac.md
+skills/07-reporting-actuals.md
+skills/08-reporting-budgets.md
+skills/09-director-review-workflow.md
+skills/10-analytics-kpis.md
+skills/11-notifications-email.md
+skills/12-frontend-apollo-pages.md
+skills/13-admin-console.md
+skills/14-testing-quality.md
+skills/15-azure-deployment.md
+skills/16-security-hardening.md

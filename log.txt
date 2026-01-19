@@ -1,0 +1,5 @@
+﻿commit 9a6d257e7d6e81f676e398191441636436746582
+Author: Sahan Viranga Hettiarachchi <hmsvhettiarachchi@std.foc.sab.ac.lk>
+Date:   Fri Jan 16 13:14:11 2026 +0530
+
+    feat: enhance mobile responsiveness and admin company management

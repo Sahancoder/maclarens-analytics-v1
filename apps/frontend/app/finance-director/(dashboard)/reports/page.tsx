@@ -5,25 +5,25 @@ import { useRouter } from "next/navigation";
 import { Download, Send, X, ChevronDown, AlertCircle, Mail } from "lucide-react";
 
 const reportData = [
-  { metric: "Revenue (LKR)", actual: "12,500,000", budget: "12,000,000", variance: "500,000", pct: "+4.17%" },
-  { metric: "Gross Profit (GP)", actual: "4,375,000", budget: "4,200,000", variance: "175,000", pct: "+4.17%" },
-  { metric: "GP Margin", actual: "35.00%", budget: "35.00%", variance: "0.00%", pct: "0.00%", isCalc: true },
-  { metric: "Other Income", actual: "250,000", budget: "200,000", variance: "50,000", pct: "+25.00%" },
-  { metric: "Personal Related Expenses", actual: "1,500,000", budget: "1,600,000", variance: "-100,000", pct: "-6.25%" },
-  { metric: "Admin & Establishment", actual: "800,000", budget: "850,000", variance: "-50,000", pct: "-5.88%" },
-  { metric: "Selling & Distribution", actual: "600,000", budget: "650,000", variance: "-50,000", pct: "-7.69%" },
-  { metric: "Financial Expenses", actual: "200,000", budget: "180,000", variance: "20,000", pct: "+11.11%" },
-  { metric: "Depreciation", actual: "300,000", budget: "300,000", variance: "0", pct: "0.00%" },
-  { metric: "Total Overheads", actual: "3,400,000", budget: "3,580,000", variance: "-180,000", pct: "-5.03%", isCalc: true },
-  { metric: "Provisions", actual: "50,000", budget: "75,000", variance: "-25,000", pct: "-33.33%" },
-  { metric: "Exchange (Loss/Gain)", actual: "-30,000", budget: "-20,000", variance: "-10,000", pct: "+50.00%" },
-  { metric: "PBT Before Non-Ops", actual: "1,145,000", budget: "725,000", variance: "420,000", pct: "+57.93%", isCalc: true },
-  { metric: "NP Margin", actual: "9.16%", budget: "6.04%", variance: "3.12%", pct: "+51.66%", isCalc: true },
-  { metric: "Non-Operating Expenses", actual: "100,000", budget: "120,000", variance: "-20,000", pct: "-16.67%" },
-  { metric: "Non-Operating Income", actual: "80,000", budget: "60,000", variance: "20,000", pct: "+33.33%" },
-  { metric: "PBT After Non-Ops", actual: "1,125,000", budget: "665,000", variance: "460,000", pct: "+69.17%", isCalc: true },
-  { metric: "EBIT", actual: "1,325,000", budget: "845,000", variance: "480,000", pct: "+56.80%", isCalc: true },
-  { metric: "EBITDA", actual: "1,625,000", budget: "1,145,000", variance: "480,000", pct: "+41.92%", isCalc: true },
+  { metric: "Revenue (LKR)", monthlyActual: "12,500,000", monthlyBudget: "12,000,000", monthlyVariance: "500,000", monthlyAchievement: "104.17%", ytdActual: "145,000,000", ytdBudget: "140,000,000", ytdAchievement: "103.57%" },
+  { metric: "Gross Profit (GP)", monthlyActual: "4,375,000", monthlyBudget: "4,200,000", monthlyVariance: "175,000", monthlyAchievement: "104.17%", ytdActual: "51,000,000", ytdBudget: "49,000,000", ytdAchievement: "104.08%" },
+  { metric: "GP Margin", monthlyActual: "35.00%", monthlyBudget: "35.00%", monthlyVariance: "0.00%", monthlyAchievement: "100.00%", ytdActual: "35.17%", ytdBudget: "35.00%", ytdAchievement: "100.49%", isCalc: true },
+  { metric: "Other Income", monthlyActual: "250,000", monthlyBudget: "200,000", monthlyVariance: "50,000", monthlyAchievement: "125.00%", ytdActual: "2,500,000", ytdBudget: "2,400,000", ytdAchievement: "104.17%" },
+  { metric: "Personal Related Expenses", monthlyActual: "1,500,000", monthlyBudget: "1,600,000", monthlyVariance: "-100,000", monthlyAchievement: "93.75%", ytdActual: "17,500,000", ytdBudget: "18,000,000", ytdAchievement: "97.22%" },
+  { metric: "Admin & Establishment", monthlyActual: "800,000", monthlyBudget: "850,000", monthlyVariance: "-50,000", monthlyAchievement: "94.12%", ytdActual: "9,000,000", ytdBudget: "9,500,000", ytdAchievement: "94.74%" },
+  { metric: "Selling & Distribution", monthlyActual: "600,000", monthlyBudget: "650,000", monthlyVariance: "-50,000", monthlyAchievement: "92.31%", ytdActual: "7,000,000", ytdBudget: "7,500,000", ytdAchievement: "93.33%" },
+  { metric: "Financial Expenses", monthlyActual: "200,000", monthlyBudget: "180,000", monthlyVariance: "20,000", monthlyAchievement: "111.11%", ytdActual: "2,200,000", ytdBudget: "2,000,000", ytdAchievement: "110.00%" },
+  { metric: "Depreciation", monthlyActual: "300,000", monthlyBudget: "300,000", monthlyVariance: "0", monthlyAchievement: "100.00%", ytdActual: "3,600,000", ytdBudget: "3,600,000", ytdAchievement: "100.00%" },
+  { metric: "Total Overheads", monthlyActual: "3,400,000", monthlyBudget: "3,580,000", monthlyVariance: "-180,000", monthlyAchievement: "94.97%", ytdActual: "39,300,000", ytdBudget: "40,600,000", ytdAchievement: "96.80%", isCalc: true },
+  { metric: "Provisions", monthlyActual: "50,000", monthlyBudget: "75,000", monthlyVariance: "-25,000", monthlyAchievement: "66.67%", ytdActual: "600,000", ytdBudget: "800,000", ytdAchievement: "75.00%" },
+  { metric: "Exchange (Loss/Gain)", monthlyActual: "-30,000", monthlyBudget: "-20,000", monthlyVariance: "-10,000", monthlyAchievement: "150.00%", ytdActual: "-350,000", ytdBudget: "-240,000", ytdAchievement: "145.83%" },
+  { metric: "PBT Before Non-Ops", monthlyActual: "1,145,000", monthlyBudget: "725,000", monthlyVariance: "420,000", monthlyAchievement: "157.93%", ytdActual: "13,850,000", ytdBudget: "10,500,000", ytdAchievement: "131.90%", isCalc: true },
+  { metric: "NP Margin", monthlyActual: "9.16%", monthlyBudget: "6.04%", monthlyVariance: "3.12%", monthlyAchievement: "151.66%", ytdActual: "9.55%", ytdBudget: "7.50%", ytdAchievement: "127.33%", isCalc: true },
+  { metric: "Non-Operating Expenses", monthlyActual: "100,000", monthlyBudget: "120,000", monthlyVariance: "-20,000", monthlyAchievement: "83.33%", ytdActual: "1,100,000", ytdBudget: "1,300,000", ytdAchievement: "84.62%" },
+  { metric: "Non-Operating Income", monthlyActual: "80,000", monthlyBudget: "60,000", monthlyVariance: "20,000", monthlyAchievement: "133.33%", ytdActual: "900,000", ytdBudget: "700,000", ytdAchievement: "128.57%" },
+  { metric: "PBT After Non-Ops", monthlyActual: "1,125,000", monthlyBudget: "665,000", monthlyVariance: "460,000", monthlyAchievement: "169.17%", ytdActual: "13,650,000", ytdBudget: "9,900,000", ytdAchievement: "137.88%", isCalc: true },
+  { metric: "EBIT", monthlyActual: "1,325,000", monthlyBudget: "845,000", monthlyVariance: "480,000", monthlyAchievement: "156.80%", ytdActual: "15,850,000", ytdBudget: "11,900,000", ytdAchievement: "133.19%", isCalc: true },
+  { metric: "EBITDA", monthlyActual: "1,625,000", monthlyBudget: "1,145,000", monthlyVariance: "480,000", monthlyAchievement: "141.92%", ytdActual: "19,450,000", ytdBudget: "15,500,000", ytdAchievement: "125.48%", isCalc: true },
 ];
 
 const pendingReports = [
@@ -121,28 +121,42 @@ export default function ReportsPage() {
               <table className="w-full">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Metric</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Actual</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Budget</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Variance</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Variance %</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase w-64">Metric</th>
+                    
+                    {/* Monthly Headers */}
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase border-l border-slate-100">Monthly Actual</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Monthly Budget</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Monthly Achv %</th>
+                    
+                    {/* YTD Headers */}
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase border-l border-slate-200 bg-slate-50/50">YTD Actual</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase bg-slate-50/50">YTD Budget</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase bg-slate-50/50">YTD Achv %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {reportData.map((row, i) => {
-                    const isPositive = row.pct.startsWith("+") || row.pct === "0.00%";
+                    const isMonthlyPositive = parseFloat(row.monthlyAchievement.replace("%", "")) >= 100;
+                    const isYtdPositive = parseFloat(row.ytdAchievement.replace("%", "")) >= 100;
+                    
                     return (
                       <tr key={i} className={row.isCalc ? "bg-slate-50" : "hover:bg-slate-50"}>
-                        <td className={`px-5 py-3 text-sm ${row.isCalc ? "font-semibold text-slate-800" : "text-slate-700"}`}>
+                        <td className={`px-5 py-3 text-sm ${row.isCalc ? "font-semibold text-slate-800" : "text-slate-700"} whitespace-nowrap`}>
                           {row.metric}
                         </td>
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono">{row.actual}</td>
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono">{row.budget}</td>
-                        <td className={`px-5 py-3 text-sm text-right font-mono ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
-                          {row.variance}
+                        
+                        {/* Monthly Column Group */}
+                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono border-l border-slate-100">{row.monthlyActual}</td>
+                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono">{row.monthlyBudget}</td>
+                        <td className={`px-5 py-3 text-sm text-right font-mono font-medium ${isMonthlyPositive ? "text-emerald-600" : "text-amber-600"}`}>
+                          {row.monthlyAchievement}
                         </td>
-                        <td className={`px-5 py-3 text-sm text-right font-mono font-medium ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
-                          {row.pct}
+
+                        {/* YTD Column Group */}
+                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono border-l border-slate-200 bg-slate-50/50">{row.ytdActual}</td>
+                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono bg-slate-50/50">{row.ytdBudget}</td>
+                        <td className={`px-5 py-3 text-sm text-right font-mono font-medium bg-slate-50/50 ${isYtdPositive ? "text-emerald-600" : "text-amber-600"}`}>
+                          {row.ytdAchievement}
                         </td>
                       </tr>
                     );
