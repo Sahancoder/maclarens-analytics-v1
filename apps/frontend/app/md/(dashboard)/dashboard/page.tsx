@@ -80,6 +80,10 @@ const groupData = {
   priorYearGp: 1650000,
   priorYearGpMargin: 32.8,
   pbtAchievement: 91.8,
+  revenue: 5200000, 
+  revenuePriorYear: 4800000,
+  overhead: 1253500,
+  overheadPriorYear: 1100000,
 };
 
 const clusters: Cluster[] = [
@@ -393,18 +397,18 @@ export default function MDDashboard() {
         </div>
 
         {/* ============ GROUP KPIs (Level 1) ============ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Tile 1: GP Margin */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+          {/* Tile 1: Revenue */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">GP Margin</span>
-              <Activity className="h-4 w-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-500 uppercase">Revenue</span>
+              <DollarSign className="h-4 w-4 text-slate-400" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin}%</p>
+            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.revenue)}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="flex items-center text-xs font-medium text-emerald-600">
                 <ArrowUpRight className="h-3 w-3" />
-                +{(groupData.gpMargin - groupData.priorYearGpMargin).toFixed(1)}%
+                +{((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(1)}%
               </span>
               <span className="text-xs text-slate-400">vs Prior Year</span>
             </div>
@@ -426,7 +430,39 @@ export default function MDDashboard() {
             </div>
           </div>
 
-          {/* Tile 3: Actual PBT */}
+          {/* Tile 3: GP Margin */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase">GP Margin</span>
+              <Activity className="h-4 w-4 text-slate-400" />
+            </div>
+            <p className="text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin}%</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="flex items-center text-xs font-medium text-emerald-600">
+                <ArrowUpRight className="h-3 w-3" />
+                +{(groupData.gpMargin - groupData.priorYearGpMargin).toFixed(1)}%
+              </span>
+              <span className="text-xs text-slate-400">vs Prior Year</span>
+            </div>
+          </div>
+
+          {/* Tile 4: Total Overhead */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase">Total Overhead</span>
+              <Activity className="h-4 w-4 text-slate-400" />
+            </div>
+            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.overhead)}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="flex items-center text-xs font-medium text-red-600">
+                <ArrowUpRight className="h-3 w-3" />
+                +{((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(1)}%
+              </span>
+              <span className="text-xs text-slate-400">vs Prior Year</span>
+            </div>
+          </div>
+
+          {/* Tile 5: Actual PBT */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 uppercase">Actual PBT</span>
@@ -442,7 +478,7 @@ export default function MDDashboard() {
             </div>
           </div>
 
-          {/* Tile 4: PBT Achievement */}
+          {/* Tile 6: PBT Achievement */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 uppercase">PBT Achievement</span>

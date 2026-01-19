@@ -15,10 +15,12 @@ import {
 export const navItems = [
   { href: "/md/dashboard", label: "Group Overview", icon: LayoutDashboard, description: "Strategic snapshot" },
   { href: "/md/performance", label: "Cluster Drilldown", icon: Building2, description: "Cluster → Company" },
+  /* Future Development
   { href: "/md/risks", label: "Risk Analysis", icon: AlertTriangle, description: "Variance intelligence" },
   { href: "/md/forecast", label: "Forecast", icon: TrendingUp, description: "Year-end projections" },
   { href: "/md/board", label: "Board Pack", icon: FileText, description: "Executive summary" },
   { href: "/md/notifications", label: "Alerts", icon: Bell, description: "Action items" },
+  */
 ];
 
 export function Sidebar() {
