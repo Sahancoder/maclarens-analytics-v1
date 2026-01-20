@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, MoreHorizontal, Mail, Building2, Shield, Edit, Trash2, UserCheck, UserX } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Mail, Building2, Shield, Edit, Trash2, UserCheck, UserX, X, ChevronDown } from "lucide-react";
 
 interface User {
   id: string;
@@ -186,48 +186,61 @@ export default function UsersPage() {
 
       {/* Add User Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Add New User</h3>
-            <div className="space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-[#0b1f3a]">Add New User</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">First Name</label>
-                  <input type="text" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" />
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">First Name</label>
+                  <input type="text" className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Last Name</label>
-                  <input type="text" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" />
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Last Name</label>
+                  <input type="text" className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
-                <input type="email" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" placeholder="user@mclarens.lk" />
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Email Address</label>
+                <input type="email" className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" placeholder="user@mclarens.lk" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
-                <select className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg">
-                  <option>Select Role</option>
-                  <option>Data Officer</option>
-                  <option>Finance Director</option>
-                  <option>Executive Viewer</option>
-                </select>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Role</label>
+                <div className="relative">
+                  <select className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]">
+                    <option>Select Role</option>
+                    <option>Data Officer</option>
+                    <option>Finance Director</option>
+                    <option>Executive Viewer</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Assign to Company</label>
-                <select className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg">
-                  <option>Select Company</option>
-                  <option>McLarens Maritime Academy</option>
-                  <option>GAC Shipping Limited</option>
-                  <option>Spectra Logistics</option>
-                </select>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Assign to Company</label>
+                <div className="relative">
+                  <select className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]">
+                    <option>Select Company</option>
+                    <option>McLarens Maritime Academy</option>
+                    <option>GAC Shipping Limited</option>
+                    <option>Spectra Logistics</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowAddModal(false)} className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
+
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => setShowAddModal(false)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
                 Cancel
               </button>
-              <button className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90">
+              <button className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors">
                 Create User
               </button>
             </div>

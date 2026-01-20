@@ -207,35 +207,42 @@ export default function RolesPage() {
 
       {/* Add Role Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Create New Role</h3>
-            <div className="space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-[#0b1f3a]">Create New Role</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Role Name</label>
-                <input type="text" className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" placeholder="e.g., Regional Manager" />
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Role Name</label>
+                <input type="text" className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" placeholder="e.g., Regional Manager" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
-                <textarea className="w-full px-4 py-3 text-sm border border-slate-300 rounded-lg resize-none" rows={2} placeholder="Brief description of this role..." />
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Description</label>
+                <textarea className="w-full px-3 py-2 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a] resize-none" rows={2} placeholder="Brief description of this role..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">Permissions</label>
-                <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-200 rounded-lg p-3">
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Permissions</label>
+                <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 rounded-lg p-2 bg-slate-50/50">
                   {allPermissions.map((perm) => (
-                    <label key={perm.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded cursor-pointer">
-                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[#0b1f3a]" />
+                    <label key={perm.id} className="flex items-center gap-3 p-1.5 hover:bg-white hover:shadow-sm rounded cursor-pointer transition-all">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
                       <span className="text-sm text-slate-700">{perm.name}</span>
                     </label>
                   ))}
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowAddModal(false)} className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
+            
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => setShowAddModal(false)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
                 Cancel
               </button>
-              <button className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90">
+              <button className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors">
                 Create Role
               </button>
             </div>

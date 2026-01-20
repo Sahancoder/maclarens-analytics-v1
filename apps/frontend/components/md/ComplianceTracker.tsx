@@ -293,59 +293,63 @@ export function ComplianceTracker() {
         </div>
       </div>
 
-      {/* Details Drawer (Overlay) */}
+      {/* Details Modal (Overlay) */}
       {selectedCompany && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm" onClick={() => setSelectedCompany(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setSelectedCompany(null)}>
           <div 
-            className="w-full max-w-md bg-white h-full shadow-2xl p-0 flex flex-col animate-in slide-in-from-right duration-200"
+            className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
-            {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between ">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">{selectedCompany.name}</h2>
+                <h2 className="text-xl font-bold text-[#0b1f3a]">{selectedCompany.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <StatusBadge status={selectedCompany.status} />
-                  <span className="text-xs text-slate-500">• {activeTab === "submitted" ? "Submission Details" : "Pending Action"}</span>
+                  <span className="text-xs text-slate-500 font-medium">• {activeTab === "submitted" ? "Submission Details" : "Pending Action"}</span>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedCompany(null)}
-                className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto">
               {selectedCompany.status === "submitted" ? (
                 <div className="space-y-6">
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
                     <div className="flex items-start gap-3">
-                      <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5" />
+                      <div className="bg-white p-1 rounded-full text-emerald-600 shadow-sm mt-0.5">
+                        <CheckCircle className="w-5 h-5" />
+                      </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-emerald-900">All Reports Submitted</h4>
-                        <p className="text-xs text-emerald-700 mt-1">
+                        <h4 className="text-sm font-bold text-emerald-900">All Reports Submitted</h4>
+                        <p className="text-xs text-emerald-700 mt-1 font-medium">
                           Last submission received on {selectedCompany.lastSubmission}.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Submission History</h4>
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Submission History</h4>
                     <div className="space-y-3">
                       {selectedCompany.submissions.map(sub => (
-                        <div key={sub.id} className="border border-slate-200 rounded-lg p-4 hover:border-[#0b1f3a] transition-colors">
-                          <div className="flex justify-between items-start mb-2">
+                        <div key={sub.id} className="border border-slate-200 rounded-xl p-4 hover:border-[#0b1f3a]/30 transition-colors bg-slate-50/50">
+                          <div className="flex justify-between items-start mb-3">
                             <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-[#0b1f3a]" />
-                              <span className="font-semibold text-sm text-slate-900">{sub.type} Report</span>
+                              <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                <FileText className="w-4 h-4 text-[#0b1f3a]" />
+                              </div>
+                              <span className="font-bold text-sm text-slate-900">{sub.type} Report</span>
                             </div>
-                            <span className="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600">v{sub.version}</span>
+                            <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded-full uppercase tracking-wide">v{sub.version}</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-y-2 text-xs text-slate-500">
+                          <div className="grid grid-cols-2 gap-y-2 text-xs text-slate-500 font-medium border-t border-slate-200 pt-3">
                             <div className="flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5" />
                               {sub.date}
@@ -362,44 +366,57 @@ export function ComplianceTracker() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <div className={`border rounded-lg p-4 ${selectedCompany.status === "overdue" ? "bg-red-50 border-red-100" : "bg-amber-50 border-amber-100"}`}>
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className={`w-5 h-5 mt-0.5 ${selectedCompany.status === "overdue" ? "text-red-600" : "text-amber-600"}`} />
+                  {/* Status Banner */}
+                  <div className={`border rounded-xl p-4 shadow-sm ${selectedCompany.status === "overdue" ? "bg-red-50 border-red-100" : "bg-amber-50 border-amber-100"}`}>
+                    <div className="flex items-start gap-4">
+                      <div className={`p-2 rounded-full ${selectedCompany.status === "overdue" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600"}`}>
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
                       <div>
-                        <h4 className={`text-sm font-semibold ${selectedCompany.status === "overdue" ? "text-red-900" : "text-amber-900"}`}>
+                        <h4 className={`text-base font-bold ${selectedCompany.status === "overdue" ? "text-red-900" : "text-amber-900"}`}>
                           Submission {selectedCompany.status === "overdue" ? "Overdue" : "Pending"}
                         </h4>
-                        <p className={`text-xs mt-1 ${selectedCompany.status === "overdue" ? "text-red-700" : "text-amber-700"}`}>
-                          Due date was {selectedCompany.dueDate}. Immediate action required.
+                        <p className={`text-sm mt-1 font-medium ${selectedCompany.status === "overdue" ? "text-red-700" : "text-amber-700"}`}>
+                          Due date was <span className="font-bold">{selectedCompany.dueDate}</span>. Immediate action required.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                     <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Required Actions</h4>
-                     <div className="border border-slate-200 rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="text-sm font-medium text-slate-700">Actuals + Budget</span>
-                          <span className="text-xs font-semibold text-red-600">Missing</span>
+                  {/* Required Actions Card */}
+                  <div className="space-y-3">
+                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Required Actions</h4>
+                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                              <FileText className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <span className="text-sm font-semibold text-slate-900">Actuals + Budget</span>
+                          </div>
+                          <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded">Missing</span>
                         </div>
-                        <div className="flex justify-between items-center text-xs text-slate-500">
-                           <span>Finance Officer</span>
-                           <span>Not assigned</span>
+                        <div className="flex justify-between items-center text-sm">
+                           <span className="text-slate-500 font-medium">Finance Officer</span>
+                           <span className="text-slate-400 italic">Not assigned</span>
                         </div>
                      </div>
-                     
-                     <div className="pt-4">
-                        <label className="text-xs font-medium text-slate-700 mb-1.5 block">Send Reminder</label>
-                        <textarea 
-                          className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a] outline-none"
-                          rows={3}
-                          placeholder="Type a message to the finance team..."
-                          defaultValue={`Please submit the monthly reports for ${selectedCompany.name} as soon as possible.`}
-                        />
-                        <button className="mt-3 w-full bg-[#0b1f3a] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#0b1f3a]/90 transition-colors">
-                          Send Reminder
-                        </button>
+                  </div>
+                  
+                  {/* Send Reminder Section */}
+                  <div className="pt-2">
+                     <label className="text-xs font-bold text-slate-700 mb-2 block uppercase tracking-wide">Send Reminder</label>
+                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-1">
+                       <textarea 
+                         className="w-full bg-transparent border-none p-3 text-sm focus:ring-0 placeholder:text-slate-400 min-h-[80px] resize-none"
+                         placeholder="Type a message to the finance team..."
+                         defaultValue={`Please submit the monthly reports for ${selectedCompany.name} as soon as possible.`}
+                       />
+                       <div className="flex justify-end p-2 border-t border-slate-200">
+                          <button className="px-4 py-2 bg-[#0b1f3a] text-white rounded-lg text-sm font-semibold hover:bg-[#0b1f3a]/90 transition-all shadow-sm flex items-center gap-2">
+                            Send Reminder <ChevronRight className="w-4 h-4" />
+                          </button>
+                       </div>
                      </div>
                   </div>
                 </div>

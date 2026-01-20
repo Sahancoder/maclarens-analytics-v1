@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, Building2, Edit, ToggleLeft, ToggleRight, Users, Calendar } from "lucide-react";
+import { Search, Plus, Building2, Edit, ToggleLeft, ToggleRight, Users, Calendar, X, ChevronDown } from "lucide-react";
 
 interface Company {
   id: string;
-  code: string;
   name: string;
   cluster: string;
   yearEnd: string;
@@ -15,13 +14,13 @@ interface Company {
 }
 
 const companiesData: Company[] = [
-  { id: "1", code: "MMA", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics", yearEnd: "March", director: "Sahan Viranga", dataOfficer: "Sahan Hettiarachchi", status: "active" },
-  { id: "2", code: "GSL", name: "GAC Shipping Limited", cluster: "GAC Cluster", yearEnd: "December", director: "Orlando Diggs", dataOfficer: "Natali Craig", status: "active" },
-  { id: "3", code: "SPIL", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", director: "—", dataOfficer: "Drew Cano", status: "active" },
-  { id: "4", code: "IOE", name: "Interocean Energy", cluster: "Bunkering & Renewables", yearEnd: "March", director: "—", dataOfficer: "—", status: "active" },
-  { id: "5", code: "ONE", name: "ONE", cluster: "Liner", yearEnd: "March", director: "—", dataOfficer: "—", status: "active" },
-  { id: "6", code: "MSC", name: "MSC", cluster: "Liner", yearEnd: "December", director: "—", dataOfficer: "—", status: "active" },
-  { id: "7", code: "GMSL", name: "GAC Marine Services", cluster: "GAC Cluster", yearEnd: "December", director: "—", dataOfficer: "—", status: "inactive" },
+  { id: "1", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics", yearEnd: "March", director: "Sahan Viranga", dataOfficer: "Sahan Hettiarachchi", status: "active" },
+  { id: "2", name: "GAC Shipping Limited", cluster: "GAC Cluster", yearEnd: "December", director: "Orlando Diggs", dataOfficer: "Natali Craig", status: "active" },
+  { id: "3", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", director: "—", dataOfficer: "Drew Cano", status: "active" },
+  { id: "4", name: "Interocean Energy", cluster: "Bunkering & Renewables", yearEnd: "March", director: "—", dataOfficer: "—", status: "active" },
+  { id: "5", name: "ONE", cluster: "Liner", yearEnd: "March", director: "—", dataOfficer: "—", status: "active" },
+  { id: "6", name: "MSC", cluster: "Liner", yearEnd: "December", director: "—", dataOfficer: "—", status: "active" },
+  { id: "7", name: "GAC Marine Services", cluster: "GAC Cluster", yearEnd: "December", director: "—", dataOfficer: "—", status: "inactive" },
 ];
 
 export default function CompaniesPage() {
@@ -32,12 +31,28 @@ export default function CompaniesPage() {
 
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [assigningCompany, setAssigningCompany] = useState<Company | null>(null);
+  const [selectedDirector, setSelectedDirector] = useState("");
+  const [selectedOfficer, setSelectedOfficer] = useState("");
+  const [directorEmail, setDirectorEmail] = useState("");
+  const [officerEmail, setOfficerEmail] = useState("");
+
+  const getEmailForUser = (name: string) => {
+    const emailMap: Record<string, string> = {
+      "Sahan Viranga": "sahanviranga18@gmail.com",
+      "Orlando Diggs": "orlando.diggs@mclarens.lk",
+      "Sarah Smith": "sarah.smith@mclarens.lk",
+      "Sahan Hettiarachchi": "sahanhettiarachchi275@gmail.com",
+      "Natali Craig": "natali.craig@mclarens.lk",
+      "Drew Cano": "drew.cano@mclarens.lk",
+      "John Doe": "john.doe@mclarens.lk"
+    };
+    return emailMap[name] || "";
+  };
 
   const clusters = Array.from(new Set(companiesData.map((c) => c.cluster)));
 
   const filteredCompanies = companies.filter((company) => {
-    const matchesSearch = company.name.toLowerCase().includes(search.toLowerCase()) ||
-                         company.code.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = company.name.toLowerCase().includes(search.toLowerCase());
     const matchesCluster = clusterFilter === "all" || company.cluster === clusterFilter;
     return matchesSearch && matchesCluster;
   });
@@ -76,7 +91,7 @@ export default function CompaniesPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or code..."
+                placeholder="Search by name..."
                 className="w-full h-11 pl-11 pr-4 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-[#0b1f3a]"
               />
             </div>
@@ -109,7 +124,6 @@ export default function CompaniesPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-slate-900">{company.name}</h3>
-                    <p className="text-sm text-slate-500">{company.code}</p>
                   </div>
                 </div>
                 <button
@@ -154,7 +168,15 @@ export default function CompaniesPage() {
                   Edit
                 </button>
                 <button 
-                  onClick={() => setAssigningCompany(company)}
+                  onClick={() => {
+                    setAssigningCompany(company);
+                    const director = company.director === "—" ? "" : company.director;
+                    const officer = company.dataOfficer === "—" ? "" : company.dataOfficer;
+                    setSelectedDirector(director);
+                    setSelectedOfficer(officer);
+                    setDirectorEmail(getEmailForUser(director));
+                    setOfficerEmail(getEmailForUser(officer));
+                  }}
                   className="flex-1 h-9 text-sm font-medium text-[#0b1f3a] bg-[#0b1f3a]/10 rounded-lg hover:bg-[#0b1f3a]/20 transition-colors"
                 >
                   Assign Users
@@ -167,55 +189,91 @@ export default function CompaniesPage() {
 
       {/* Edit Company Modal */}
       {editingCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Edit Company</h3>
-            <div className="space-y-5">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Code</label>
-                  <input 
-                    type="text" 
-                    defaultValue={editingCompany.code}
-                    className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg bg-slate-50" 
-                    readOnly
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
-                  <input 
-                    type="text" 
-                    defaultValue={editingCompany.name}
-                    className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg" 
-                  />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-[#0b1f3a]">Edit Company</h3>
+              <button onClick={() => setEditingCompany(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Company Name <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  defaultValue={editingCompany.name}
+                  className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Cluster <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select 
+                    defaultValue={editingCompany.cluster}
+                    className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]"
+                  >
+                    {clusters.map((cluster) => (
+                      <option key={cluster}>{cluster}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Cluster</label>
-                <select 
-                  defaultValue={editingCompany.cluster}
-                  className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg"
-                >
-                  {clusters.map((cluster) => (
-                    <option key={cluster}>{cluster}</option>
-                  ))}
-                </select>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Financial Year Start Month <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select 
+                    defaultValue={editingCompany.yearEnd === "March" ? "April" : "January"}
+                    className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]"
+                  >
+                    <option value="April">April</option>
+                    <option value="January">January</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Financial Year End</label>
-                <select 
-                  defaultValue={editingCompany.yearEnd}
-                  className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg"
-                >
-                  <option>March</option>
-                  <option>December</option>
-                </select>
+
+              <div className="pt-2 border-t border-slate-100">
+                <h4 className="text-xs font-semibold text-slate-700 uppercase mb-3">Assigned Users</h4>
+                <div className="grid grid-cols-1 gap-3">
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div>
+                            <p className="text-xs text-slate-500">Finance Director (FD)</p>
+                            <p className="text-sm font-medium text-slate-900">{editingCompany.director !== "—" ? editingCompany.director : "Unassigned"}</p>
+                        </div>
+                        {editingCompany.director !== "—" && (
+                            <button 
+                              onClick={() => setEditingCompany({...editingCompany, director: "—"})} 
+                              className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors"
+                            >
+                              Unassign
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div>
+                            <p className="text-xs text-slate-500">Finance Officer (FO)</p>
+                            <p className="text-sm font-medium text-slate-900">{editingCompany.dataOfficer !== "—" ? editingCompany.dataOfficer : "Unassigned"}</p>
+                        </div>
+                        {editingCompany.dataOfficer !== "—" && (
+                            <button 
+                              onClick={() => setEditingCompany({...editingCompany, dataOfficer: "—"})} 
+                              className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors"
+                            >
+                              Unassign
+                            </button>
+                        )}
+                    </div>
+                </div>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-6">
+
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
               <button 
                 onClick={() => setEditingCompany(null)} 
-                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+                className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -224,7 +282,7 @@ export default function CompaniesPage() {
                   alert("Company updated successfully!");
                   setEditingCompany(null);
                 }}
-                className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90"
+                className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors"
               >
                 Save Changes
               </button>
@@ -233,36 +291,128 @@ export default function CompaniesPage() {
         </div>
       )}
 
+      {/* Add Company Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-[#0b1f3a]">Add New Company</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Company Name <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Acme Corp"
+                  className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Cluster <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]">
+                    <option value="">Select Cluster...</option>
+                    {clusters.map((cluster) => (
+                      <option key={cluster} value={cluster}>{cluster}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Financial Year Start Month <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a]">
+                    <option value="April">April</option>
+                    <option value="January">January</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  alert("Company added successfully!");
+                  setShowAddModal(false);
+                }}
+                className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors"
+              >
+                Add Company
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assign Users Modal */}
       {assigningCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900 mb-2">Assign Users</h3>
-            <p className="text-sm text-slate-500 mb-6">Assign key personnel for <span className="font-semibold text-slate-800">{assigningCompany.name}</span></p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-[#0b1f3a]">Assign Users</h3>
+              <button onClick={() => setAssigningCompany(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             
-            <div className="space-y-5">
+            <div className="p-5 space-y-4">
+              <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 mb-2">
+                <p className="text-xs text-blue-800">Assigning users for <span className="font-bold">{assigningCompany.name}</span></p>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Finance Director</label>
-                <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Finance Director</label>
+                <div className="relative group mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#0b1f3a]" />
                   <select 
-                    defaultValue={assigningCompany.director === "—" ? "" : assigningCompany.director}
-                    className="w-full h-11 pl-4 pr-10 text-sm border border-slate-300 rounded-lg appearance-none"
+                    value={selectedDirector}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setSelectedDirector(name);
+                      setDirectorEmail(getEmailForUser(name)); // Auto-fill email
+                    }}
+                    className="w-full h-10 pl-9 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
                   >
                     <option value="">Select Director...</option>
                     <option value="Sahan Viranga">Sahan Viranga</option>
                     <option value="Orlando Diggs">Orlando Diggs</option>
                     <option value="Sarah Smith">Sarah Smith</option>
                   </select>
-                  <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 </div>
+                <input 
+                  type="text" 
+                  placeholder="Director's Email"
+                  value={directorEmail}
+                  onChange={(e) => setDirectorEmail(e.target.value)}
+                  className="w-full h-9 px-3 text-xs text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
+                />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Data Officer</label>
-                <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Data Officer</label>
+                <div className="relative group mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#0b1f3a]" />
                   <select 
-                    defaultValue={assigningCompany.dataOfficer === "—" ? "" : assigningCompany.dataOfficer}
-                    className="w-full h-11 pl-4 pr-10 text-sm border border-slate-300 rounded-lg appearance-none"
+                    value={selectedOfficer}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setSelectedOfficer(name);
+                      setOfficerEmail(getEmailForUser(name)); // Auto-fill email
+                    }}
+                    className="w-full h-10 pl-9 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
                   >
                     <option value="">Select Officer...</option>
                     <option value="Sahan Hettiarachchi">Sahan Hettiarachchi</option>
@@ -270,15 +420,22 @@ export default function CompaniesPage() {
                     <option value="Drew Cano">Drew Cano</option>
                     <option value="John Doe">John Doe</option>
                   </select>
-                  <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 </div>
+                <input 
+                  type="text" 
+                  placeholder="Officer's Email"
+                  value={officerEmail}
+                  onChange={(e) => setOfficerEmail(e.target.value)}
+                  className="w-full h-9 px-3 text-xs text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
+                />
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end mt-8">
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
               <button 
                 onClick={() => setAssigningCompany(null)} 
-                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+                className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -287,7 +444,7 @@ export default function CompaniesPage() {
                   alert("Users assigned successfully!");
                   setAssigningCompany(null);
                 }}
-                className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90"
+                className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors"
               >
                 Save Assignments
               </button>

@@ -173,39 +173,39 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
   
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-900">Confirm Budget Submission</h3>
-          <button onClick={() => { onClose(); setConfirmed(false); }} className="p-1.5 hover:bg-slate-100 rounded-lg">
-            <X className="h-5 w-5 text-slate-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="text-lg font-bold text-[#0b1f3a]">Confirm Budget Submission</h3>
+          <button onClick={() => { onClose(); setConfirmed(false); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X className="h-5 w-5" />
           </button>
         </div>
         
-        <div className="mb-6">
-          <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200 mb-4">
-            <Calculator className="h-6 w-6 text-blue-600 flex-shrink-0" />
-            <p className="text-sm text-blue-800">
+        <div className="p-5 space-y-4">
+          <div className="flex items-start gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+            <Calculator className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-800 leading-snug">
               All budget fields have been completed for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month}</span>
             </p>
           </div>
           
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex items-start gap-3 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-all">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
             <span className="text-sm text-slate-600">
               I confirm that the budget data entered is accurate and ready for review by the Finance Director.
             </span>
           </label>
         </div>
         
-        <div className="flex gap-3 justify-end">
+        <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={() => { onClose(); setConfirmed(false); }} 
-            className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+            className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
             Cancel
           </button>
           <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed}
-            className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             Submit Budget
           </button>
         </div>
