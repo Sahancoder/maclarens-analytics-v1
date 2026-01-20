@@ -243,15 +243,16 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
           {/* Login Actions */}
           <div className="mt-8 space-y-6">
             {/* Microsoft SSO Button */}
+            {/* Microsoft SSO Button */}
             <button
               onClick={handleMicrosoftLogin}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md hover:border-slate-400 group focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full max-w-[280px] mx-auto flex items-center justify-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2 px-3 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md hover:border-slate-400 group focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
                   <svg
-                    className="animate-spin h-5 w-5 text-slate-700"
+                    className="animate-spin h-4 w-4 text-slate-700"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -270,21 +271,21 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <span className="text-sm sm:text-base">Signing in...</span>
+                  <span className="text-xs sm:text-sm">Signing in...</span>
                 </>
               ) : (
                 <>
                   {/* Microsoft Logo Icon */}
-                  <div className="grid grid-cols-2 gap-0.5 w-4 h-4 shrink-0">
+                  <div className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5 shrink-0">
                     <div className="bg-[#f25022] w-full h-full"></div>
                     <div className="bg-[#7fba00] w-full h-full"></div>
                     <div className="bg-[#00a4ef] w-full h-full"></div>
                     <div className="bg-[#ffb900] w-full h-full"></div>
                   </div>
-                  <span className="text-sm sm:text-base">
+                  <span className="text-xs sm:text-sm">
                     Sign in with Microsoft Entra ID
                   </span>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
             </button>

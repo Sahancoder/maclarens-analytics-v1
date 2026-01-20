@@ -48,13 +48,17 @@ export default function FinanceOfficerDashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50 overflow-x-hidden">
       <Header />
-      <div className="flex flex-1">
-        <div className="hidden md:block">
+      <div className="flex flex-1 min-h-0">
+        <aside className="hidden md:flex md:flex-shrink-0 md:w-60 lg:w-64">
           <Sidebar />
-        </div>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        </aside>
+        <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto">
+          <div className="w-full max-w-full">
+            {children}
+          </div>
+        </main>
       </div>
       <Footer />
     </div>

@@ -7,6 +7,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '480px', // Extra small breakpoint for better mobile support
+      },
       fontFamily: {
         inter: ["var(--font-inter)"],
         roboto: ["var(--font-roboto)"],

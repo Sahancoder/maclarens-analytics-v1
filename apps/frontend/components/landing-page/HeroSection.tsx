@@ -62,7 +62,7 @@ export function HeroSection() {
                 Welcome to
               </p>
               <h1 className="mt-1 md:mt-2 font-sansation text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight text-white md:whitespace-nowrap">
-                McLaren&apos;s Analytics.io
+                McLarens Analytics.io
               </h1>
             </div>
 

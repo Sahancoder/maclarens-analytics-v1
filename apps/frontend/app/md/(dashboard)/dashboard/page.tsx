@@ -16,6 +16,7 @@ import {
   Building2,
   X,
   Calendar,
+  Globe,
 } from "lucide-react";
 import {
   BarChart,
@@ -265,8 +266,28 @@ export default function MDDashboard() {
   }, [contributionMode, contributionMonth, contributionYear]);
   
   // Period selection
+  const [overviewMode, setOverviewMode] = useState<"month" | "ytd">("month");
   const [selectedMonth, setSelectedMonth] = useState<number>(10); // October
   const [selectedYear, setSelectedYear] = useState<number>(2025);
+
+  // Currency State
+  const [currency, setCurrency] = useState<"LKR" | "USD">("LKR");
+  const [exchangeRate, setExchangeRate] = useState<number>(300);
+
+  // Currency Helpers
+  const convertValue = (val: number) => currency === "USD" ? val / exchangeRate : val;
+  
+  const formatFinancial = (val: number) => { // Replaces formatCurrency
+    const converted = convertValue(val);
+    if (currency === "USD") {
+      return `$${(Math.abs(converted) / 1000).toFixed(2)}M`;
+    }
+    return `LKR ${(Math.abs(converted) / 1000).toFixed(1)}${converted < 0 ? "M" : "M"}`;
+  };
+
+  const formatRawNumber = (val: number) => { // Replaces formatNumber for lists
+    return convertValue(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  };
   
   // Available months/years for dropdown
   const availableMonths = [
@@ -351,39 +372,87 @@ export default function MDDashboard() {
   }, []);
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <div className="max-w-[1600px] mx-auto p-6">
+    <div className="min-h-full bg-slate-50 overflow-x-hidden">
+      <div className="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-6">
         
-        {/* ============ HEADER ============ */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Group Strategic Overview</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Unified view: Group → Cluster → Company
+        {/* Header - Responsive: stacks on mobile */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 truncate">Group Strategic Overview</h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Unified view: Group → Cluster → Company {currency === "USD" && `• Converted @ ${exchangeRate} LKR/USD`}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Month Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-slate-600">Month:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="h-9 px-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Currency Controls */}
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-1 mr-2">
+              <div className="flex items-center px-2 py-1 bg-slate-50 rounded border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-500 mr-2">USD RATE</span>
+                <span className="text-xs font-medium text-slate-400 mr-1">LKR</span>
+                <input 
+                  type="number"
+                  value={exchangeRate}
+                  onChange={(e) => setExchangeRate(Number(e.target.value))}
+                  className="w-12 bg-transparent text-xs font-bold text-slate-700 focus:outline-none text-right"
+                />
+              </div>
+              <button
+                onClick={() => setCurrency(c => c === "LKR" ? "USD" : "LKR")}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition-all ${
+                  currency === "USD" 
+                    ? "bg-blue-600 text-white shadow-sm" 
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                {availableMonths.map(month => (
-                  <option key={month.value} value={month.value}>{month.label}</option>
-                ))}
-              </select>
+                <Globe className="h-3 w-3" />
+                {currency}
+              </button>
             </div>
+
+            <div className="h-6 w-px bg-slate-200 mx-1" />
+            {/* Mode Toggle */}
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button
+                onClick={() => setOverviewMode("month")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  overviewMode === "month" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Month
+              </button>
+              <button
+                onClick={() => setOverviewMode("ytd")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  overviewMode === "ytd" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                YTD
+              </button>
+            </div>
+
+            {/* Month Selector */}
+            {overviewMode === "month" && (
+              <div className="flex items-center gap-1 sm:gap-2">
+                <label className="text-xs font-medium text-slate-600 hidden sm:block">Month:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
+                >
+                  {availableMonths.map(month => (
+                    <option key={month.value} value={month.value}>{month.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             
             {/* Year Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-slate-600">Year:</label>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <label className="text-xs font-medium text-slate-600 hidden sm:block">Year:</label>
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="h-9 px-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
+                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
               >
                 {availableYears.map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -391,109 +460,109 @@ export default function MDDashboard() {
               </select>
             </div>
             
-            <div className="h-6 w-px bg-slate-200" />
-            <span className="text-xs text-slate-500">Last updated: 2 hours ago</span>
+            <div className="hidden sm:block h-6 w-px bg-slate-200" />
+            <span className="text-xs text-slate-500 hidden md:block">Last updated: 2 hours ago</span>
           </div>
         </div>
 
         {/* ============ GROUP KPIs (Level 1) ============ */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
           {/* Tile 1: Revenue */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">Revenue</span>
-              <DollarSign className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">Revenue</span>
+              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.revenue)}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="flex items-center text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" />
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.revenue)}</p>
+            <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
+              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
+                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 +{((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-slate-400">vs Prior Year</span>
+              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
           </div>
 
           {/* Tile 2: GP */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">GP</span>
-              <DollarSign className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">GP</span>
+              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.gp)}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="flex items-center text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" />
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.gp)}</p>
+            <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
+              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
+                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 +12.1%
               </span>
-              <span className="text-xs text-slate-400">vs Prior Year</span>
+              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
           </div>
 
           {/* Tile 3: GP Margin */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">GP Margin</span>
-              <Activity className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">GP Margin</span>
+              <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin}%</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="flex items-center text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" />
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin}%</p>
+            <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
+              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
+                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 +{(groupData.gpMargin - groupData.priorYearGpMargin).toFixed(1)}%
               </span>
-              <span className="text-xs text-slate-400">vs Prior Year</span>
+              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
           </div>
 
           {/* Tile 4: Total Overhead */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">Total Overhead</span>
-              <Activity className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">Total Overhead</span>
+              <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.overhead)}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="flex items-center text-xs font-medium text-red-600">
-                <ArrowUpRight className="h-3 w-3" />
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.overhead)}</p>
+            <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
+              <span className="flex items-center text-[10px] sm:text-xs font-medium text-red-600">
+                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 +{((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-slate-400">vs Prior Year</span>
+              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
           </div>
 
           {/* Tile 5: Actual PBT */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">Actual PBT</span>
-              <TrendingUp className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">Actual PBT</span>
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">{formatCurrency(groupData.totalPBT)}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="flex items-center text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" />
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.totalPBT)}</p>
+            <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
+              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
+                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 +8.4%
               </span>
-              <span className="text-xs text-slate-400">vs Prior Year</span>
+              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
           </div>
 
           {/* Tile 6: PBT Achievement */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 md:p-5 shadow-sm min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase">PBT Achievement</span>
-              <Target className="h-4 w-4 text-slate-400" />
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">PBT Achievement</span>
+              <Target className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-2xl font-bold text-[#0b1f3a]">
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a]">
               {groupData.pbtAchievement}%
             </p>
-            <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+            <div className="w-full h-1 sm:h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
               <div 
                 className={`h-full rounded-full ${groupData.pbtAchievement >= 100 ? "bg-emerald-500" : "bg-[#0b1f3a]"}`} 
                 style={{ width: `${Math.min(groupData.pbtAchievement, 100)}%` }} 
               />
             </div>
-            <p className="text-xs text-slate-500 mt-1">of target</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-1">of target</p>
           </div>
         </div>
 
@@ -571,17 +640,18 @@ export default function MDDashboard() {
 
 
         {/* ============ MAIN VISUALIZATION (Level 2 - Clusters) ============ */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5 mb-6">
           
           {/* Chart Section */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">Cluster Contribution Analysis</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Contribution % by Cluster</p>
-              </div>
+          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-w-0">
+            <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900">Cluster Contribution Analysis</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Contribution % by Cluster</p>
+                </div>
               
-              <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 {/* Mode Toggles */}
                 <div className="flex bg-slate-100 p-1 rounded-lg">
                   <button
@@ -625,6 +695,7 @@ export default function MDDashboard() {
                     ))}
                   </select>
                 </div>
+                </div>
               </div>
             </div>
             
@@ -648,7 +719,7 @@ export default function MDDashboard() {
                     />
                     <Tooltip 
                       formatter={(value: number, name: string, props: any) => [
-                        `${value.toFixed(1)}% (LKR ${formatNumber(props.payload.pbt)})`,
+                        `${value.toFixed(1)}% (${currency} ${formatRawNumber(props.payload.pbt)})`,
                         "Contribution"
                       ]}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: '12px' }}
@@ -703,9 +774,9 @@ export default function MDDashboard() {
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
-                          <p className="text-slate-500">PBT</p>
+                          <p className="text-slate-500">PBT ({currency})</p>
                           <p className={`font-semibold ${cluster.pbt >= 0 ? "text-slate-800" : "text-red-600"}`}>
-                            {formatNumber(cluster.pbt)}
+                            {formatRawNumber(cluster.pbt)}
                           </p>
                         </div>
                         <div>
@@ -753,7 +824,7 @@ export default function MDDashboard() {
               <div className="bg-slate-50 rounded-lg p-4">
                 <p className="text-xs text-slate-500 mb-1">Month PBT</p>
                 <p className={`text-xl font-bold ${selectedCluster.pbt >= 0 ? "text-slate-900" : "text-red-600"}`}>
-                  {formatNumber(selectedCluster.pbt)}
+                  {formatFinancial(selectedCluster.pbt)}
                 </p>
               </div>
               <div className="bg-slate-50 rounded-lg p-4">

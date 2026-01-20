@@ -5,7 +5,7 @@ import { NextAuthProvider } from "@/lib/auth-provider";
 import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
-  title: "McLaren's Analytics.io | Enterprise Financial Analytics",
+  title: "McLarens Analytics.io | Enterprise Financial Analytics",
   description:
     "Track real-time financial metrics and operational KPIs to optimize strategy and maximize profitability.",
 };

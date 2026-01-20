@@ -418,22 +418,22 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
   const GridRow = ({ label, monthly, ytd, isBold = false, isHeader = false, isAccent = false, isNegative = false }: any) => {
     if (isHeader) {
       return (
-        <div className="grid grid-cols-[1fr_140px_140px] items-center border-b-2 border-slate-100 pb-2 mb-2">
-           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-2">{label || "Metric"}</div>
-           <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider px-3 border-l border-slate-100">Monthly</div>
-           <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider px-3 border-l border-slate-100">YTD</div>
+        <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] md:grid-cols-[1fr_140px_140px] items-center border-b-2 border-slate-100 pb-2 mb-2">
+           <div className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider pl-2">{label || "Metric"}</div>
+           <div className="text-right text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider px-2 sm:px-3 border-l border-slate-100">Monthly</div>
+           <div className="text-right text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider px-2 sm:px-3 border-l border-slate-100">YTD</div>
         </div>
       );
     }
     
     return (
-      <div className="grid grid-cols-[1fr_140px_140px] items-center py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 rounded-sm">
-         <div className={`pl-2 pr-4 ${isBold ? 'font-semibold text-slate-800' : 'text-slate-600 font-medium'} text-sm`}>
+      <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] md:grid-cols-[1fr_140px_140px] items-center py-2 sm:py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 rounded-sm">
+         <div className={`pl-2 pr-2 sm:pr-4 ${isBold ? 'font-semibold text-slate-800' : 'text-slate-600 font-medium'} text-xs sm:text-sm truncate`}>
            {label}
          </div>
          
          {/* Monthly Value */}
-         <div className={`text-right px-3 border-l border-slate-100 font-mono text-sm tracking-tight
+         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight
            ${isBold ? 'font-bold' : 'font-medium'} 
            ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
          `}>
@@ -441,10 +441,10 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
          </div>
          
          {/* YTD Value */}
-         <div className={`text-right px-3 border-l border-slate-100 font-mono text-sm tracking-tight
+         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight
            ${isBold ? 'font-bold' : 'font-medium'} 
            ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
-           bg-slate-50/50 -my-2.5 py-2.5
+           bg-slate-50/50 -my-2 sm:-my-2.5 py-2 sm:py-2.5
          `}>
            {ytd}
          </div>
@@ -453,35 +453,35 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">{company.name}</h3>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-1 text-xs text-slate-500">
-               <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-medium">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-start sm:items-center justify-between bg-slate-50 gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 truncate">{company.name}</h3>
+            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-6 gap-y-1 mt-1 text-[10px] sm:text-xs text-slate-500">
+               <span className="px-1.5 sm:px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-medium">
                  Fiscal: {company.fiscalYearStartMonth === 1 ? "Jan-Dec" : "Apr-Mar"}
                </span>
-               <span className="flex items-center gap-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+               <span className="flex items-center gap-1 sm:gap-2">
+                 <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>
                  <span className="font-semibold text-slate-700">Monthly:</span> {monthName} {year}
                </span>
-               <span className="flex items-center gap-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+               <span className="flex items-center gap-1 sm:gap-2">
+                 <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>
                  <span className="font-semibold text-slate-700">YTD:</span> {ytdInfo.label} ({ytdInfo.duration} Mo.)
                </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
-            <X className="w-6 h-6" />
+          <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 flex-shrink-0">
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-slate-50/50">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-x-8 sm:gap-y-6">
             
             {/* GROUP 1: Revenue & GP */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">

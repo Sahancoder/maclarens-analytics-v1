@@ -12,3 +12,4 @@ redis==5.0.1
 python-multipart==0.0.6
 resend==0.7.0
 PyJWT==2.8.0
+azure-communication-email==1.0.0

@@ -5,11 +5,14 @@ import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 
 const partners = [
   { name: "MMA", src: "/Company Logos/mma-logo-320.png" },
-  { name: "MOL", src: "/Company Logos/mol-logo.jpg" },
-  { name: "C.H. Robinson", src: "/Company Logos/Robinson_Logo.png" },
+  { name: "MOL", src: "/Company Logos/mol.png" },
   { name: "Swift Shipping", src: "/Company Logos/Shipping .png" },
   { name: "Sharmans", src: "/Company Logos/Sharmans  logistic..png" },
   { name: "GAC", src: "/Company Logos/gac-logo.svg" },
+  { name: "3M", src: "/Company Logos/3M.png" },
+  { name: "Mobil", src: "/Company Logos/mobil-lubricants-logo.png" },
+  { name: "Spectra", src: "/Company Logos/Spectra_Logo.png" },
+  { name: "Topaz", src: "/Company Logos/hotel topzz.png" },
 ];
 
 interface PartnerLogosProps {
@@ -35,20 +38,25 @@ export function PartnerLogos({ showLabel = true }: PartnerLogosProps) {
 
       <div className="relative">
         <div className="flex animate-scroll gap-12 md:gap-20">
-          {allLogos.map((partner, index) => (
-            <div
-              key={`${partner.name}-${index}`}
-              className="flex h-16 w-36 md:h-20 md:w-48 flex-shrink-0 items-center justify-center"
-            >
-              <Image
-                src={partner.src}
-                alt={partner.name}
-                width={180}
-                height={70}
-                className="h-14 md:h-16 w-auto object-contain"
-              />
-            </div>
-          ))}
+          {allLogos.map((partner, index) => {
+            const isLargeLogo = ["Spectra", "Topaz"].includes(partner.name);
+            return (
+              <div
+                key={`${partner.name}-${index}`}
+                className="flex h-16 w-36 md:h-20 md:w-48 flex-shrink-0 items-center justify-center"
+              >
+                <Image
+                  src={partner.src}
+                  alt={partner.name}
+                  width={180}
+                  height={70}
+                  className={`${
+                    isLargeLogo ? "h-20 md:h-28" : "h-14 md:h-16"
+                  } w-auto object-contain`}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

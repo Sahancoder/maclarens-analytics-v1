@@ -261,6 +261,71 @@ class GraphProvider(BaseEmailProvider):
             return {"status": "unhealthy", "provider": "graph", "error": str(e)}
 
 
+class AzureEmailProvider(BaseEmailProvider):
+    """Azure Communication Services Email provider"""
+    
+    def __init__(self):
+        self.connection_string = settings.azure_email_connection_string
+        self.sender_email = settings.azure_email_sender
+        self._client = None
+    
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from azure.communication.email import EmailClient
+                self._client = EmailClient.from_connection_string(self.connection_string)
+            except ImportError:
+                raise RuntimeError("Azure Communication Email package not installed. Run: pip install azure-communication-email")
+        return self._client
+    
+    async def send_email(
+        self,
+        to: str | List[str],
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None
+    ) -> Dict[str, Any]:
+        if not self.connection_string:
+            logger.warning("[AZURE-EMAIL] Connection string not configured, logging email instead")
+            logger.info(f"[AZURE-EMAIL] Would send to: {to}, Subject: {subject}")
+            return {"success": True, "id": "dev-mode", "message": "Azure Email not configured"}
+        
+        try:
+            client = self._get_client()
+            recipients = to if isinstance(to, list) else [to]
+            
+            # Build message
+            message = {
+                "senderAddress": self.sender_email,
+                "recipients": {
+                    "to": [{"address": addr} for addr in recipients]
+                },
+                "content": {
+                    "subject": subject,
+                    "html": html_content,
+                }
+            }
+            
+            if text_content:
+                message["content"]["plainText"] = text_content
+            
+            # Send email (Azure SDK is sync, wrap it)
+            poller = client.begin_send(message)
+            result = poller.result()
+            
+            logger.info(f"[AZURE-EMAIL] Email sent to: {recipients}, Message ID: {result.get('id', 'unknown')}")
+            return {"success": True, "id": result.get("id"), "provider": "azure_email"}
+            
+        except Exception as e:
+            logger.error(f"[AZURE-EMAIL] Failed to send email: {e}")
+            return {"success": False, "error": str(e), "provider": "azure_email"}
+    
+    async def health_check(self) -> Dict[str, Any]:
+        if not self.connection_string:
+            return {"status": "not_configured", "provider": "azure_email"}
+        return {"status": "configured", "provider": "azure_email", "sender": self.sender_email}
+
+
 def get_email_provider() -> BaseEmailProvider:
     """Factory function to get the configured email provider"""
     if not settings.email_enabled:
@@ -271,6 +336,7 @@ def get_email_provider() -> BaseEmailProvider:
         EmailProvider.MAILHOG: MailHogProvider,
         EmailProvider.RESEND: ResendProvider,
         EmailProvider.GRAPH: GraphProvider,
+        EmailProvider.AZURE_EMAIL: AzureEmailProvider,
     }
     
     provider_class = provider_map.get(settings.email_provider, DisabledEmailProvider)

@@ -16,6 +16,7 @@ class EmailProvider(str, Enum):
     MAILHOG = "mailhog"
     RESEND = "resend"
     GRAPH = "graph"
+    AZURE_EMAIL = "azure_email"  # Azure Communication Services Email
 
 
 class Settings(BaseSettings):
@@ -61,6 +62,10 @@ class Settings(BaseSettings):
     
     # Microsoft Graph Settings (for production email)
     graph_sender_email: Optional[str] = None  # e.g., notifications@yourtenant.com
+    
+    # Azure Communication Services Email (alternative production email)
+    azure_email_connection_string: Optional[str] = None  # From Azure Portal > ACS > Keys
+    azure_email_sender: str = "DoNotReply@<your-acs-domain>.azurecomm.net"  # Verified sender
     
     # ============ APP SETTINGS ============
     debug: bool = True

@@ -57,7 +57,7 @@ export function RoleAccessCards() {
           }`}
         >
           <h2 className="font-sansation text-3xl md:text-4xl lg:text-5xl font-bold tracking-wide text-[#0b1f3a]">
-            McLaren&apos;s Analytics.io
+            McLarens Analytics.io
           </h2>
           <p className="mt-2 md:mt-4 text-base md:text-lg lg:text-xl text-slate-600 max-w-3xl">
             Select your role to access your personalized dashboard and begin

@@ -136,7 +136,7 @@ export function FeatureAccordion() {
             Platform Capabilities
           </h2>
           <p className="mt-3 md:mt-5 text-lg md:text-xl lg:text-2xl text-white/70">
-            Click to explore what McLaren&apos;s Analytics.io offers
+            Click to explore what McLarens Analytics.io offers
           </p>
         </div>
 

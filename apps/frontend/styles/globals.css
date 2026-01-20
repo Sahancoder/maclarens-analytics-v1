@@ -2,29 +2,329 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+
 html {
-  font-size: 18px;
+  font-size: 16px; /* Changed from 18px for better zoom compatibility */
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
 }
 
 body {
   @apply bg-white text-slate-900;
+  overflow-x: hidden; /* Prevent horizontal scroll */
+  min-width: 320px; /* Minimum supported width */
 }
+
+/* =============================================================================
+   TYPOGRAPHY - RESPONSIVE
+   ============================================================================= */
 
 p {
   @apply text-base leading-relaxed;
 }
 
 h1 {
-  @apply text-5xl font-bold;
+  @apply text-3xl sm:text-4xl lg:text-5xl font-bold;
 }
 
 h2 {
-  @apply text-4xl font-bold;
+  @apply text-2xl sm:text-3xl lg:text-4xl font-bold;
 }
 
 h3 {
-  @apply text-xl font-semibold;
+  @apply text-lg sm:text-xl font-semibold;
 }
+
+/* =============================================================================
+   RESPONSIVE LAYOUT UTILITIES (Critical for 80% zoom and mobile)
+   ============================================================================= */
+
+/* Prevent flex/grid children from refusing to shrink */
+.flex > *,
+.grid > * {
+  min-width: 0;
+}
+
+/* Ensure containers don't overflow */
+.container-safe {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Safe responsive padding */
+@layer utilities {
+  .p-responsive {
+    @apply p-3 sm:p-4 md:p-5 lg:p-6;
+  }
+  
+  .px-responsive {
+    @apply px-3 sm:px-4 md:px-5 lg:px-6;
+  }
+  
+  .py-responsive {
+    @apply py-3 sm:py-4 md:py-5;
+  }
+  
+  .gap-responsive {
+    @apply gap-3 sm:gap-4 md:gap-5;
+  }
+}
+
+/* =============================================================================
+   KPI CARDS - FULLY RESPONSIVE
+   ============================================================================= */
+
+/* KPI Card base - prevents text overflow */
+.kpi-card {
+  @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+  @apply p-3 sm:p-4 md:p-5;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.kpi-card p,
+.kpi-card span {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* KPI value - scales with viewport */
+.kpi-value {
+  @apply text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a];
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* =============================================================================
+   TABLES - SCROLLABLE CONTAINERS
+   ============================================================================= */
+
+/* Tables must scroll, not crush layout */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table {
+  min-width: 500px; /* Minimum table width before scrolling */
+}
+
+/* =============================================================================
+   CHARTS - RESPONSIVE CONTAINERS
+   ============================================================================= */
+
+/* Chart containers must be responsive */
+.chart-container {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chart-container > * {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* =============================================================================
+   MODALS/POPUPS - MOBILE AND ZOOM SAFE
+   ============================================================================= */
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 z-50 flex items-center justify-center;
+  @apply p-2 sm:p-4 md:p-6;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Modal content - responsive and scrollable */
+.modal-content {
+  @apply bg-white rounded-xl shadow-2xl;
+  width: calc(100vw - 16px);
+  max-width: 900px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  .modal-content {
+    width: calc(100vw - 32px);
+    max-height: calc(100vh - 48px);
+  }
+}
+
+@media (min-width: 768px) {
+  .modal-content {
+    width: calc(100vw - 48px);
+    max-height: calc(100vh - 64px);
+  }
+}
+
+/* Modal body - scrollable */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .modal-body {
+    padding: 1.25rem;
+  }
+}
+
+/* Modal header and footer - fixed */
+.modal-header,
+.modal-footer {
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+   SIDEBAR + MAIN LAYOUT - NO OVERLAP AT 80% ZOOM
+   ============================================================================= */
+
+/* Main layout container */
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Sidebar - doesn't overlap on zoom */
+.sidebar {
+  flex-shrink: 0;
+  width: 240px;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .sidebar {
+    display: none;
+  }
+}
+
+/* Main content - takes remaining space */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* =============================================================================
+   GRID SYSTEMS - RESPONSIVE BREAKPOINTS
+   ============================================================================= */
+
+/* KPI grid that works at all zoom levels */
+.kpi-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .kpi-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* =============================================================================
+   NUMBERS AND TEXT - DON'T BREAK CARDS
+   ============================================================================= */
+
+/* Financial numbers */
+.financial-number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Labels that can wrap */
+.label-wrap {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Truncate with ellipsis */
+.truncate-safe {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* =============================================================================
+   CROSS-BROWSER FIXES
+   ============================================================================= */
+
+/* Safari flexbox fix */
+@supports (-webkit-appearance: none) {
+  .flex > * {
+    max-width: 100%;
+  }
+}
+
+/* Edge/Chrome flex shrink fix */
+* {
+  flex-shrink: 1;
+}
+
+/* iOS scroll fix */
+@supports (-webkit-overflow-scrolling: touch) {
+  .modal-body,
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* =============================================================================
+   ZOOM LEVEL FIXES (80%, 100%, 125%)
+   ============================================================================= */
+
+/* At 80% zoom, containers may appear wider - ensure they don't overflow */
+@media screen {
+  .zoom-safe {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+/* Prevent layout shift on zoom */
+html, body {
+  scroll-behavior: smooth;
+}
+
+/* =============================================================================
+   ANIMATIONS (Preserved from original)
+   ============================================================================= */
 
 /* Infinite scroll animation for partner logos */
 @keyframes scroll {
@@ -65,7 +365,6 @@ h3 {
 }
 
 /* Cloth Wave animation */
-/* Simulates a gentle breeze affecting only the fabric */
 @keyframes cloth-wave {
   0%, 100% {
     transform: scaleX(1) skewY(0deg);
@@ -76,6 +375,52 @@ h3 {
 }
 
 .animate-cloth-wave {
-  transform-origin: top left; /* Anchors the cloth to the pole */
+  transform-origin: top left;
   animation: cloth-wave 3s ease-in-out infinite;
+}
+
+/* =============================================================================
+   MOBILE-SPECIFIC OVERRIDES
+   ============================================================================= */
+
+@media (max-width: 639px) {
+  /* Smaller text on mobile */
+  .kpi-value {
+    font-size: 1.125rem;
+  }
+  
+  /* Compact padding */
+  .kpi-card {
+    padding: 0.75rem;
+  }
+  
+  /* Full-width modals */
+  .modal-content {
+    width: 100%;
+    margin: 0.5rem;
+    border-radius: 0.75rem;
+  }
+  
+  /* Stack header elements */
+  .header-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+/* =============================================================================
+   PRINT STYLES
+   ============================================================================= */
+
+@media print {
+  .sidebar,
+  .modal-overlay,
+  button {
+    display: none !important;
+  }
+  
+  .main-content {
+    width: 100% !important;
+    margin: 0 !important;
+  }
 }
