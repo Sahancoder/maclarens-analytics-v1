@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -226,6 +226,206 @@ const getRiskColor = (risk: string) => {
 };
 
 // ============ MAIN COMPONENT ============
+
+// --- helpers (UI only) ---
+const COLORS = [
+  "#0b1f3a",
+  "#16a34a",
+  "#2563eb",
+  "#f97316",
+  "#a855f7",
+  "#ef4444",
+  "#14b8a6",
+  "#eab308",
+];
+
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(d: Date) {
+  // Keep labels compact: "Jan", "Feb"... (years are implied by continuity)
+  return d.toLocaleString("default", { month: "short" });
+}
+
+function fullLabel(d: Date) {
+  return `${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
+}
+
+function generateMonthSeries(fromYear = 2020) {
+  const start = new Date(fromYear, 0, 1);
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const months: Date[] = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    months.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
+}
+
+// deterministic-ish random for UI demo
+function seededNoise(seed: number) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+type CompanyLike = {
+  id?: string | number;
+  name: string;
+  pbt: number;     // base pbt (your existing number)
+  budget?: number; // optional
+};
+
+function CompanyPbtTrendScroller({
+  selectedCompanies,
+  selectedCompany,
+}: {
+  selectedCompanies?: CompanyLike[];
+  selectedCompany?: CompanyLike | null;
+}) {
+  const companies: CompanyLike[] = useMemo(() => {
+    if (selectedCompanies?.length) return selectedCompanies;
+    return selectedCompany ? [selectedCompany] : [];
+  }, [selectedCompanies, selectedCompany]);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Build continuous months (2020 -> current)
+  const months = useMemo(() => generateMonthSeries(2020), []);
+
+  // Build UI-only chart data (one row per month; keys per company)
+  const data = useMemo(() => {
+    return months.map((d, idx) => {
+      const row: any = {
+        key: monthKey(d),
+        month: monthLabel(d),
+        year: d.getFullYear(),
+        full: fullLabel(d),
+      };
+
+      companies.forEach((c, ci) => {
+        // Create a smooth-ish variation around base PBT
+        const base = Number(c.pbt ?? 0);
+        const n = seededNoise((idx + 1) * 97 + (ci + 1) * 31);
+        const seasonal = Math.sin((idx / 12) * Math.PI * 2) * 0.08; // subtle seasonality
+        const variation = (n * 0.22 - 0.11) + seasonal; // ~ +/- 20% + season
+        row[c.name] = Math.round(base * (1 + variation));
+      });
+
+      return row;
+    });
+  }, [months, companies]);
+
+  // Auto-scroll to the end (current month) initially
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+  }, [companies.length]);
+
+  if (!companies.length) return null;
+
+  // Width: give each month a fixed pixel width so it becomes scrollable
+  const PX_PER_MONTH = 72; // adjust: 60–90 good
+  const chartWidth = Math.max(months.length * PX_PER_MONTH, 900);
+
+  return (
+    <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-800">
+            Company PBT Trend{" "}
+            <span className="text-slate-400 font-normal">| 2020 → Current</span>
+          </h4>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Swipe / drag horizontally to view past months and years.
+          </p>
+        </div>
+
+        {/* Optional: keep your range chips if you want UI only (not wired here) */}
+        <div className="flex bg-white border border-slate-200 rounded-lg p-0.5">
+          <button className="px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50 rounded">
+            6M
+          </button>
+          <button className="px-2 py-1 text-[10px] font-medium text-[#0b1f3a] bg-slate-100 rounded shadow-sm">
+            12M
+          </button>
+        </div>
+      </div>
+
+      {/* Horizontal scroller */}
+      <div
+        ref={scrollRef}
+        className="w-full overflow-x-auto overflow-y-hidden rounded-lg border border-slate-200 bg-white"
+        style={{
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        {/* Fixed-width inner canvas so the chart can scroll */}
+        <div style={{ width: chartWidth, height: 260, padding: 12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                axisLine={false}
+                tickLine={false}
+                width={50}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "none",
+                  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                }}
+                labelStyle={{ fontSize: "12px", fontWeight: 600, color: "#1e293b" }}
+                labelFormatter={(_, payload) => {
+                  const p = payload?.[0]?.payload;
+                  return p?.full ?? "";
+                }}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={28}
+                wrapperStyle={{ fontSize: "12px" }}
+              />
+
+              {/* One line per company, different colors */}
+              {companies.map((c, i) => (
+                <Line
+                  key={c.name}
+                  type="monotone"
+                  dataKey={c.name}
+                  stroke={COLORS[i % COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Tiny hint for desktop users */}
+      <div className="mt-2 text-[11px] text-slate-500">
+        Tip: On desktop, use shift + mouse wheel or trackpad horizontal scroll.
+      </div>
+    </div>
+  );
+}
 
 export default function MDDashboard() {
   const [selectedCluster, setSelectedCluster] = useState<Cluster | null>(null);

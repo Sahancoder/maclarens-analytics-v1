@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -28,6 +28,7 @@ import {
   LineChart,
   Area,
   Legend,
+  ReferenceArea,
 } from "recharts";
 
 // ============ DATA ============
@@ -105,18 +106,35 @@ const formatLKR000 = (val: number) => val.toLocaleString(); // Just comma separa
 const formatUSD = (val: number) => `USD ${val.toLocaleString()}`;
 const formatPercent = (val: number) => `${val.toFixed(1)}%`;
 
+// Date Helpers
+function generateMonthSeries(fromYear = 2020) {
+  const start = new Date(fromYear, 0, 1);
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  const months: Date[] = [];
+  const cursor = new Date(start);
 
-// Mock Series generator for Trend Chart
-const getPbdtSeries = (companyId: string) => {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const baseValue = Math.floor(Math.random() * 40000000) + 10000000; 
-  
-  return months.map(m => ({
-    month: m,
-    value: baseValue + Math.floor(Math.random() * 10000000) - 5000000
-  }));
-};
+  while (cursor <= end) {
+    months.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
+}
+
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(d: Date) {
+  return d.toLocaleString("default", { month: "short" });
+}
+
+function fullLabel(d: Date) {
+  return `${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
+}
+
 const generateCompanyData = (id: string, name: string, clusterId: string, fiscalStart: 1 | 4): Company => {
   // Base PBT ~10m - 50m
   const basePbt = Math.floor(Math.random() * 40000000) + 10000000;
@@ -660,37 +678,48 @@ export default function PerformancePage() {
     }
   }, [drilldownClusterId]); // Deliberately limited deps to prevent cycles
 
-  // Derive Drilldown Data - Multi Series
+  // Derive Drilldown Data - Continuous Series
   const drilldownData = useMemo(() => {
     if (drilldownCompanyIds.length === 0) return [];
     
-    // We need to merge series from multiple companies into a single array of objects:
-    // [{ month: "Jan", company1: 100, company2: 120 }, ...]
-
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // Continuous timeline from 2020
+    const months = generateMonthSeries(2020);
     
-    // Generate data for each company
-    const companiesData = drilldownCompanyIds.map(id => {
-       return { id, series: getPbdtSeries(id) };
-    });
-
-    const mergedData = months.map(month => {
-       const row: any = { month };
-       companiesData.forEach(cd => {
-          const point = cd.series.find(s => s.month === month);
-          if (point) {
-             row[cd.id] = point.value;
-          }
+    // Generate data for each company for the whole timeline
+    const data = months.map((d, index) => {
+       const row: any = {
+          month: monthLabel(d),
+          year: d.getFullYear(),
+          full: fullLabel(d),
+          key: monthKey(d)
+       };
+       
+       drilldownCompanyIds.forEach((id, i) => {
+          // Mock data: Base + Trend + Seasonality + Noise
+          const seed = (index + 1) * (i + 1) * 123;
+          const base = 25000000; 
+          const growth = index * 100000; // Slight upward trend
+          const seasonal = Math.sin((index / 12) * Math.PI * 2) * 3000000;
+          const noise = (Math.sin(seed) * 10000000) % 5000000;
+          
+          row[id] = Math.max(0, Math.round(base + growth + seasonal + noise));
        });
+       
        return row;
     });
     
-    // Filter by time range
-    if (drilldownTimeRange === "6M") {
-      return mergedData.slice(-6);
+    return data;
+  }, [drilldownCompanyIds]);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to end when data loads or changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
     }
-    return mergedData;
-  }, [drilldownCompanyIds, drilldownTimeRange]);
+  }, [drilldownData]);
+
 
   const availableDrilldownCompanies = useMemo(() => {
     const c = clusters.find(cl => cl.id === drilldownClusterId);
@@ -727,33 +756,7 @@ export default function PerformancePage() {
             <p className="text-sm text-slate-500 mt-1">Analyze performance drivers from Cluster to Company level</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Month Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-slate-600">Month:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="h-9 px-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
-              >
-                {availableMonths.map(month => (
-                  <option key={month.value} value={month.value}>{month.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Year Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-slate-600">Year:</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="h-9 px-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:border-[#0b1f3a]"
-              >
-                {availableYears.map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
+             {/* Selectors moved to Performance Hierarchy section */}
           </div>
         </div>
 
@@ -795,41 +798,59 @@ export default function PerformancePage() {
 
                 <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
 
-                {/* Time Range Toggle */}
-                 <div className="flex bg-slate-100 p-1 rounded-lg">
-                  <button
-                    onClick={() => setDrilldownTimeRange("6M")}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                      drilldownTimeRange === "6M" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    Last 6M
-                  </button>
-                  <button
-                    onClick={() => setDrilldownTimeRange("12M")}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                      drilldownTimeRange === "12M" ? "bg-white text-[#0b1f3a] shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    12M
-                  </button>
+                <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
+                <div className="text-[10px] text-slate-400 font-medium">
+                  Scroll to view history
                 </div>
              </div>
           </div>
 
           <div className="p-5">
-            <div className="h-[380px] w-full">
+            <div className="h-[320px] w-full">
               {drilldownCompanyIds.length > 0 ? (
+                <div 
+                  ref={scrollRef}
+                  className="w-full h-full overflow-x-auto overflow-y-hidden"
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                >
+                  <div style={{ width: Math.max(drilldownData.length * 60, 1000), height: "100%" }}>
                    <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={drilldownData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      
+                      {/* Year Shading Areas defined manually based on known range 2020-Current */}
+                      {Array.from({ length: 7 }).map((_, i) => {
+                         const year = 2020 + i;
+                         // Shade even years (or alternate)
+                         if (year % 2 === 0) {
+                           return (
+                             <ReferenceArea 
+                               key={year} 
+                               x1={`${year}-01`} 
+                               x2={`${year}-12`} 
+                               fill="#f1f5f9" 
+                               fillOpacity={0.5} 
+                             />
+                           );
+                         }
+                         return null;
+                      })}
+
                       <XAxis 
-                        dataKey="month" 
+                        dataKey="key" // Use unique key (YYYY-MM)
                         stroke="#64748b" 
                         tick={{ fontSize: 11 }}
+                        tickFormatter={(val) => {
+                           // val is "YYYY-MM", return "Jan" etc.
+                           // We can parse or just use a lookup map, but slicing is easiest if strict format
+                           const [y, m] = val.split('-');
+                           const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+                           return date.toLocaleString('default', { month: 'short' });
+                        }}
                         axisLine={{ stroke: '#cbd5e1' }}
                         tickLine={false}
                         dy={10}
+                        interval={0}
                       />
                       <YAxis 
                         stroke="#64748b"
@@ -850,6 +871,8 @@ export default function PerformancePage() {
                           boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                           fontSize: '12px' 
                         }}
+                        labelStyle={{ color: '#0b1f3a', marginBottom: '0.25rem' }}
+                        labelFormatter={(_, payload) => payload?.[0]?.payload?.full || ""}
                         itemStyle={{ fontWeight: 600 }}
                         formatter={(value: number, name: string) => {
                            const company = availableDrilldownCompanies.find(c => c.id === name);
@@ -858,13 +881,14 @@ export default function PerformancePage() {
                         cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
                       />
                       <Legend 
-                        verticalAlign="bottom" 
+                        verticalAlign="top" 
                         height={36} 
                         iconType="circle"
                         formatter={(value, entry: any) => {
                            const company = availableDrilldownCompanies.find(c => c.id === entry.dataKey);
-                           return <span className="text-slate-600 font-medium ml-1">{company ? company.name : value}</span>;
+                           return <span className="text-slate-600 font-medium ml-1 text-xs">{company ? company.name : value}</span>;
                         }}
+                        wrapperStyle={{ paddingBottom: '10px' }}
                       />
                       
                       {drilldownCompanyIds.map((id) => (
@@ -873,14 +897,16 @@ export default function PerformancePage() {
                           type="linear" 
                           dataKey={id} 
                           stroke={companyColors[id]} 
-                          strokeWidth={2.5} 
-                          dot={{ r: 3, fill: companyColors[id], strokeWidth: 2, stroke: "#fff" }}
+                          strokeWidth={2} 
+                          dot={false}
                           activeDot={{ r: 6, fill: companyColors[id], strokeWidth: 0 }}
-                          isAnimationActive={true}
+                          isAnimationActive={false}
                         />
                       ))}
                     </LineChart>
                    </ResponsiveContainer>
+                  </div>
+                </div>
               ) : (
                  <div className="flex flex-col items-center justify-center h-full text-slate-400">
                     <p className="text-sm">Select one or more companies to view trend comparison</p>
@@ -892,9 +918,41 @@ export default function PerformancePage() {
 
         {/* Hierarchical List: Cluster → Company */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="text-base font-semibold text-slate-900">Performance Hierarchy</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Click cluster row to expand companies</p>
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Performance Hierarchy</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Click cluster row to expand companies</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {/* Month Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600">Month:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="h-8 px-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10"
+                >
+                  {availableMonths.map(month => (
+                    <option key={month.value} value={month.value}>{month.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Year Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600">Year:</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="h-8 px-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10"
+                >
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           
           <div className="divide-y divide-slate-100">
