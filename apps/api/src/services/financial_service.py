@@ -561,10 +561,38 @@ class FinancialService:
         return performance_data
     
     @staticmethod
-    async def get_group_kpis(db: AsyncSession, year: int, month: int) -> Dict[str, float]:
+    async def get_group_kpis(
+        db: AsyncSession, 
+        year: int, 
+        month: int,
+        is_ytd: bool = False
+    ) -> Dict[str, float]:
         """Get group-level KPIs for CEO dashboard"""
-        # Current month totals - using computed PBT formulas
-        current_query = select(
+        
+        # Helper to construct date filtering condition based on FY cycles
+        def get_fy_condition(model, ref_year, ref_month):
+            if not is_ytd:
+                return and_(model.year == ref_year, model.month == ref_month)
+            
+            # For YTD, we need to handle mixed Fiscal Cycles
+            # Since we are aggregating across the whole group, this is tricky.
+            # Strategy: Sum up (Actuals) for the valid periods for EACH company based on its cluster's cycle.
+            # However, doing this in a single aggregate query without grouping is hard.
+            # Simplified approach for Group Level:
+            # Assume 'active financial year' is based on the majority or passed in context.
+            # BETTER APPROACH: Use a complex WHERE clause that checks the joined Cluster's cycle.
+            
+            # Case 1: Standard (Jan-Dec) -> Year = ref_year, 1 <= Month <= ref_month
+            # Case 2: Apr-Mar -> 
+            #    If ref_month >= 4: Year = ref_year, 4 <= Month <= ref_month
+            #    If ref_month < 4: (Year=ref_year-1 & Month >= 4) OR (Year=ref_year & Month <= ref_month)
+            
+            # Since this is a Group KPI query, we might not have 'Cluster' joined in the standard `get_group_kpis` query?
+            # We need to join Company -> Cluster.
+            pass
+
+        # Construct the complex query
+        stmt = select(
             func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
                      (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
                       FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
@@ -581,27 +609,106 @@ class FinancialService:
                      (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
                       FinancialData.selling_exp_actual) +
                      FinancialData.provisions_actual + FinancialData.exchange_gl_actual
-            ).label('ebitda_actual'),  # EBITDA = PBT Before + Finance + Depreciation
+            ).label('ebitda_actual'),
             func.sum(FinancialData.revenue_lkr_actual).label('revenue_actual')
-        ).where(
-            and_(FinancialData.year == year, FinancialData.month == month)
+        ).select_from(FinancialData).join(
+            Company, FinancialData.company_id == Company.id
+        ).join(
+            Cluster, Company.cluster_id == Cluster.id
         )
-        
-        result = await db.execute(current_query)
+
+        if not is_ytd:
+            # Month View
+            stmt = stmt.where(and_(FinancialData.year == year, FinancialData.month == month))
+        else:
+            # YTD View (Complex Logic)
+            # Logic:
+            # IF fiscal_cycle = 'december':
+            #    year == target_year AND month <= target_month
+            # ELSE (march):
+            #    IF target_month >= 4:
+            #       year == target_year AND month >= 4 AND month <= target_month
+            #    ELSE (target_month < 4):
+            #       (year == target_year-1 AND month >= 4) OR (year == target_year AND month <= target_month)
+            
+            pass # We will build the where clause below
+            
+            # SQL Alchemy OR/AND construction
+            # We split the condition into two main blocks based on Cluster.fiscal_cycle
+            
+            cycle_dec = and_(
+                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
+                FinancialData.year == year,
+                FinancialData.month >= 1,
+                FinancialData.month <= month
+            )
+            
+            if month >= 4:
+                cycle_mar = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    FinancialData.year == year,
+                    FinancialData.month >= 4,
+                    FinancialData.month <= month
+                )
+            else:
+                cycle_mar = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    func.or_(
+                        and_(FinancialData.year == year - 1, FinancialData.month >= 4),
+                        and_(FinancialData.year == year, FinancialData.month <= month)
+                    )
+                )
+                
+            stmt = stmt.where(func.or_(cycle_dec, cycle_mar))
+
+        result = await db.execute(stmt)
         current = result.first()
         
-        # Prior year same month
-        prior_query = select(
+        # Prior Year / Period Logic
+        # For simplify, if YTD, we compare to Prior YTD (Same logic but year-1)
+        prior_year = year - 1
+        
+        prior_stmt = select(
             func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
                      (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
                       FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
                       FinancialData.depreciation_actual) +
                      FinancialData.provisions_actual + FinancialData.exchange_gl_actual
             ).label('prior_actual')
-        ).where(
-            and_(FinancialData.year == year - 1, FinancialData.month == month)
-        )
-        prior_result = await db.execute(prior_query)
+        ).select_from(FinancialData).join(Company).join(Cluster)
+
+        if not is_ytd:
+            prior_stmt = prior_stmt.where(and_(FinancialData.year == prior_year, FinancialData.month == month))
+        else:
+            # Prior YTD logic - shift everything back by 1 year
+            # Note: We keep the same month boundaries, just change year
+            
+            cycle_dec_prior = and_(
+                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
+                FinancialData.year == prior_year,
+                FinancialData.month >= 1,
+                FinancialData.month <= month
+            )
+            
+            if month >= 4:
+                cycle_mar_prior = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    FinancialData.year == prior_year,
+                    FinancialData.month >= 4,
+                    FinancialData.month <= month
+                )
+            else:
+                cycle_mar_prior = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    func.or_(
+                        and_(FinancialData.year == prior_year - 1, FinancialData.month >= 4),
+                        and_(FinancialData.year == prior_year, FinancialData.month <= month)
+                    )
+                )
+            
+            prior_stmt = prior_stmt.where(func.or_(cycle_dec_prior, cycle_mar_prior))
+
+        prior_result = await db.execute(prior_stmt)
         prior = prior_result.first()
         
         total_actual = float(current.total_actual or 0)
@@ -635,11 +742,14 @@ class FinancialService:
         year: int,
         month: int,
         limit: int = 5,
-        bottom: bool = False
+        bottom: bool = False,
+        is_ytd: bool = False
     ) -> List[Dict[str, Any]]:
-        """Get top or bottom performing clusters"""
+        """Get top or bottom performing Companies (not Clusters)"""
+        
         query = select(
-            Cluster.name,
+            Company.name,
+            Company.id.label('company_id'),
             func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
                      (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
                       FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
@@ -656,30 +766,60 @@ class FinancialService:
             Company, FinancialData.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
-        ).where(
-            and_(FinancialData.year == year, FinancialData.month == month)
-        ).group_by(Cluster.name)
+        )
+
+        if not is_ytd:
+            query = query.where(and_(FinancialData.year == year, FinancialData.month == month))
+        else:
+            # YTD View - Similar logic to Group KPIs
+            cycle_dec = and_(
+                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
+                FinancialData.year == year,
+                FinancialData.month >= 1,
+                FinancialData.month <= month
+            )
+            
+            if month >= 4:
+                cycle_mar = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    FinancialData.year == year,
+                    FinancialData.month >= 4,
+                    FinancialData.month <= month
+                )
+            else:
+                cycle_mar = and_(
+                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
+                    func.or_(
+                        and_(FinancialData.year == year - 1, FinancialData.month >= 4),
+                        and_(FinancialData.year == year, FinancialData.month <= month)
+                    )
+                )
+                
+            query = query.where(func.or_(cycle_dec, cycle_mar))
+
+        query = query.group_by(Company.name, Company.id)
         
         result = await db.execute(query)
-        clusters = []
+        companies = []
         
         for row in result.all():
             actual = float(row.actual or 0)
             budget = float(row.budget or 0)
             achievement = (actual / budget * 100) if budget != 0 else 0
             variance = actual - budget
-            clusters.append({
+            companies.append({
                 "name": row.name,
+                "id": str(row.company_id),
                 "achievement_percent": round(achievement, 2),
                 "variance": variance
             })
         
         # Sort by achievement
-        clusters.sort(key=lambda x: x['achievement_percent'], reverse=not bottom)
+        companies.sort(key=lambda x: x['achievement_percent'], reverse=not bottom)
         
         return [
             {"rank": i + 1, **c}
-            for i, c in enumerate(clusters[:limit])
+            for i, c in enumerate(companies[:limit])
         ]
     
     @staticmethod

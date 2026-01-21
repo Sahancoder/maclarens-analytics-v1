@@ -67,11 +67,17 @@ class AnalyticsQuery:
         ]
     
     @strawberry.field
-    async def group_kpis(self, info: Info, year: int, month: int) -> GroupKPIs:
+    async def group_kpis(
+        self, 
+        info: Info, 
+        year: int, 
+        month: int,
+        is_ytd: bool = False
+    ) -> GroupKPIs:
         """Get group-level KPIs for executive dashboard"""
         db = info.context["db"]
         
-        data = await FinancialService.get_group_kpis(db, year, month)
+        data = await FinancialService.get_group_kpis(db, year, month, is_ytd=is_ytd)
         
         return GroupKPIs(
             total_actual=data["total_actual"],
@@ -90,12 +96,15 @@ class AnalyticsQuery:
         info: Info,
         year: int,
         month: int,
-        limit: int = 5
+        limit: int = 5,
+        is_ytd: bool = False
     ) -> List[TopPerformer]:
         """Get top performing clusters"""
         db = info.context["db"]
         
-        data = await FinancialService.get_top_performers(db, year, month, limit, bottom=False)
+        data = await FinancialService.get_top_performers(
+            db, year, month, limit, bottom=False, is_ytd=is_ytd
+        )
         
         return [
             TopPerformer(
@@ -113,12 +122,15 @@ class AnalyticsQuery:
         info: Info,
         year: int,
         month: int,
-        limit: int = 5
+        limit: int = 5,
+        is_ytd: bool = False
     ) -> List[TopPerformer]:
         """Get bottom performing clusters"""
         db = info.context["db"]
         
-        data = await FinancialService.get_top_performers(db, year, month, limit, bottom=True)
+        data = await FinancialService.get_top_performers(
+            db, year, month, limit, bottom=True, is_ytd=is_ytd
+        )
         
         return [
             TopPerformer(
