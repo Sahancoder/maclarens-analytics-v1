@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Menu, X, LogOut, FileText, Bell, FolderOpen, XCircle } from "lucide-react";
 import Link from "next/link";
 

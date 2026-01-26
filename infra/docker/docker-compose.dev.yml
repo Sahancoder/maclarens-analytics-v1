@@ -1,9 +1,26 @@
-version: "3.8"
+# Docker Compose version attribute is obsolete and ignored
+
+# ============================================================
+# McLarens Analytics - Local Development Environment
+# ============================================================
+# Usage: docker compose -f docker-compose.dev.yml up --build
+# 
+# Service URLs:
+#   Frontend:     http://localhost:3000
+#   Backend API:  http://localhost:8000
+#   Backend Docs: http://localhost:8000/docs
+#   GraphQL:      http://localhost:8000/graphql
+#   Mailpit UI:   http://localhost:8025
+#   PostgreSQL:   localhost:5432
+# ============================================================
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: maclarens-postgres
+  # ──────────────────────────────────────────────────────────
+  # DATABASE: PostgreSQL 16
+  # ──────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: maclarens-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -13,13 +30,17 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d maclarens_analytics"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
     networks:
       - maclarens-network
 
+  # ──────────────────────────────────────────────────────────
+  # CACHE: Redis 7
+  # ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: maclarens-redis
@@ -29,89 +50,121 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - maclarens-network
 
-  # MailHog - Local email testing server
+  # ──────────────────────────────────────────────────────────
+  # EMAIL: Mailpit (Modern email testing - replaces MailHog)
   # SMTP: localhost:1025 | Web UI: http://localhost:8025
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: maclarens-mailhog
+  # ──────────────────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: maclarens-mailpit
     ports:
-      - "1025:1025" # SMTP server
-      - "8025:8025" # Web UI
+      - "1025:1025"   # SMTP server
+      - "8025:8025"   # Web UI
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
     networks:
       - maclarens-network
-    logging:
-      driver: "none" # Reduce log noise
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
-  api:
+  # ──────────────────────────────────────────────────────────
+  # BACKEND: FastAPI (Python)
+  # Hot reload enabled via volume mount
+  # ──────────────────────────────────────────────────────────
+  backend:
     build:
       context: ../../apps/api
       dockerfile: Dockerfile.dev
-    container_name: maclarens-api
+    container_name: maclarens-backend
     environment:
-      # Database
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/maclarens_analytics
+      # ─── Database ───
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/maclarens_analytics
       REDIS_URL: redis://redis:6379
 
-      # App Settings
+      # ─── App Settings ───
       PYTHON_ENV: development
       DEBUG: "true"
       ENVIRONMENT: development
       APP_URL: http://localhost:3000
 
-      # Auth Mode: "dev" or "entra"
+      # ─── Auth Mode (dev = no Microsoft login required) ───
       AUTH_MODE: dev
       JWT_SECRET: maclarens-dev-secret-change-in-production
 
-      # Email Settings
+      # ─── Email Settings - Mailpit ───
       EMAIL_ENABLED: "true"
-      EMAIL_PROVIDER: mailhog
-      SMTP_HOST: mailhog
+      EMAIL_PROVIDER: mailpit
+      SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_USE_TLS: "false"
       SENDER_EMAIL: no-reply@maclarens.local
+
+      # ─── CORS ───
+      CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000"]'
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mailhog:
-        condition: service_started
+      mailpit:
+        condition: service_healthy
     volumes:
+      # Hot reload: mount source code
       - ../../apps/api/src:/app/src
     networks:
       - maclarens-network
     restart: unless-stopped
 
+  # ──────────────────────────────────────────────────────────
+  # FRONTEND: Next.js 14
+  # Hot reload enabled via volume mount
+  # API proxy: /api/* → http://backend:8000/*
+  # ──────────────────────────────────────────────────────────
   frontend:
     build:
       context: ../../apps/frontend
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://localhost:8000/graphql
+      dockerfile: Dockerfile.dev
     container_name: maclarens-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/graphql
-      - NODE_ENV=development
+      NODE_ENV: development
+      # Client-side GraphQL URL (browser uses this)
+      NEXT_PUBLIC_API_URL: http://localhost:8000/graphql
+      # Server-side rewrite target (Next.js internals use this)
+      BACKEND_URL: http://backend:8000
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      - backend
+    # NOTE: Volume mounts removed to fix SWC binary incompatibility
+    # node_modules installed inside container are Linux-compatible
+    # Trade-off: No hot reload, but stable builds
     networks:
       - maclarens-network
     restart: unless-stopped
 
+# ──────────────────────────────────────────────────────────
+# VOLUMES: Persistent data storage
+# ──────────────────────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:
 
+# ──────────────────────────────────────────────────────────
+# NETWORKS: Internal service communication
+# ──────────────────────────────────────────────────────────
 networks:
   maclarens-network:
     driver: bridge

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, FileText } from "lucide-react";
 
 const COMPANIES_DATA = [
@@ -44,8 +44,8 @@ interface FormData {
   revenue: string; gp: string; otherIncome: string;
   personalExpenses: string; adminExpenses: string; sellingExpenses: string;
   financialExpenses: string; depreciation: string;
-  provisions: string; provisionsSign: "+" | "-";
-  exchange: string; exchangeSign: "+" | "-";
+  provisions: string; // Negative values can be entered directly
+  exchange: string;   // Negative values can be entered directly
   nonOpsExpenses: string; nonOpsIncome: string;
   comment: string;
 }
@@ -111,28 +111,46 @@ function Dropdown({ label, value, options, onChange, placeholder, disabled, sear
   );
 }
 
-function InputField({ label, value, onChange, isCompleted, sign, onSignChange, showSign }: {
-  label: string; value: string; onChange: (v: string) => void; isCompleted: boolean;
-  sign?: "+" | "-"; onSignChange?: (s: "+" | "-") => void; showSign?: boolean;
+function EntryRow({ label, budget = "0.00", value, onChange, isCompleted }: {
+  label: string; budget?: string; value: string; onChange: (v: string) => void; isCompleted: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-slate-700">{label}</label>
-      <div className="flex gap-2">
-        {showSign && (
-          <button type="button" onClick={() => onSignChange?.(sign === "+" ? "-" : "+")}
-            className={`h-11 w-11 rounded-lg text-lg font-bold border-2 transition-all flex items-center justify-center ${
-              sign === "+" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"
-            }`}>
-            {sign}
-          </button>
-        )}
+    <div className="grid grid-cols-12 gap-4 items-center py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors rounded-lg px-2">
+      <div className="col-span-12 sm:col-span-4 flex items-center">
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+      </div>
+      <div className="col-span-6 sm:col-span-4 relative">
+         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">LKR</span>
+         <div className="w-full h-10 pl-10 pr-3 flex items-center text-sm text-slate-500 bg-slate-100/50 border border-slate-200 rounded-lg">
+            {budget}
+         </div>
+      </div>
+      <div className="col-span-6 sm:col-span-4 relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <span className="text-slate-400 sm:text-sm">LKR</span>
+        </div>
         <input type="text" value={value} placeholder="0.00"
           onChange={(e) => { if (e.target.value === "" || /^-?\d*\.?\d*$/.test(e.target.value)) onChange(e.target.value); }}
-          className={`flex-1 h-11 px-4 text-sm border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
-            isCompleted ? "border-emerald-300 bg-emerald-50/50" : "border-slate-300 bg-white hover:border-slate-400"
+          className={`w-full h-10 pl-10 pr-3 text-sm font-medium border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
+            isCompleted ? "border-emerald-300 bg-emerald-50/50 text-emerald-900" : "border-slate-300 bg-white hover:border-slate-400 text-slate-900"
           }`}
         />
+      </div>
+    </div>
+  );
+}
+
+function GridHeader() {
+  return (
+    <div className="grid grid-cols-12 gap-4 mb-2 px-2 pb-2 border-b border-slate-200/60">
+      <div className="col-span-12 sm:col-span-4">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Metric / Line Item</span>
+      </div>
+      <div className="col-span-6 sm:col-span-4">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Budget (Admin)</span>
+      </div>
+      <div className="col-span-6 sm:col-span-4">
+        <span className="text-xs font-bold text-[#0b1f3a] uppercase tracking-wider">Actual (Entry)</span>
       </div>
     </div>
   );
@@ -223,7 +241,7 @@ export default function ActualEntryPage() {
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
-    provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+    provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
     comment: "",
   });
 
@@ -331,8 +349,8 @@ export default function ActualEntryPage() {
     const revenue = n(formData.revenue), gp = n(formData.gp), otherIncome = n(formData.otherIncome);
     const personal = n(formData.personalExpenses), admin = n(formData.adminExpenses), selling = n(formData.sellingExpenses);
     const financial = n(formData.financialExpenses), depreciation = n(formData.depreciation);
-    const provisions = n(formData.provisions) * (formData.provisionsSign === "+" ? 1 : -1);
-    const exchange = n(formData.exchange) * (formData.exchangeSign === "+" ? 1 : -1);
+    const provisions = n(formData.provisions);
+    const exchange = n(formData.exchange);
     const nonOpsExp = n(formData.nonOpsExpenses), nonOpsInc = n(formData.nonOpsIncome);
 
     const gpMargin = revenue > 0 ? ((gp / revenue) * 100).toFixed(2) : "0.00";
@@ -427,32 +445,59 @@ export default function ActualEntryPage() {
         {/* Form Area */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5">
-            <Section title="Actual Revenue & Income (LKR)">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                <InputField label="Revenue" value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
-                <InputField label="Gross Profit (GP)" value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
-                <CalcField label="GP Margin" value={calc.gpMargin} isCompleted={gpOk} suffix="%" />
-                <InputField label="Other Income" value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
+            <Section title="Actual Revenue & Income">
+              <div className="pt-4">
+                <GridHeader />
+                <div className="space-y-1">
+                    <EntryRow label="Revenue" budget="12,500,000" value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
+                    <EntryRow label="Gross Profit (GP)" budget="4,200,000" value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
+                    <EntryRow label="Other Income" budget="150,000" value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-12 gap-4">
+                    <div className="col-span-12 sm:col-span-8 flex justify-end items-center">
+                        <span className="text-sm font-semibold text-slate-700">GP Margin</span>
+                    </div>
+                    <div className="col-span-6 sm:col-span-4">
+                         <div className={`h-9 px-3 flex items-center text-sm font-bold rounded-lg border ${gpOk ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-400 border-slate-200"}`}>
+                            {calc.gpMargin}%
+                         </div>
+                    </div>
+                </div>
               </div>
             </Section>
 
-            <Section title="Actual Operating Expenses (LKR)">
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 pt-5">
-                <InputField label="Personal Related" value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
-                <InputField label="Admin & Establishment" value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
-                <InputField label="Selling & Distribution" value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
-                <InputField label="Financial Expenses" value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
-                <InputField label="Depreciation" value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
-                <CalcField label="Total Overheads" value={calc.totalOverheads} isCompleted={overheadsOk} />
+            <Section title="Actual Operating Expenses">
+              <div className="pt-4">
+                <GridHeader />
+                <div className="space-y-1">
+                    <EntryRow label="Personal Related" budget="1,200,000" value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
+                    <EntryRow label="Admin & Establishment" budget="450,000" value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
+                    <EntryRow label="Selling & Distribution" budget="320,000" value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
+                    <EntryRow label="Financial Expenses" budget="125,000" value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
+                    <EntryRow label="Depreciation" budget="85,000" value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-12 gap-4">
+                    <div className="col-span-12 sm:col-span-8 flex justify-end items-center">
+                        <span className="text-sm font-semibold text-slate-700">Total Overheads</span>
+                    </div>
+                    <div className="col-span-6 sm:col-span-4">
+                         <div className={`h-9 px-3 flex items-center text-sm font-bold rounded-lg border ${overheadsOk ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-400 border-slate-200"}`}>
+                            {calc.totalOverheads}
+                         </div>
+                    </div>
+                </div>
               </div>
             </Section>
 
-            <Section title="Actual Non-Operating Items (LKR)">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                <InputField label="Provisions" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} sign={formData.provisionsSign} onSignChange={s => update("provisionsSign", s)} showSign />
-                <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} sign={formData.exchangeSign} onSignChange={s => update("exchangeSign", s)} showSign />
-                <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
-                <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
+            <Section title="Actual Non-Operating Items">
+               <div className="pt-4">
+                <GridHeader />
+                <div className="space-y-1">
+                    <EntryRow label="Provisions" budget="0.00" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
+                    <EntryRow label="Exchange (Loss/Gain)" budget="0.00" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
+                    <EntryRow label="Non-Operating Expenses" budget="50,000" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
+                    <EntryRow label="Non-Operating Income" budget="0.00" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
+                </div>
               </div>
             </Section>
 

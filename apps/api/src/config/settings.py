@@ -14,6 +14,7 @@ class AuthMode(str, Enum):
 class EmailProvider(str, Enum):
     DISABLED = "disabled"
     MAILHOG = "mailhog"
+    MAILPIT = "mailpit"  # Preferred for local dev
     RESEND = "resend"
     GRAPH = "graph"
     AZURE_EMAIL = "azure_email"  # Azure Communication Services Email

@@ -23,6 +23,7 @@ from src.db.models import (
 )
 from src.config.settings import settings
 from src.services.notification_service import NotificationService
+from src.services.email_outbox_service import EmailOutboxService
 
 logger = logging.getLogger(__name__)
 
@@ -159,22 +160,33 @@ class WorkflowService:
             )
             db.add(notification)
         
-        # 4. Commit all DB changes
+        # 4. Queue emails to outbox (no SMTP in request thread)
+        if settings.is_email_enabled and directors:
+            company_name = report.company.name if report.company else "Unknown"
+            period = f"{report.month}/{report.year}"
+            review_url = f"{settings.app_url}/company-director/reports/{report.id}"
+            
+            for director in directors:
+                if director.email:
+                    await EmailOutboxService.queue_template_email(
+                        db=db,
+                        to_email=director.email,
+                        to_name=director.name,
+                        template_name="report_submitted",
+                        variables={
+                            "company_name": company_name,
+                            "period": period,
+                            "submitted_by": submitter.name,
+                            "review_url": review_url
+                        },
+                        related_type="report",
+                        related_id=report_id
+                    )
+                    logger.info(f"Queued submission email for {director.email}")
+        
+        # 5. Commit all DB changes (including queued emails)
         await db.commit()
         await db.refresh(report)
-        
-        # 5. Send emails asynchronously
-        if settings.is_email_enabled and directors:
-            if background_tasks:
-                background_tasks.add_task(
-                    WorkflowService._send_submission_emails,
-                    report, submitter, directors
-                )
-            else:
-                # Fallback: send synchronously (not ideal but works)
-                await WorkflowService._send_submission_emails(
-                    report, submitter, directors
-                )
         
         return {
             "success": True,
@@ -268,20 +280,27 @@ class WorkflowService:
                 is_read=False
             )
             db.add(notification)
+            
+            # Queue email to outbox
+            if settings.is_email_enabled and author.email:
+                await EmailOutboxService.queue_template_email(
+                    db=db,
+                    to_email=author.email,
+                    to_name=author.name,
+                    template_name="report_approved",
+                    variables={
+                        "company_name": company_name,
+                        "period": period,
+                        "approved_by": approver.name
+                    },
+                    related_type="report",
+                    related_id=report_id
+                )
+                logger.info(f"Queued approval email for {author.email}")
         
-        # 4. Commit
+        # 4. Commit all DB changes
         await db.commit()
         await db.refresh(report)
-        
-        # 5. Send email
-        if settings.is_email_enabled and author and author.email:
-            if background_tasks:
-                background_tasks.add_task(
-                    WorkflowService._send_approval_email,
-                    report, approver, author
-                )
-            else:
-                await WorkflowService._send_approval_email(report, approver, author)
         
         return {
             "success": True,
@@ -374,22 +393,30 @@ class WorkflowService:
                 is_read=False
             )
             db.add(notification)
+            
+            # Queue email to outbox
+            if settings.is_email_enabled and author.email:
+                edit_url = f"{settings.app_url}/data-officer/reports/{report.id}/edit"
+                await EmailOutboxService.queue_template_email(
+                    db=db,
+                    to_email=author.email,
+                    to_name=author.name,
+                    template_name="report_rejected",
+                    variables={
+                        "company_name": company_name,
+                        "period": period,
+                        "rejected_by": rejector.name,
+                        "rejection_reason": reason,
+                        "edit_url": edit_url
+                    },
+                    related_type="report",
+                    related_id=report_id
+                )
+                logger.info(f"Queued rejection email for {author.email}")
         
-        # 5. Commit
+        # 5. Commit all DB changes
         await db.commit()
         await db.refresh(report)
-        
-        # 6. Send email
-        if settings.is_email_enabled and author and author.email:
-            if background_tasks:
-                background_tasks.add_task(
-                    WorkflowService._send_rejection_email,
-                    report, rejector, author, reason
-                )
-            else:
-                await WorkflowService._send_rejection_email(
-                    report, rejector, author, reason
-                )
         
         return {
             "success": True,

@@ -1,4 +1,4 @@
-version: '3.8'
+# Docker Compose for Production
 
 services:
   postgres:
@@ -95,6 +95,8 @@ services:
     container_name: maclarens-frontend
     environment:
       - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8000/graphql}
+      - INTERNAL_GRAPHQL_ENDPOINT=http://api:8000/graphql
+      - BACKEND_URL=http://api:8000
       - NODE_ENV=production
     ports:
       - "3000:3000"

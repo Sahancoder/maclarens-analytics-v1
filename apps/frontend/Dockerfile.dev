@@ -1,0 +1,25 @@
+# ============================================
+# Next.js 14 Development Dockerfile
+# Fixed for Alpine + SWC compatibility
+# ============================================
+
+FROM node:20-alpine3.19
+
+# Install libc6-compat for Next.js SWC binary compatibility
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+
+# Install dependencies inside container (NOT from Windows)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+EXPOSE 3000
+
+# Development server with hot reload
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

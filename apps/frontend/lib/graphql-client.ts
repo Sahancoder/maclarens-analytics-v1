@@ -4,6 +4,9 @@
 
 const API_URL = process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || 'http://localhost:8000/graphql';
 
+// server-side: use internal docker network
+const INTERNAL_API_URL = process.env.INTERNAL_GRAPHQL_ENDPOINT || 'http://maclarens-backend:8000/graphql';
+
 interface GraphQLResponse<T> {
   data?: T;
   errors?: Array<{ message: string }>;
@@ -22,19 +25,36 @@ export async function graphqlRequest<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
+  // Docker Fix: SSR must use internal URL, Browser must use public URL
+  const isServer = typeof window === 'undefined';
+  const url = isServer ? INTERNAL_API_URL : API_URL;
 
-  const result: GraphQLResponse<T> = await response.json();
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+      cache: 'no-store',
+    });
 
-  if (result.errors) {
-    throw new Error(result.errors[0].message);
+    if (!response.ok) {
+       // Log error for debugging Docker networking issues
+       const text = await response.text();
+       console.error(`GraphQL Error [${response.status}]: ${text.slice(0, 100)}`);
+       throw new Error(`Network error: ${response.status}`);
+    }
+
+    const result: GraphQLResponse<T> = await response.json();
+
+    if (result.errors) {
+      throw new Error(result.errors[0].message);
+    }
+
+    return result.data as T;
+  } catch (err) {
+    console.error(`GraphQL Request Failed to ${url}`, err);
+    throw err;
   }
-
-  return result.data as T;
 }
 
 // ============ AUTH QUERIES ============

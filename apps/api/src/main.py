@@ -2,8 +2,13 @@
 McLarens Analytics API - FastAPI Entry Point
 """
 from contextlib import asynccontextmanager
+import os
+import aiosmtplib
+from email.message import EmailMessage
+
 from fastapi import FastAPI, Depends, Request, Query
 from fastapi.responses import Response
+from pydantic import BaseModel, EmailStr
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
@@ -14,6 +19,13 @@ from src.services.auth_service import AuthService
 from src.services.health_service import HealthService
 from src.db.models import UserRole
 from src.services.export_service import ExportService
+from src.routers.auth_router import router as auth_router
+from src.routers.admin_router import router as admin_router
+from src.routers.fo_router import router as fo_router
+from src.routers.fd_router import router as fd_router
+from src.routers.ceo_router import router as ceo_router
+from src.routers.md_router import router as md_router
+from src.security.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -51,6 +63,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting middleware (global)
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests=100,
+    window_seconds=60,
+    exclude_paths=["/health", "/docs", "/openapi.json", "/graphql"]
+)
+
+# Include auth router
+app.include_router(auth_router)
+
+# Include admin router
+app.include_router(admin_router)
+
+# Include FO router
+app.include_router(fo_router)
+
+# Include FD router
+app.include_router(fd_router)
+
+# Include CEO router
+app.include_router(ceo_router)
+
+# Include MD router
+app.include_router(md_router)
 
 
 async def get_context(request: Request):
@@ -229,4 +267,62 @@ async def get_available_periods():
     async with AsyncSessionLocal() as db:
         periods = await ExportService.get_available_periods(db)
         return {"periods": periods}
+
+
+# ============ DEV EMAIL TEST ENDPOINT ============
+
+class TestEmailRequest(BaseModel):
+    """Request model for test email endpoint"""
+    to: EmailStr
+    subject: str
+    body: str
+
+
+@app.post("/dev/send-test-email")
+async def send_test_email(request: TestEmailRequest):
+    """
+    Send a test email via SMTP (for local Mailpit testing).
+    
+    Usage:
+        curl -X POST http://localhost:8000/dev/send-test-email \
+            -H "Content-Type: application/json" \
+            -d '{"to":"test@example.com","subject":"Hello","body":"Test message"}'
+    
+    Then check Mailpit UI at: http://localhost:8025
+    """
+    smtp_host = os.getenv("SMTP_HOST", "mailpit")
+    smtp_port = int(os.getenv("SMTP_PORT", "1025"))
+    sender_email = os.getenv("SENDER_EMAIL", "no-reply@maclarens.local")
+    
+    message = EmailMessage()
+    message["From"] = sender_email
+    message["To"] = request.to
+    message["Subject"] = request.subject
+    message.set_content(request.body)
+    
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=smtp_host,
+            port=smtp_port,
+            use_tls=False,
+            start_tls=False
+        )
+        return {
+            "status": "sent",
+            "to": request.to,
+            "subject": request.subject,
+            "from": sender_email,
+            "smtp_host": smtp_host,
+            "smtp_port": smtp_port,
+            "message": "Check Mailpit UI at http://localhost:8025"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "smtp_host": smtp_host,
+            "smtp_port": smtp_port
+        }
+
 
