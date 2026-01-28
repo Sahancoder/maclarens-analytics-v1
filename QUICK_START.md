@@ -122,13 +122,13 @@ mailpit
 
 ## 🌐 Service URLs
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| **Frontend** | http://localhost:3000 | Main application |
-| **Backend API** | http://localhost:8000 | API base |
-| **Swagger Docs** | http://localhost:8000/docs | Interactive API docs |
-| **GraphQL** | http://localhost:8000/graphql | GraphQL playground |
-| **Mailpit** | http://localhost:8025 | Email inbox |
+| Service          | URL                           | Description          |
+| ---------------- | ----------------------------- | -------------------- |
+| **Frontend**     | http://localhost:3000         | Main application     |
+| **Backend API**  | http://localhost:8000         | API base             |
+| **Swagger Docs** | http://localhost:8000/docs    | Interactive API docs |
+| **GraphQL**      | http://localhost:8000/graphql | GraphQL playground   |
+| **Mailpit**      | http://localhost:8025         | Email inbox          |
 
 ---
 
@@ -214,6 +214,7 @@ npm run lint
 ### "psql: command not found"
 
 Add PostgreSQL to PATH:
+
 ```powershell
 # Windows
 $env:Path += ";C:\Program Files\PostgreSQL\16\bin"
@@ -222,6 +223,7 @@ $env:Path += ";C:\Program Files\PostgreSQL\16\bin"
 ### Database connection failed
 
 Check credentials and ensure PostgreSQL is running:
+
 ```bash
 # Test connection
 psql -U finance_user -d maclarens_analytics
@@ -235,6 +237,7 @@ psql -U finance_user -d maclarens_analytics
 ### Port already in use
 
 **Backend (8000):**
+
 ```powershell
 # Windows
 Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process
@@ -244,6 +247,7 @@ lsof -ti:8000 | xargs kill
 ```
 
 **Frontend (3000):**
+
 ```powershell
 # Windows
 Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process
@@ -263,10 +267,10 @@ lsof -ti:3000 | xargs kill
 ## 📚 Full Documentation
 
 For detailed setup instructions, see:
+
 - [Complete Local Dev Guide](docs/LOCAL_DEV_SETUP.md)
 - [Database Schema](docs/database.md)
 - [Authentication Guide](docs/auth-migration-guide.md)
-- [Docker Guide](docs/DOCKER_DEV_GUIDE.md) (alternative)
 
 ---
 
