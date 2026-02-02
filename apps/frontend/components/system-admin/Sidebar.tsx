@@ -12,6 +12,7 @@ import {
   Bell,
   ClipboardList,
   FolderOpen,
+  FileSpreadsheet,
 } from "lucide-react";
 
 export const navItems = [
@@ -20,6 +21,7 @@ export const navItems = [
   { href: "/system-admin/companies", label: "Companies", icon: Building2 },
   { href: "/system-admin/clusters", label: "Clusters", icon: Layers },
   { href: "/system-admin/budget-entry", label: "Budget Entry", icon: ClipboardList },
+  { href: "/system-admin/actual-entry", label: "Actual Entry", icon: FileSpreadsheet },
   { href: "/system-admin/budget-drafts", label: "Budget Drafts", icon: FolderOpen },
   { href: "/system-admin/audit", label: "Audit Logs", icon: FileText },
   { href: "/system-admin/notifications", label: "Notifications", icon: Bell },
