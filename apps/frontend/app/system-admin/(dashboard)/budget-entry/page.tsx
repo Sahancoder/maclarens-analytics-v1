@@ -39,6 +39,7 @@ const COMPANIES_DATA = [
 ];
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026"];
 
 interface FormData {
   revenue: string; gp: string; otherIncome: string;
@@ -218,6 +219,7 @@ export default function BudgetEntryPage() {
   const [cluster, setCluster] = useState("");
   const [company, setCompany] = useState("");
   const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
@@ -343,12 +345,7 @@ export default function BudgetEntryPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <Dropdown label="Cluster" value={cluster} options={clusters} onChange={setCluster} placeholder="Select Cluster" searchable />
           <Dropdown label="Company" value={company} options={companies.map(c => c.name)} onChange={setCompany} placeholder="Select Company" disabled={!cluster} searchable />
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-700">Financial Year</label>
-            <div className="h-11 px-4 flex items-center text-sm bg-slate-100 border border-slate-200 rounded-lg text-slate-600">
-              {financialYear || "Auto-derived"}
-            </div>
-          </div>
+          <Dropdown label="Reporting Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!company} />
           <Dropdown label="Budget Period" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!company} />
         </div>
         {companyData && (
