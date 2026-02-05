@@ -45,8 +45,8 @@ interface FormData {
   revenue: string; gp: string; otherIncome: string;
   personalExpenses: string; adminExpenses: string; sellingExpenses: string;
   financialExpenses: string; depreciation: string;
-  provisions: string; provisionsSign: "+" | "-";
-  exchange: string; exchangeSign: "+" | "-";
+  provisions: string;
+  exchange: string;
   nonOpsExpenses: string; nonOpsIncome: string;
   comment: string;
 }
@@ -224,7 +224,7 @@ export default function BudgetEntryPage() {
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
-    provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+    provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
     comment: "",
   });
 
@@ -263,7 +263,7 @@ export default function BudgetEntryPage() {
       setFormData({
         revenue: "", gp: "", otherIncome: "",
         personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
-        provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+        provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
         comment: "",
       });
       localStorage.removeItem("budgetDraft");
@@ -287,8 +287,9 @@ export default function BudgetEntryPage() {
     const revenue = n(formData.revenue), gp = n(formData.gp), otherIncome = n(formData.otherIncome);
     const personal = n(formData.personalExpenses), admin = n(formData.adminExpenses), selling = n(formData.sellingExpenses);
     const financial = n(formData.financialExpenses), depreciation = n(formData.depreciation);
-    const provisions = n(formData.provisions) * (formData.provisionsSign === "+" ? 1 : -1);
-    const exchange = n(formData.exchange) * (formData.exchangeSign === "+" ? 1 : -1);
+
+    const provisions = n(formData.provisions);
+    const exchange = n(formData.exchange);
     const nonOpsExp = n(formData.nonOpsExpenses), nonOpsInc = n(formData.nonOpsIncome);
 
     const gpMargin = revenue > 0 ? ((gp / revenue) * 100).toFixed(2) : "0.00";
@@ -380,8 +381,8 @@ export default function BudgetEntryPage() {
 
             <Section title="Budget Non-Operating Items (LKR)">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                <InputField label="Provisions" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} sign={formData.provisionsSign} onSignChange={s => update("provisionsSign", s)} showSign />
-                <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} sign={formData.exchangeSign} onSignChange={s => update("exchangeSign", s)} showSign />
+                <InputField label="Provisions" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
+                <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
                 <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
                 <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
               </div>
