@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search, ToggleLeft, ToggleRight, X } from "lucide-react";
 import {
   AdminAPI,
@@ -57,6 +57,12 @@ export default function CompaniesPage() {
     user_id: "",
     role_id: "",
   });
+  const [pendingAssignments, setPendingAssignments] = useState<
+    { user_id: string; user_name: string; user_email: string; role_id: number; role_name: string }[]
+  >([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -98,6 +104,27 @@ export default function CompaniesPage() {
     setLoading(false);
   };
 
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filter users based on search text
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return users;
+    const q = userSearch.toLowerCase();
+    return users.filter((u) => {
+      const name = `${u.first_name || ""} ${u.last_name || ""}`.toLowerCase();
+      return name.includes(q) || u.user_email.toLowerCase().includes(q);
+    });
+  }, [users, userSearch]);
+
   useEffect(() => {
     loadLookups();
   }, []);
@@ -118,6 +145,10 @@ export default function CompaniesPage() {
   const openAssign = async (company: AdminCompany) => {
     setAssigning(company);
     setNewAssignment({ user_id: "", role_id: "" });
+    setPendingAssignments([]);
+    setUserSearch("");
+    setShowUserDropdown(false);
+    setError(null);
     const response = await AdminAPI.getCompanyUsers(company.company_id);
     setCompanyAssignments(response.data || []);
   };
@@ -180,27 +211,45 @@ export default function CompaniesPage() {
     await loadLookups();
   };
 
-  const addAssignment = async () => {
+  const addAssignment = () => {
     if (!assigning || !newAssignment.user_id || !newAssignment.role_id) return;
 
-    const res = await AdminAPI.createAssignment({
-      user_id: newAssignment.user_id,
-      company_id: assigning.company_id,
-      role_id: Number(newAssignment.role_id),
-      is_active: true,
-    });
-    if (res.error) {
-      setError(res.error);
+    const roleId = Number(newAssignment.role_id);
+    const alreadyExists =
+      companyAssignments.some((a) => a.user_id === newAssignment.user_id && a.role_id === roleId) ||
+      pendingAssignments.some((a) => a.user_id === newAssignment.user_id && a.role_id === roleId);
+
+    if (alreadyExists) {
+      setError("This user-role assignment already exists.");
       return;
     }
 
-    const refreshed = await AdminAPI.getCompanyUsers(assigning.company_id);
-    setCompanyAssignments(refreshed.data || []);
+    const user = users.find((u) => u.user_id === newAssignment.user_id);
+    const role = roles.find((r) => r.role_id === roleId);
+    if (!user || !role) return;
+
+    const displayName = `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.user_email;
+
+    setPendingAssignments((prev) => [
+      ...prev,
+      {
+        user_id: user.user_id,
+        user_name: displayName,
+        user_email: user.user_email,
+        role_id: role.role_id,
+        role_name: role.role_name,
+      },
+    ]);
     setNewAssignment({ user_id: "", role_id: "" });
-    await loadCompanies();
+    setUserSearch("");
+    setError(null);
   };
 
-  const removeAssignment = async (assignment: AdminAssignment) => {
+  const removePending = (index: number) => {
+    setPendingAssignments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingAssignment = async (assignment: AdminAssignment) => {
     if (!assigning) return;
 
     const res = await AdminAPI.deleteAssignment(
@@ -215,6 +264,35 @@ export default function CompaniesPage() {
 
     const refreshed = await AdminAPI.getCompanyUsers(assigning.company_id);
     setCompanyAssignments(refreshed.data || []);
+    await loadCompanies();
+  };
+
+  const saveAllAssignments = async () => {
+    if (!assigning || pendingAssignments.length === 0) {
+      setAssigning(null);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    for (const pending of pendingAssignments) {
+      const res = await AdminAPI.createAssignment({
+        user_id: pending.user_id,
+        company_id: assigning.company_id,
+        role_id: pending.role_id,
+        is_active: true,
+      });
+      if (res.error) {
+        setError(res.error);
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    setSubmitting(false);
+    setPendingAssignments([]);
+    setAssigning(null);
     await loadCompanies();
   };
 
@@ -367,19 +445,73 @@ export default function CompaniesPage() {
       {assigning && (
         <Modal title={`Assign Users - ${assigning.company_name}`} onClose={() => setAssigning(null)}>
           <div className="space-y-3">
+            {error && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
-              <select
-                value={newAssignment.user_id}
-                onChange={(e) => setNewAssignment((prev) => ({ ...prev, user_id: e.target.value }))}
-                className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
-              >
-                <option value="">Select user</option>
-                {users.map((user) => (
-                  <option key={user.user_id} value={user.user_id}>
-                    {`${user.first_name || ""} ${user.last_name || ""}`.trim() || user.user_email}
-                  </option>
-                ))}
-              </select>
+              {/* Searchable user dropdown */}
+              <div className="relative" ref={dropdownRef}>
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute top-1/2 -translate-y-1/2 left-3" />
+                  <input
+                    value={userSearch}
+                    onChange={(e) => {
+                      setUserSearch(e.target.value);
+                      setShowUserDropdown(true);
+                      setNewAssignment((prev) => ({ ...prev, user_id: "" }));
+                    }}
+                    onFocus={() => setShowUserDropdown(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowUserDropdown(true);
+                    }}
+                    placeholder="Search users..."
+                    className="h-10 w-full border border-slate-300 rounded-lg pl-10 pr-3 text-sm"
+                    autoComplete="off"
+                  />
+                </div>
+                {showUserDropdown && (
+                  <div className="absolute z-50 top-11 left-0 right-0 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+                    {filteredUsers.length === 0 ? (
+                      <p className="text-sm text-slate-500 p-3">No users found.</p>
+                    ) : (
+                      filteredUsers.map((user) => {
+                        const displayName =
+                          `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.user_email;
+                        const alreadyAssigned = companyAssignments.some(
+                          (a) => a.user_id === user.user_id
+                        );
+                        return (
+                          <button
+                            key={user.user_id}
+                            type="button"
+                            onClick={() => {
+                              setNewAssignment((prev) => ({ ...prev, user_id: user.user_id }));
+                              setUserSearch(displayName);
+                              setShowUserDropdown(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm border-b border-slate-50 last:border-0 ${
+                              alreadyAssigned
+                                ? "bg-slate-50"
+                                : "hover:bg-blue-50"
+                            }`}
+                          >
+                            <p className={`font-medium ${alreadyAssigned ? "text-slate-400" : "text-slate-900"}`}>
+                              {displayName}
+                            </p>
+                            <p className="text-xs text-slate-500">{user.user_email}</p>
+                            {alreadyAssigned && (
+                              <span className="text-xs text-amber-600">Already assigned</span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
               <select
                 value={newAssignment.role_id}
                 onChange={(e) => setNewAssignment((prev) => ({ ...prev, role_id: e.target.value }))}
@@ -391,31 +523,69 @@ export default function CompaniesPage() {
                 ))}
               </select>
             </div>
-            <button onClick={addAssignment} className="h-9 px-3 rounded-lg bg-[#0b1f3a] text-white text-sm">
+            <button
+              onClick={addAssignment}
+              disabled={!newAssignment.user_id || !newAssignment.role_id}
+              className="h-9 px-3 rounded-lg bg-[#0b1f3a] text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Add Assignment
             </button>
 
-            <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg">
-              {companyAssignments.length === 0 && (
-                <p className="text-sm text-slate-500 p-3">No assigned users.</p>
-              )}
-              {companyAssignments.map((assignment) => (
-                <div key={assignment.id} className="flex items-center justify-between px-3 py-2 border-b border-slate-100 last:border-0">
-                  <div>
-                    <p className="text-sm text-slate-900">{assignment.user_name}</p>
-                    <p className="text-xs text-slate-500">{assignment.role_name}</p>
-                  </div>
-                  <button
-                    onClick={() => removeAssignment(assignment)}
-                    className="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700"
-                  >
-                    Remove
-                  </button>
+            {/* Pending assignments (not yet saved) */}
+            {pendingAssignments.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1">New Assignments</p>
+                <div className="border border-blue-200 rounded-lg bg-blue-50/30">
+                  {pendingAssignments.map((pending, index) => (
+                    <div key={`pending-${index}`} className="flex items-center justify-between px-3 py-2 border-b border-blue-100 last:border-0">
+                      <div>
+                        <p className="text-sm text-slate-900">{pending.user_name}</p>
+                        <p className="text-xs text-slate-500">{pending.role_name}</p>
+                      </div>
+                      <button
+                        onClick={() => removePending(index)}
+                        className="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Existing assignments (already in DB) */}
+            <div>
+              {companyAssignments.length > 0 && (
+                <p className="text-xs font-medium text-slate-500 mb-1">Current Assignments</p>
+              )}
+              <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg">
+                {companyAssignments.length === 0 && pendingAssignments.length === 0 && (
+                  <p className="text-sm text-slate-500 p-3">No assigned users.</p>
+                )}
+                {companyAssignments.map((assignment) => (
+                  <div key={assignment.id} className="flex items-center justify-between px-3 py-2 border-b border-slate-100 last:border-0">
+                    <div>
+                      <p className="text-sm text-slate-900">{assignment.user_name}</p>
+                      <p className="text-xs text-slate-500">{assignment.role_name}</p>
+                    </div>
+                    <button
+                      onClick={() => removeExistingAssignment(assignment)}
+                      className="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          <ModalActions onCancel={() => setAssigning(null)} onSubmit={() => setAssigning(null)} submitLabel="Done" />
+          <ModalActions
+            onCancel={() => { setPendingAssignments([]); setAssigning(null); }}
+            onSubmit={saveAllAssignments}
+            submitLabel={submitting ? "Saving..." : "Done"}
+            disabled={submitting}
+          />
         </Modal>
       )}
     </div>
@@ -432,8 +602,8 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white border border-slate-200">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-xl bg-white border border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-base font-semibold text-slate-900">{title}</h2>
           <button onClick={onClose} className="text-slate-500"><X className="h-4 w-4" /></button>

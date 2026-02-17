@@ -548,6 +548,10 @@ async function apiFetch<T>(
       };
     }
 
+    if (response.status === 204) {
+      return { data: null as T, error: null, status: response.status };
+    }
+
     const data = await response.json();
     return { data, error: null, status: response.status };
   } catch (error) {
@@ -741,8 +745,6 @@ export const AdminAPI = {
     user_email: string;
     first_name: string;
     last_name: string;
-    role_id: number;
-    company_id: string;
     is_active?: boolean;
   }): Promise<ApiResponse<AdminUser>> {
     return apiFetch<AdminUser>('/admin/users', {

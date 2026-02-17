@@ -152,8 +152,8 @@ class UserCreate(BaseModel):
     user_email: EmailStr
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
-    role_id: int
-    company_id: str
+    role_id: Optional[int] = None
+    company_id: Optional[str] = None
     is_active: bool = True
 
 
@@ -1020,7 +1020,7 @@ async def assign_user_to_company(
 @router.get("/users", response_model=UserListResponse)
 async def list_users(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=200),
+    page_size: int = Query(default=20, ge=1, le=2000),
     search: Optional[str] = Query(default=None),
     role_id: Optional[int] = Query(default=None),
     company_id: Optional[str] = Query(default=None),
@@ -1112,17 +1112,22 @@ async def create_user(
     if existing_user:
         raise HTTPException(status_code=409, detail="Email already exists")
 
-    role = (
-        await db.execute(select(RoleMaster).where(RoleMaster.role_id == request.role_id))
-    ).scalar_one_or_none()
-    if not role:
-        raise HTTPException(status_code=400, detail="Invalid role_id")
+    role = None
+    company = None
 
-    company = (
-        await db.execute(select(Company).where(Company.company_id == request.company_id))
-    ).scalar_one_or_none()
-    if not company:
-        raise HTTPException(status_code=400, detail="Invalid company_id")
+    if request.role_id is not None:
+        role = (
+            await db.execute(select(RoleMaster).where(RoleMaster.role_id == request.role_id))
+        ).scalar_one_or_none()
+        if not role:
+            raise HTTPException(status_code=400, detail="Invalid role_id")
+
+    if request.company_id is not None:
+        company = (
+            await db.execute(select(Company).where(Company.company_id == request.company_id))
+        ).scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=400, detail="Invalid company_id")
 
     user_id = await _next_text_id(db, User.user_id, "U", 4)
     now = _utcnow()
@@ -1138,14 +1143,19 @@ async def create_user(
     )
     db.add(user)
 
-    db.add(
-        UserCompanyRoleMap(
-            user_id=user_id,
-            company_id=request.company_id,
-            role_id=request.role_id,
-            is_active=True,
+    if role and company:
+        db.add(
+            UserCompanyRoleMap(
+                user_id=user_id,
+                company_id=request.company_id,
+                role_id=request.role_id,
+                is_active=True,
+            )
         )
-    )
+
+    audit_detail = f"Created user {normalized_email}"
+    if role and company:
+        audit_detail += f" with role {role.role_name} at company {company.company_name}"
 
     await _audit(
         db,
@@ -1153,7 +1163,7 @@ async def create_user(
         "USER_CREATED",
         "user",
         user_id,
-        f"Created user {normalized_email} with role {role.role_name} at company {company.company_name}",
+        audit_detail,
     )
 
     await db.commit()

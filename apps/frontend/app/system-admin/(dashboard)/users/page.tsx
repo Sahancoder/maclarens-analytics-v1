@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, UserCheck, UserX, X } from "lucide-react";
-import { AdminAPI, type AdminCompany, type AdminRole, type AdminUser } from "@/lib/api-client";
+import { AdminAPI, type AdminRole, type AdminUser } from "@/lib/api-client";
 
 const ROLE_OPTIONS = [
   { role_id: 1, role_name: "Finance Officer" },
@@ -14,7 +14,6 @@ const ROLE_OPTIONS = [
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<AdminRole[]>(ROLE_OPTIONS);
-  const [companies, setCompanies] = useState<AdminCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,8 +31,6 @@ export default function UsersPage() {
     first_name: "",
     last_name: "",
     user_email: "",
-    role_id: "",
-    company_id: "",
   });
 
   useEffect(() => {
@@ -45,13 +42,8 @@ export default function UsersPage() {
   }, [searchInput]);
 
   const loadLookups = async () => {
-    const [rolesRes, companiesRes] = await Promise.all([
-      AdminAPI.getRoles(),
-      AdminAPI.getCompaniesList({ page: 1, page_size: 1000, is_active: true }),
-    ]);
-
+    const rolesRes = await AdminAPI.getRoles();
     if (rolesRes.data && rolesRes.data.length > 0) setRoles(rolesRes.data);
-    if (companiesRes.data) setCompanies(companiesRes.data.companies);
   };
 
   const loadUsers = async () => {
@@ -94,12 +86,10 @@ export default function UsersPage() {
       first_name: "",
       last_name: "",
       user_email: "",
-      role_id: "",
-      company_id: "",
     });
 
   const createUser = async () => {
-    if (!form.first_name || !form.last_name || !form.user_email || !form.role_id || !form.company_id) {
+    if (!form.first_name || !form.last_name || !form.user_email) {
       setError("All user fields are required.");
       return;
     }
@@ -111,8 +101,6 @@ export default function UsersPage() {
       first_name: form.first_name.trim(),
       last_name: form.last_name.trim(),
       user_email: form.user_email.trim(),
-      role_id: Number(form.role_id),
-      company_id: form.company_id,
       is_active: true,
     });
 
@@ -145,6 +133,7 @@ export default function UsersPage() {
           ...user,
           role_name: role?.role_name || "Unassigned",
           company_name: role?.company_name || "Unassigned",
+          cluster_name: role?.cluster_name || "Unassigned",
         };
       }),
     [users]
@@ -208,6 +197,7 @@ export default function UsersPage() {
                   <th className="px-5 py-3 text-left text-xs uppercase text-slate-500">User</th>
                   <th className="px-5 py-3 text-left text-xs uppercase text-slate-500">Role</th>
                   <th className="px-5 py-3 text-left text-xs uppercase text-slate-500">Company</th>
+                  <th className="px-5 py-3 text-left text-xs uppercase text-slate-500">Cluster</th>
                   <th className="px-5 py-3 text-left text-xs uppercase text-slate-500">Status</th>
                   <th className="px-5 py-3 text-right text-xs uppercase text-slate-500">Actions</th>
                 </tr>
@@ -215,12 +205,12 @@ export default function UsersPage() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-sm text-slate-500">Loading users...</td>
+                    <td colSpan={6} className="px-5 py-8 text-sm text-slate-500">Loading users...</td>
                   </tr>
                 )}
                 {!loading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-sm text-slate-500">No users found.</td>
+                    <td colSpan={6} className="px-5 py-8 text-sm text-slate-500">No users found.</td>
                   </tr>
                 )}
                 {!loading && rows.map((user) => (
@@ -231,6 +221,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-5 py-3 text-sm text-slate-700">{user.role_name}</td>
                     <td className="px-5 py-3 text-sm text-slate-700">{user.company_name}</td>
+                    <td className="px-5 py-3 text-sm text-slate-700">{user.cluster_name}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${user.is_active ? "text-emerald-700" : "text-slate-500"}`}>
                         {user.is_active ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
@@ -301,26 +292,6 @@ export default function UsersPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, user_email: e.target.value }))}
                 className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
               />
-              <select
-                value={form.role_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, role_id: e.target.value }))}
-                className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
-              >
-                <option value="">Select role</option>
-                {roles.map((role) => (
-                  <option key={role.role_id} value={role.role_id}>{role.role_name}</option>
-                ))}
-              </select>
-              <select
-                value={form.company_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
-                className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
-              >
-                <option value="">Select company</option>
-                {companies.map((company) => (
-                  <option key={company.company_id} value={company.company_id}>{company.company_name}</option>
-                ))}
-              </select>
             </div>
             <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
               <button onClick={() => setShowAdd(false)} className="h-9 px-3 text-sm border border-slate-300 rounded-lg">Cancel</button>
