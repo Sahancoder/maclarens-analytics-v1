@@ -14,7 +14,6 @@ Endpoints:
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -282,7 +281,7 @@ async def get_approved_company_ids(
     db: AsyncSession, 
     year: int, 
     month: Optional[int] = None
-) -> List[UUID]:
+) -> List[str]:
     """Get company IDs with approved reports for period"""
     query = select(Report.company_id).where(
         and_(
@@ -607,7 +606,7 @@ async def get_cluster_detail(
     
     # Get cluster
     cluster_result = await db.execute(
-        select(Cluster).where(Cluster.id == UUID(cluster_id))
+        select(Cluster).where(Cluster.id == cluster_id)
     )
     cluster = cluster_result.scalar_one_or_none()
     
@@ -618,7 +617,7 @@ async def get_cluster_detail(
     companies_result = await db.execute(
         select(Company).where(
             and_(
-                Company.cluster_id == UUID(cluster_id),
+                Company.cluster_id == cluster_id,
                 Company.is_active == True
             )
         ).order_by(Company.name)
@@ -919,9 +918,9 @@ async def get_trends(
     
     company_name = None
     if company_id:
-        query = query.where(FinancialMonthly.company_id == UUID(company_id))
+        query = query.where(FinancialMonthly.company_id == company_id)
         company_result = await db.execute(
-            select(Company).where(Company.id == UUID(company_id))
+            select(Company).where(Company.id == company_id)
         )
         company = company_result.scalar_one_or_none()
         company_name = company.name if company else None

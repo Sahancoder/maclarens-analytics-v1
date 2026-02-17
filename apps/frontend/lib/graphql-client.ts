@@ -5,7 +5,7 @@
 const API_URL = process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || 'http://localhost:8000/graphql';
 
 // server-side: use internal docker network
-const INTERNAL_API_URL = process.env.INTERNAL_GRAPHQL_ENDPOINT || 'http://maclarens-backend:8000/graphql';
+const INTERNAL_API_URL = process.env.INTERNAL_GRAPHQL_ENDPOINT || 'http://backend:8000/graphql';
 
 interface GraphQLResponse<T> {
   data?: T;

@@ -1,124 +1,157 @@
 "use client";
 
-const stats = [
-  { label: "Total Users", value: "48", change: "+3 this month", borderColor: "border-l-[#0b1f3a]" },
-  { label: "Active Companies", value: "32", change: "2 inactive", borderColor: "border-l-[#0b1f3a]" },
-  { label: "Clusters", value: "12", change: "All active", borderColor: "border-l-[#0b1f3a]" },
-  { label: "Pending Reports", value: "7", change: "Awaiting review", borderColor: "border-l-amber-500" },
-];
+import { useEffect, useMemo, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { AdminAPI, FDAPI, HealthAPI, type AdminActivity, type AdminDashboardStats } from "@/lib/api-client";
 
-const systemHealth = [
-  { name: "Analytics API", status: "operational", latency: "45ms" },
-  { name: "PostgreSQL Database", status: "operational", latency: "12ms" },
-  { name: "Auth Service (Entra ID)", status: "operational", latency: "89ms" },
-  { name: "File Storage", status: "operational", latency: "23ms" },
-];
+type HealthPayload = {
+  status?: string;
+  checks?: Record<string, { status?: string; latency_ms?: number; response_time_ms?: number }>;
+  components?: Record<string, { status?: string; latency_ms?: number; response_time_ms?: number }>;
+};
 
-const recentActivity = [
-  { action: "User Created", detail: "natali.craig@mclarens.lk added as Data Officer", time: "2 hours ago", type: "user" },
-  { action: "Company Updated", detail: "GAC Shipping Limited - Year end changed to December", time: "5 hours ago", type: "company" },
-  { action: "Role Modified", detail: "Finance Director permissions updated", time: "1 day ago", type: "role" },
-  { action: "Cluster Created", detail: "New cluster 'Renewables' added", time: "2 days ago", type: "cluster" },
-  { action: "User Deactivated", detail: "john.doe@mclarens.lk account deactivated", time: "3 days ago", type: "user" },
-];
+export default function AdminDashboardPage() {
+  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
+  const [health, setHealth] = useState<HealthPayload | null>(null);
+  const [activities, setActivities] = useState<AdminActivity[]>([]);
+  const [pendingReports, setPendingReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const pendingApprovals = [
-  { company: "McLarens Maritime Academy", month: "December 2025", submittedBy: "Sahan Hettiarachchi", status: "pending" },
-  { company: "GAC Shipping Limited", month: "December 2025", submittedBy: "Natali Craig", status: "pending" },
-  { company: "Spectra Logistics", month: "November 2025", submittedBy: "Drew Cano", status: "in_review" },
-];
+  const load = async () => {
+    setLoading(true);
+    setError(null);
 
-export default function AdminDashboard() {
+    const [statsRes, activityRes, pendingRes, healthRes] = await Promise.all([
+      AdminAPI.getDashboardStats(),
+      AdminAPI.getRecentActivity(8),
+      FDAPI.getPendingReports(),
+      HealthAPI.full(),
+    ]);
+
+    if (statsRes.error) setError(statsRes.error);
+    if (statsRes.data) setStats(statsRes.data);
+    if (activityRes.data) setActivities(activityRes.data.activities);
+    if (pendingRes.data) setPendingReports((pendingRes.data.reports || []).slice(0, 5));
+    if (healthRes.data) setHealth(healthRes.data as unknown as HealthPayload);
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const checks = useMemo(() => health?.components || health?.checks || {}, [health]);
+  const healthRows = useMemo(
+    () => [
+      { name: "Analytics API", status: health?.status || "unknown", latency: "-" },
+      {
+        name: "PostgreSQL Database",
+        status: checks.database?.status || "unknown",
+        latency: checks.database?.latency_ms || checks.database?.response_time_ms || "-",
+      },
+      {
+        name: "Redis",
+        status: checks.redis?.status || "unknown",
+        latency: checks.redis?.latency_ms || checks.redis?.response_time_ms || "-",
+      },
+      {
+        name: "Email Service",
+        status: checks.email?.status || "not_configured",
+        latency: "-",
+      },
+    ],
+    [health, checks]
+  );
+
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="p-4 md:p-8">
-        {/* Header */}
-        <div className="mb-8">
+      <div className="p-4 md:p-8 space-y-6">
+        <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">System Dashboard</h1>
-          <p className="text-base text-slate-500 mt-2">Platform overview and system health monitoring</p>
+          <p className="text-sm md:text-base text-slate-500 mt-2">Live platform metrics and activity</p>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, i) => (
-            <div key={i} className={`bg-white rounded-lg border border-slate-200 border-l-4 ${stat.borderColor} p-6`}>
-              <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
-              <p className="text-4xl font-bold text-[#0b1f3a] mt-2">{stat.value}</p>
-              <p className="text-sm text-slate-400 mt-2">{stat.change}</p>
-            </div>
-          ))}
+        {error && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            Failed to load dashboard data: {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatCard label="Total Users" value={stats?.total_users ?? 0} loading={loading} />
+          <StatCard label="Active Companies" value={stats?.active_companies ?? 0} loading={loading} />
+          <StatCard label="Clusters" value={stats?.total_clusters ?? 0} loading={loading} />
+          <StatCard label="Pending Reports" value={stats?.pending_reports ?? 0} loading={loading} />
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* System Health */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-5">System Health</h2>
-            <div className="space-y-3">
-              {systemHealth.map((service, i) => (
-                <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
-                  <span className="text-sm text-slate-700">{service.name}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-slate-400">{service.latency}</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                      <span className="text-xs text-emerald-600 font-medium">Operational</span>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h2 className="text-lg font-semibold text-slate-900 mb-3">System Health</h2>
+            <div className="space-y-2">
+              {healthRows.map((row) => {
+                const isOk = row.status === "healthy" || row.status === "operational";
+                const isNotConfigured = row.status === "not_configured" || row.status === "not_available";
+                const label = isNotConfigured ? "Not configured" : isOk ? "Operational" : "Degraded";
+                const color = isNotConfigured ? "bg-slate-400" : isOk ? "bg-emerald-500" : "bg-rose-500";
+
+                return (
+                  <div key={row.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                    <span className="text-sm text-slate-700">{row.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400">{row.latency === "-" ? "-" : `${row.latency}ms`}</span>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                        <span className={`h-2 w-2 rounded-full ${color}`} />
+                        {label}
+                      </span>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h2 className="text-lg font-semibold text-slate-900 mb-3">Recent Activity</h2>
+            <div className="space-y-3">
+              {!loading && activities.length === 0 && <p className="text-sm text-slate-500">No recent activity.</p>}
+              {activities.map((activity) => (
+                <div key={activity.id} className="border-b border-slate-100 last:border-0 pb-2">
+                  <p className="text-sm font-medium text-slate-800">{activity.details || activity.action}</p>
+                  <p className="text-xs text-slate-500">{activity.user_email || "System"}</p>
+                  <p className="text-xs text-slate-400">
+                    {activity.timestamp ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) : "-"}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-5">Recent Activity</h2>
-            <div className="space-y-4">
-              {recentActivity.map((activity, i) => (
-                <div key={i} className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
-                  <div className={`h-2 w-2 rounded-full mt-2 flex-shrink-0 ${
-                    activity.type === "user" ? "bg-[#0b1f3a]" :
-                    activity.type === "company" ? "bg-[#0b1f3a]" :
-                    activity.type === "role" ? "bg-[#0b1f3a]" :
-                    "bg-[#0b1f3a]"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{activity.action}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 truncate">{activity.detail}</p>
-                    <p className="text-xs text-slate-400 mt-1">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pending Reports */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-5">Pending Reports</h2>
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h2 className="text-lg font-semibold text-slate-900 mb-3">Pending Reports</h2>
             <div className="space-y-3">
-              {pendingApprovals.map((report, i) => (
-                <div key={i} className="py-3 border-b border-slate-100 last:border-0">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{report.company}</p>
-                      <p className="text-xs text-slate-500 mt-1">{report.month}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Submitted by {report.submittedBy}</p>
-                    </div>
-                    <span className={`px-2.5 py-1 text-xs font-medium rounded ${
-                      report.status === "pending" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-blue-50 text-blue-700 border border-blue-200"
-                    }`}>
-                      {report.status === "pending" ? "Pending" : "In Review"}
-                    </span>
-                  </div>
+              {!loading && pendingReports.length === 0 && <p className="text-sm text-slate-500">No pending reports.</p>}
+              {pendingReports.map((report) => (
+                <div key={`${report.id || report.company_id}-${report.period_id || report.month}`} className="border-b border-slate-100 last:border-0 pb-2">
+                  <p className="text-sm font-medium text-slate-800">{report.company_name}</p>
+                  <p className="text-xs text-slate-500">{report.month_name} {report.year}</p>
+                  <p className="text-xs text-slate-400">By {report.submitted_by_name}</p>
                 </div>
               ))}
             </div>
-            <button className="w-full mt-4 h-10 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors">
-              View All Reports
-            </button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, loading }: { label: string; value: number; loading: boolean }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-slate-900">{loading ? "..." : value}</p>
     </div>
   );
 }

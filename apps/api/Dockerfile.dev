@@ -2,24 +2,17 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY src/ ./src/
-COPY alembic/ ./alembic/
+# Copy alembic config (migrations and source are volume-mounted for hot reload)
 COPY alembic.ini .
-COPY seed_standalone.py .
-COPY seed_real_data.py .
-COPY seed_production.py .
+
+# Source code, alembic/, and seed scripts are volume-mounted for hot reload
+# Only copy what's needed for initial startup if volumes aren't ready
 
 EXPOSE 8000
 
 # Development mode with hot reload
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# --reload-dir ensures uvicorn watches the mounted /app/src directory
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src"]

@@ -5,7 +5,7 @@
 # ============================================================================
 
 param(
-    [string]$DbName = "finance_workflow",
+    [string]$DbName = "maclarens_analytics",
     [string]$DbUser = "finance_user",
     [string]$DbPassword = "finance_pass",
     [string]$PostgresUser = "postgres"
@@ -167,7 +167,7 @@ Write-Host "✓ Database setup complete!" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Database connection string:" -ForegroundColor White
-Write-Host "  postgresql+asyncpg://$DbUser:$DbPassword@localhost:5432/$DbName" -ForegroundColor Cyan
+Write-Host "  postgresql+asyncpg://${DbUser}:${DbPassword}@localhost:5432/${DbName}" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Update apps/api/.env with the connection string above" -ForegroundColor Gray

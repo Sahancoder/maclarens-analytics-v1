@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, CheckCircle, XCircle, MessageSquare, FileText, Clock, Trash2, ChevronRight } from "lucide-react";
+import {
+  deleteNotificationById,
+  extractActor,
+  extractCompanyAndPeriod,
+  fetchNotifications,
+  formatTimeAgo,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type BackendNotification,
+} from "@/lib/notifications-client";
 
 interface Notification {
   id: string;
@@ -15,78 +25,53 @@ interface Notification {
   read: boolean;
 }
 
-const notificationsData: Notification[] = [
-  {
-    id: "1",
-    type: "submitted",
-    title: "New Report Submitted",
-    description: "Actual report for December 2025 has been submitted and is awaiting your review",
-    company: "McLarens Maritime Academy",
-    month: "December 2025",
-    from: "Sahan Hettiarachchi",
-    time: "2 hours ago",
-    read: false,
-  },
-  {
-    id: "2",
-    type: "comment",
-    title: "New Comment Received",
-    description: "Data Officer has responded to your query about admin expenses",
-    company: "McLarens Maritime Academy",
-    month: "November 2025",
-    from: "Sahan Hettiarachchi",
-    time: "5 hours ago",
-    read: false,
-  },
-  {
-    id: "3",
-    type: "reminder",
-    title: "Budget Entry Reminder",
-    description: "Budget entry for January 2026 is due in 3 days",
-    company: "McLarens Maritime Academy",
-    month: "January 2026",
-    from: "System",
-    time: "1 day ago",
-    read: false,
-  },
-  {
-    id: "4",
-    type: "approved",
-    title: "Report Approved Successfully",
-    description: "You approved the actual report for October 2025",
-    company: "McLarens Maritime Academy",
-    month: "October 2025",
-    from: "You",
-    time: "3 days ago",
-    read: true,
-  },
-  {
-    id: "5",
-    type: "submitted",
-    title: "Report Resubmitted",
-    description: "Corrected actual report has been resubmitted after your feedback",
-    company: "McLarens Maritime Academy",
-    month: "September 2025",
-    from: "Sahan Hettiarachchi",
-    time: "5 days ago",
-    read: true,
-  },
-  {
-    id: "6",
-    type: "comment",
-    title: "Query Response",
-    description: "Clarification provided for exchange rate calculation",
-    company: "McLarens Maritime Academy",
-    month: "September 2025",
-    from: "Sahan Hettiarachchi",
-    time: "1 week ago",
-    read: true,
-  },
-];
+function mapType(type: string): Notification["type"] {
+  if (type === "report_submitted") return "submitted";
+  if (type === "report_approved") return "approved";
+  if (type === "comment_added") return "comment";
+  return "reminder";
+}
+
+function mapNotification(item: BackendNotification): Notification {
+  const combinedText = `${item.title || ""} ${item.message || ""}`.trim();
+  const { company, period } = extractCompanyAndPeriod(combinedText);
+
+  return {
+    id: item.id,
+    type: mapType(item.type),
+    title: item.title || "Notification",
+    description: item.message || item.title || "Notification update",
+    company,
+    month: period,
+    from: extractActor(combinedText),
+    time: formatTimeAgo(item.created_at),
+    read: item.is_read,
+  };
+}
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(notificationsData);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadNotifications = async () => {
+      try {
+        const items = await fetchNotifications(100);
+        if (!isMounted) return;
+        setNotifications(items.map(mapNotification));
+      } catch (error) {
+        console.error("Failed to load notifications", error);
+        if (isMounted) setNotifications([]);
+      }
+    };
+
+    loadNotifications();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -95,17 +80,32 @@ export default function NotificationsPage() {
     return true;
   });
 
-  const handleMarkAsRead = (id: string) => {
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+    } catch (error) {
+      console.error("Failed to mark notification as read", error);
+    }
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteNotificationById(id);
+    } catch (error) {
+      console.error("Failed to delete notification", error);
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 

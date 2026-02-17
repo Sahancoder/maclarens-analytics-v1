@@ -1,0 +1,14 @@
+cluster_id,cluster_name,is_active,created_date,modified_date
+C01,Liner,true,2026-01-19,2026-12-02
+C02,Shipping services & Logistics ,true,2026-01-19,2026-12-02
+C03,GAC Cluster,true,2026-01-19,2026-12-02
+C04,Warehouse and Logistics,true,2026-01-19,2026-12-02
+C05,Ship Supply Services,true,2026-01-19,2026-12-02
+C06,Lubricant Two,true,2026-01-19,2026-12-02
+C07,Manufacturing ,true,2026-01-19,2026-12-02
+C08,Lubricant One,true,2026-01-19,2026-12-02
+C09,Property,true,2026-01-19,2026-12-02
+C10,Hotel & Leisure,true,2026-01-19,2026-12-02
+C11,MHL and related companies,false,2026-01-19,2026-12-02
+C12,MGML,true,2026-01-19,2026-12-02
+C13,Dormant Companies ,true,2026-01-19,2026-12-02

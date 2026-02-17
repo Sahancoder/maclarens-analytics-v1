@@ -4,6 +4,9 @@ Endpoints for entering actual financial data and managing reports
 
 Endpoints:
 - GET  /fo/companies              - Get assigned company(ies)
+- GET  /fo/user-clusters          - Get clusters for logged-in user
+- GET  /fo/user-companies         - Get companies for user within a cluster
+- GET  /fo/check-period           - Check if data entry is allowed (22-day rule)
 - GET  /fo/periods                - Get available periods for entry
 - GET  /fo/reports                - My Reports list (all statuses)
 - POST /fo/reports                - Create/get draft report for period
@@ -11,20 +14,26 @@ Endpoints:
 - PUT  /fo/reports/{id}/financials - Save actual financial data (auto-save)
 - POST /fo/reports/{id}/submit    - Submit report to FD
 - GET  /fo/budget/{company_id}/{year}/{month} - Get budget for comparison
+- GET  /fo/budget-data/{company_id}/{year}/{month} - Get budget from financial_fact
+- POST /fo/save-actuals           - Save actual data to financial_fact + workflow
 """
-from datetime import datetime
-from typing import Optional, List
-from uuid import UUID
+from datetime import datetime, date, timezone
+from decimal import Decimal
+from typing import Optional, List, Dict, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, distinct, update as sa_update, func
+from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
-    User, UserRole, Company, Report, ReportStatus, ReportComment,
-    FinancialMonthly, Scenario, ReportStatusHistory
+    User, UserRole, Company, Cluster, Report, ReportStatus, ReportComment,
+    FinancialMonthly, Scenario, ReportStatusHistory,
+    UserCompanyRoleMap, CompanyMaster, ClusterMaster, UserMaster,
+    PeriodMaster, FinancialFact, FinancialWorkflow
 )
+from src.config.constants import MetricID, StatusID, RoleID
 from src.security.middleware import (
     get_db, get_current_active_user, require_fo,
     verify_company_access
@@ -42,6 +51,7 @@ class CompanyInfo(BaseModel):
     id: str
     name: str
     code: str
+    cluster_name: Optional[str] = None
     fy_start_month: int
     currency: str
 
@@ -213,12 +223,17 @@ def build_financial_response(fm: FinancialMonthly) -> FinancialDataResponse:
 
 async def get_or_create_actual(
     db: AsyncSession,
-    company_id: UUID,
+    company_id: str,
     year: int,
     month: int,
-    user_id: UUID
-) -> FinancialMonthly:
-    """Get existing or create new actual financial entry"""
+    user_id: str
+) -> Optional[FinancialMonthly]:
+    """Get existing actual entry from the view, creating FinancialFact rows if needed.
+
+    FinancialMonthly maps to a VIEW (financial_monthly_view) which is read-only.
+    Writes must go through the underlying FinancialFact table.
+    """
+    # Check if actual row already exists in the view
     result = await db.execute(
         select(FinancialMonthly).where(
             and_(
@@ -230,45 +245,58 @@ async def get_or_create_actual(
         )
     )
     existing = result.scalar_one_or_none()
-    
     if existing:
         return existing
-    
-    # Create new
-    actual = FinancialMonthly(
-        company_id=company_id,
-        year=year,
-        month=month,
-        scenario=Scenario.ACTUAL,
-        exchange_rate=1.0,
-        revenue_lkr=0,
-        gp=0,
-        other_income=0,
-        personal_exp=0,
-        admin_exp=0,
-        selling_exp=0,
-        finance_exp=0,
-        depreciation=0,
-        provisions=0,
-        exchange_gl=0,
-        non_ops_exp=0,
-        non_ops_income=0,
-        imported_by=user_id,
-        imported_at=datetime.utcnow(),
-        version=1,
-        created_at=datetime.utcnow()
+
+    # Look up period_id
+    period_result = await db.execute(
+        select(PeriodMaster).where(
+            and_(PeriodMaster.year == year, PeriodMaster.month == month)
+        )
     )
-    db.add(actual)
+    period = period_result.scalar_one_or_none()
+    if not period:
+        return None
+
+    # Create zero-value FinancialFact rows for all metrics
+    for mid in [
+        MetricID.REVENUE, MetricID.GP, MetricID.GP_MARGIN,
+        MetricID.OTHER_INCOME, MetricID.PERSONAL_EXP, MetricID.ADMIN_EXP,
+        MetricID.SELLING_EXP, MetricID.FINANCE_EXP, MetricID.DEPRECIATION,
+        MetricID.TOTAL_OVERHEAD, MetricID.PROVISIONS, MetricID.EXCHANGE_VARIANCE,
+        MetricID.PBT_BEFORE_NON_OPS, MetricID.PBT_AFTER_NON_OPS,
+        MetricID.NON_OPS_EXP, MetricID.NON_OPS_INCOME,
+        MetricID.NP_MARGIN, MetricID.EBIT, MetricID.EBITDA,
+    ]:
+        db.add(FinancialFact(
+            company_id=company_id,
+            period_id=period.period_id,
+            metric_id=int(mid),
+            actual_budget=Scenario.ACTUAL.value,
+            amount=0,
+        ))
     await db.flush()
-    return actual
+
+    # Read back from view
+    view_result = await db.execute(
+        select(FinancialMonthly).where(
+            and_(
+                FinancialMonthly.company_id == company_id,
+                FinancialMonthly.year == year,
+                FinancialMonthly.month == month,
+                FinancialMonthly.scenario == Scenario.ACTUAL
+            )
+        )
+    )
+    return view_result.scalar_one_or_none()
 
 
 async def get_or_create_report(
     db: AsyncSession,
-    company_id: UUID,
+    company_id: str,
     year: int,
     month: int,
-    user_id: UUID
+    user_id: str
 ) -> Report:
     """Get existing or create new draft report"""
     result = await db.execute(
@@ -330,12 +358,21 @@ async def get_my_companies(
             select(Company).where(Company.id.in_(accessible))
         )
         companies = result.scalars().all()
+
+    cluster_ids = {c.cluster_id for c in companies if getattr(c, "cluster_id", None)}
+    cluster_name_by_id = {}
+    if cluster_ids:
+        cluster_result = await db.execute(
+            select(Cluster.id, Cluster.name).where(Cluster.id.in_(cluster_ids))
+        )
+        cluster_name_by_id = {cid: cname for cid, cname in cluster_result.all()}
     
     return [
         CompanyInfo(
             id=str(c.id),
             name=c.name,
             code=c.code,
+            cluster_name=cluster_name_by_id.get(c.cluster_id),
             fy_start_month=c.fy_start_month if hasattr(c, 'fy_start_month') else 1,
             currency=c.currency if hasattr(c, 'currency') else "LKR"
         )
@@ -355,7 +392,7 @@ async def get_available_periods(
     Shows which periods have budget, actual, and report status.
     """
     # Verify access
-    if not await can_access_company(db, user, UUID(company_id)):
+    if not await can_access_company(db, user, company_id):
         raise HTTPException(status_code=403, detail="Access denied to this company")
     
     # Default to current year and previous year
@@ -369,7 +406,7 @@ async def get_available_periods(
         budget_result = await db.execute(
             select(FinancialMonthly.id).where(
                 and_(
-                    FinancialMonthly.company_id == UUID(company_id),
+                    FinancialMonthly.company_id == company_id,
                     FinancialMonthly.year == year,
                     FinancialMonthly.month == month,
                     FinancialMonthly.scenario == Scenario.BUDGET
@@ -382,7 +419,7 @@ async def get_available_periods(
         actual_result = await db.execute(
             select(FinancialMonthly.id).where(
                 and_(
-                    FinancialMonthly.company_id == UUID(company_id),
+                    FinancialMonthly.company_id == company_id,
                     FinancialMonthly.year == year,
                     FinancialMonthly.month == month,
                     FinancialMonthly.scenario == Scenario.ACTUAL
@@ -395,7 +432,7 @@ async def get_available_periods(
         report_result = await db.execute(
             select(Report).where(
                 and_(
-                    Report.company_id == UUID(company_id),
+                    Report.company_id == company_id,
                     Report.year == year,
                     Report.month == month
                 )
@@ -484,13 +521,13 @@ async def create_or_get_report(
 ):
     """Create a new draft report or get existing for a period"""
     # Verify access
-    if not await can_access_company(db, user, UUID(request.company_id)):
+    if not await can_access_company(db, user, request.company_id):
         raise HTTPException(status_code=403, detail="Access denied to this company")
     
     # Get or create
     report = await get_or_create_report(
         db,
-        UUID(request.company_id),
+        request.company_id,
         request.year,
         request.month,
         user.id
@@ -499,7 +536,7 @@ async def create_or_get_report(
     # Also ensure actual entry exists
     await get_or_create_actual(
         db,
-        UUID(request.company_id),
+        request.company_id,
         request.year,
         request.month,
         user.id
@@ -538,7 +575,7 @@ async def get_report_detail(
     """Get full report detail with actual and budget data"""
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -580,7 +617,7 @@ async def get_report_detail(
     
     # Get comments
     comments_result = await db.execute(
-        select(ReportComment).where(ReportComment.report_id == UUID(report_id))
+        select(ReportComment).where(ReportComment.report_id == report_id)
         .order_by(ReportComment.created_at)
     )
     comments = comments_result.scalars().all()
@@ -631,7 +668,7 @@ async def save_actual_financials(
     """
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -649,35 +686,93 @@ async def save_actual_financials(
             detail=f"Cannot edit report in {report.status.value} status. Report must be in draft or rejected status."
         )
     
-    # Get or create actual
-    actual = await get_or_create_actual(
-        db, report.company_id, report.year, report.month, user.id
+    # Look up period_id
+    period_result = await db.execute(
+        select(PeriodMaster).where(
+            and_(PeriodMaster.year == report.year, PeriodMaster.month == report.month)
+        )
     )
-    
-    # Update all fields
-    actual.exchange_rate = data.exchange_rate
-    actual.revenue_lkr = data.revenue_lkr
-    actual.gp = data.gp
-    actual.other_income = data.other_income
-    actual.personal_exp = data.personal_exp
-    actual.admin_exp = data.admin_exp
-    actual.selling_exp = data.selling_exp
-    actual.finance_exp = data.finance_exp
-    actual.depreciation = data.depreciation
-    actual.provisions = data.provisions
-    actual.exchange_gl = data.exchange_gl
-    actual.non_ops_exp = data.non_ops_exp
-    actual.non_ops_income = data.non_ops_income
-    actual.updated_at = datetime.utcnow()
-    
+    period = period_result.scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    # Map input fields to metric IDs and upsert into FinancialFact
+    metric_values = {
+        MetricID.REVENUE: data.revenue_lkr,
+        MetricID.GP: data.gp,
+        MetricID.OTHER_INCOME: data.other_income,
+        MetricID.PERSONAL_EXP: data.personal_exp,
+        MetricID.ADMIN_EXP: data.admin_exp,
+        MetricID.SELLING_EXP: data.selling_exp,
+        MetricID.FINANCE_EXP: data.finance_exp,
+        MetricID.DEPRECIATION: data.depreciation,
+        MetricID.PROVISIONS: data.provisions,
+        MetricID.EXCHANGE_VARIANCE: data.exchange_gl,
+        MetricID.NON_OPS_EXP: data.non_ops_exp,
+        MetricID.NON_OPS_INCOME: data.non_ops_income,
+    }
+
+    # Compute derived metrics
+    total_overhead = data.personal_exp + data.admin_exp + data.selling_exp + data.finance_exp + data.depreciation
+    pbt_before = (data.gp + data.other_income) - total_overhead + data.provisions + data.exchange_gl
+    pbt_after = pbt_before + data.non_ops_income - data.non_ops_exp
+    gp_margin = (data.gp / data.revenue_lkr * 100) if data.revenue_lkr != 0 else 0
+    np_margin = (pbt_before / data.revenue_lkr * 100) if data.revenue_lkr != 0 else 0
+    ebit = pbt_before + data.finance_exp
+    ebitda = ebit + data.depreciation
+
+    metric_values[MetricID.GP_MARGIN] = gp_margin
+    metric_values[MetricID.TOTAL_OVERHEAD] = total_overhead
+    metric_values[MetricID.PBT_BEFORE_NON_OPS] = pbt_before
+    metric_values[MetricID.PBT_AFTER_NON_OPS] = pbt_after
+    metric_values[MetricID.NP_MARGIN] = np_margin
+    metric_values[MetricID.EBIT] = ebit
+    metric_values[MetricID.EBITDA] = ebitda
+
+    for metric_id, amount in metric_values.items():
+        existing_fact = await db.execute(
+            select(FinancialFact).where(
+                and_(
+                    FinancialFact.company_id == report.company_id,
+                    FinancialFact.period_id == period.period_id,
+                    FinancialFact.metric_id == int(metric_id),
+                    FinancialFact.actual_budget == Scenario.ACTUAL.value,
+                )
+            )
+        )
+        fact = existing_fact.scalar_one_or_none()
+        if fact:
+            fact.amount = amount
+        else:
+            db.add(FinancialFact(
+                company_id=report.company_id,
+                period_id=period.period_id,
+                metric_id=int(metric_id),
+                actual_budget=Scenario.ACTUAL.value,
+                amount=amount,
+            ))
+
     # Update FO comment on report
     if data.fo_comment is not None:
         report.fo_comment = data.fo_comment
-        report.updated_at = datetime.utcnow()
-    
+
     await db.commit()
-    await db.refresh(actual)
-    
+
+    # Read back from the view
+    view_result = await db.execute(
+        select(FinancialMonthly).where(
+            and_(
+                FinancialMonthly.company_id == report.company_id,
+                FinancialMonthly.year == report.year,
+                FinancialMonthly.month == report.month,
+                FinancialMonthly.scenario == Scenario.ACTUAL
+            )
+        )
+    )
+    actual = view_result.scalar_one_or_none()
+    if not actual:
+        raise HTTPException(status_code=500, detail="Failed to read back saved data")
+
     return build_financial_response(actual)
 
 
@@ -697,7 +792,7 @@ async def submit_report(
     """
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -778,13 +873,13 @@ async def get_budget_for_period(
 ):
     """Get budget data for a specific period (for comparison)"""
     # Verify access
-    if not await can_access_company(db, user, UUID(company_id)):
+    if not await can_access_company(db, user, company_id):
         raise HTTPException(status_code=403, detail="Access denied to this company")
     
     result = await db.execute(
         select(FinancialMonthly).where(
             and_(
-                FinancialMonthly.company_id == UUID(company_id),
+                FinancialMonthly.company_id == company_id,
                 FinancialMonthly.year == year,
                 FinancialMonthly.month == month,
                 FinancialMonthly.scenario == Scenario.BUDGET
@@ -797,3 +892,879 @@ async def get_budget_for_period(
         return None
     
     return build_financial_response(budget)
+
+
+# ============ NEW ENDPOINTS - DB-CONNECTED DROPDOWNS & DATA ENTRY ============
+
+# --- Request/Response Models ---
+
+class ClusterInfo(BaseModel):
+    cluster_id: str
+    cluster_name: str
+
+
+class UserCompanyInfo(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_id: str
+    fin_year_start_month: Optional[int] = None
+
+
+class PeriodCheckResponse(BaseModel):
+    allowed: bool
+    message: str
+    end_date: Optional[str] = None
+    days_exceeded: Optional[int] = None
+
+
+class BudgetFactResponse(BaseModel):
+    """Budget amounts keyed by metric_id from financial_fact"""
+    company_id: str
+    period_id: int
+    year: int
+    month: int
+    metrics: Dict[int, float]  # metric_id -> amount
+
+
+class SaveActualsRequest(BaseModel):
+    """Request to save actual data to financial_fact + financial_workflow"""
+    company_id: str
+    year: int
+    month: int
+    # Metric values (metric_id -> amount)
+    revenue: float = 0
+    gp: float = 0
+    other_income: float = 0
+    personal_exp: float = 0
+    admin_exp: float = 0
+    selling_exp: float = 0
+    finance_exp: float = 0
+    depreciation: float = 0
+    provisions: float = 0
+    exchange_gl: float = 0
+    non_ops_exp: float = 0
+    non_ops_income: float = 0
+    comment: Optional[str] = None
+    is_submit: bool = False  # True = Submit (status_id=2), False = Save Draft (status_id=1)
+
+
+# --- Metric field mapping ---
+METRIC_FIELD_MAP = {
+    MetricID.REVENUE: "revenue",
+    MetricID.GP: "gp",
+    MetricID.OTHER_INCOME: "other_income",
+    MetricID.PERSONAL_EXP: "personal_exp",
+    MetricID.ADMIN_EXP: "admin_exp",
+    MetricID.SELLING_EXP: "selling_exp",
+    MetricID.FINANCE_EXP: "finance_exp",
+    MetricID.DEPRECIATION: "depreciation",
+    MetricID.PROVISIONS: "provisions",
+    MetricID.EXCHANGE_VARIANCE: "exchange_gl",
+    MetricID.NON_OPS_EXP: "non_ops_exp",
+    MetricID.NON_OPS_INCOME: "non_ops_income",
+}
+
+
+# --- 1. Cluster Dropdown ---
+
+@router.get("/user-clusters", response_model=List[ClusterInfo])
+async def get_user_clusters(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get clusters for the logged-in user.
+    Joins: user_master -> user_company_role_map -> company_master -> cluster_master
+    Filters: user_id match, is_active=True in all tables.
+    """
+    stmt = (
+        select(
+            ClusterMaster.cluster_id,
+            ClusterMaster.cluster_name,
+        )
+        .select_from(UserMaster)
+        .join(
+            UserCompanyRoleMap,
+            and_(
+                UserMaster.user_id == UserCompanyRoleMap.user_id,
+                UserCompanyRoleMap.is_active == True,
+            ),
+        )
+        .join(
+            CompanyMaster,
+            and_(
+                UserCompanyRoleMap.company_id == CompanyMaster.company_id,
+                CompanyMaster.is_active == True,
+            ),
+        )
+        .join(
+            ClusterMaster,
+            and_(
+                CompanyMaster.cluster_id == ClusterMaster.cluster_id,
+                ClusterMaster.is_active == True,
+            ),
+        )
+        .where(
+            and_(
+                UserMaster.user_id == user.user_id,
+                UserMaster.is_active == True,
+            )
+        )
+        .distinct()
+        .order_by(ClusterMaster.cluster_name)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        ClusterInfo(cluster_id=r.cluster_id, cluster_name=r.cluster_name)
+        for r in rows
+    ]
+
+
+# --- 2. Company Dropdown (filtered by cluster) ---
+
+@router.get("/user-companies", response_model=List[UserCompanyInfo])
+async def get_user_companies(
+    cluster_id: Optional[str] = None,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get companies for the logged-in user, optionally filtered by cluster.
+    Joins: user_master -> user_company_role_map -> company_master
+    Filters: user_id match, is_active=True in user_master, user_company_role_map, company_master.
+    """
+    stmt = (
+        select(
+            CompanyMaster.company_id,
+            CompanyMaster.company_name,
+            CompanyMaster.cluster_id,
+            CompanyMaster.fin_year_start_month,
+        )
+        .select_from(UserMaster)
+        .join(
+            UserCompanyRoleMap,
+            and_(
+                UserMaster.user_id == UserCompanyRoleMap.user_id,
+                UserCompanyRoleMap.is_active == True,
+            ),
+        )
+        .join(
+            CompanyMaster,
+            and_(
+                UserCompanyRoleMap.company_id == CompanyMaster.company_id,
+                CompanyMaster.is_active == True,
+            ),
+        )
+        .where(
+            and_(
+                UserMaster.user_id == user.user_id,
+                UserMaster.is_active == True,
+            )
+        )
+    )
+
+    if cluster_id:
+        stmt = stmt.where(CompanyMaster.cluster_id == cluster_id)
+
+    stmt = stmt.distinct().order_by(CompanyMaster.company_name)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        UserCompanyInfo(
+            company_id=r.company_id,
+            company_name=r.company_name,
+            cluster_id=r.cluster_id,
+            fin_year_start_month=r.fin_year_start_month,
+        )
+        for r in rows
+    ]
+
+
+# --- 3. Period Warning (22-day rule) ---
+
+@router.get("/check-period", response_model=PeriodCheckResponse)
+async def check_period_entry(
+    year: int,
+    month: int,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Check if data entry is allowed for a given month/year.
+    Looks up period_master for (month, year), gets end_date.
+    If current_date - end_date > 22 days, data entry is NOT allowed.
+    """
+    stmt = select(PeriodMaster).where(
+        and_(
+            PeriodMaster.month == month,
+            PeriodMaster.year == year,
+        )
+    )
+    result = await db.execute(stmt)
+    period = result.scalar_one_or_none()
+
+    if not period:
+        return PeriodCheckResponse(
+            allowed=False,
+            message=f"No period found for {month}/{year}",
+        )
+
+    today = date.today()
+    end_dt = period.end_date
+    if isinstance(end_dt, datetime):
+        end_dt = end_dt.date()
+
+    delta = (today - end_dt).days
+
+    if delta > 22:
+        return PeriodCheckResponse(
+            allowed=False,
+            message="Cannot enter the data for this period. The 22-day window after the period end date has been exceeded.",
+            end_date=str(end_dt),
+            days_exceeded=delta - 22,
+        )
+
+    return PeriodCheckResponse(
+        allowed=True,
+        message="Data entry is allowed for this period.",
+        end_date=str(end_dt),
+        days_exceeded=0,
+    )
+
+
+# --- 4. Budget from financial_fact ---
+
+@router.get("/budget-data/{company_id}/{year}/{month}", response_model=Optional[BudgetFactResponse])
+async def get_budget_from_fact(
+    company_id: str,
+    year: int,
+    month: int,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get budget data from financial_fact table.
+    Joins period_master + financial_fact + company_master.
+    Filters: company_id, year/month -> period_id, actual_budget='budget'.
+    Returns metric_id -> amount mapping.
+    """
+    if not await can_access_company(db, user, company_id):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    # Get period_id
+    period_stmt = select(PeriodMaster).where(
+        and_(PeriodMaster.year == year, PeriodMaster.month == month)
+    )
+    period_result = await db.execute(period_stmt)
+    period = period_result.scalar_one_or_none()
+
+    if not period:
+        return None
+
+    # Get budget rows from financial_fact
+    fact_stmt = select(FinancialFact).where(
+        and_(
+            FinancialFact.company_id == company_id,
+            FinancialFact.period_id == period.period_id,
+            FinancialFact.actual_budget == "budget",
+        )
+    )
+    fact_result = await db.execute(fact_stmt)
+    facts = fact_result.scalars().all()
+
+    if not facts:
+        return None
+
+    metrics = {}
+    for f in facts:
+        metrics[f.metric_id] = float(f.amount) if f.amount is not None else 0.0
+
+    return BudgetFactResponse(
+        company_id=company_id,
+        period_id=period.period_id,
+        year=year,
+        month=month,
+        metrics=metrics,
+    )
+
+
+# --- 5. Save Actuals to financial_fact + financial_workflow ---
+
+@router.post("/save-actuals")
+async def save_actual_data(
+    data: SaveActualsRequest,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Save actual data to financial_fact table and update financial_workflow.
+
+    For each metric field, upserts into financial_fact with actual_budget='actual'.
+    Updates financial_workflow:
+      - status_id = 2 (Submitted) if is_submit=True, else 1 (Draft)
+      - submitted_by = current user email
+      - submitted_date = current datetime
+      - actual_comment = user comment
+    """
+    if not await can_access_company(db, user, data.company_id):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    # Get period_id
+    period_stmt = select(PeriodMaster).where(
+        and_(PeriodMaster.year == data.year, PeriodMaster.month == data.month)
+    )
+    period_result = await db.execute(period_stmt)
+    period = period_result.scalar_one_or_none()
+
+    if not period:
+        raise HTTPException(status_code=404, detail=f"No period found for {data.month}/{data.year}")
+
+    # Build metric values from request fields
+    metric_values = {
+        MetricID.REVENUE: data.revenue,
+        MetricID.GP: data.gp,
+        MetricID.OTHER_INCOME: data.other_income,
+        MetricID.PERSONAL_EXP: data.personal_exp,
+        MetricID.ADMIN_EXP: data.admin_exp,
+        MetricID.SELLING_EXP: data.selling_exp,
+        MetricID.FINANCE_EXP: data.finance_exp,
+        MetricID.DEPRECIATION: data.depreciation,
+        MetricID.PROVISIONS: data.provisions,
+        MetricID.EXCHANGE_VARIANCE: data.exchange_gl,
+        MetricID.NON_OPS_EXP: data.non_ops_exp,
+        MetricID.NON_OPS_INCOME: data.non_ops_income,
+    }
+
+    # Also calculate and store derived metrics
+    total_overhead = data.personal_exp + data.admin_exp + data.selling_exp + data.finance_exp + data.depreciation
+    pbt_before = (data.gp + data.other_income) - total_overhead + data.provisions + data.exchange_gl
+    pbt_after = pbt_before + data.non_ops_income - data.non_ops_exp
+    gp_margin = (data.gp / data.revenue * 100) if data.revenue != 0 else 0
+    np_margin = (pbt_before / data.revenue * 100) if data.revenue != 0 else 0
+    ebit = pbt_before + data.finance_exp
+    ebitda = ebit + data.depreciation
+
+    metric_values[MetricID.GP_MARGIN] = gp_margin
+    metric_values[MetricID.TOTAL_OVERHEAD] = total_overhead
+    metric_values[MetricID.PBT_BEFORE_NON_OPS] = pbt_before
+    metric_values[MetricID.PBT_AFTER_NON_OPS] = pbt_after
+    metric_values[MetricID.NP_MARGIN] = np_margin
+    metric_values[MetricID.EBIT] = ebit
+    metric_values[MetricID.EBITDA] = ebitda
+
+    # Upsert each metric into financial_fact
+    for metric_id, amount in metric_values.items():
+        existing_stmt = select(FinancialFact).where(
+            and_(
+                FinancialFact.company_id == data.company_id,
+                FinancialFact.period_id == period.period_id,
+                FinancialFact.metric_id == int(metric_id),
+                FinancialFact.actual_budget == "actual",
+            )
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            existing.amount = amount
+        else:
+            new_fact = FinancialFact(
+                company_id=data.company_id,
+                period_id=period.period_id,
+                metric_id=int(metric_id),
+                actual_budget="actual",
+                amount=amount,
+            )
+            db.add(new_fact)
+
+    # Upsert financial_workflow
+    wf_stmt = select(FinancialWorkflow).where(
+        and_(
+            FinancialWorkflow.company_id == data.company_id,
+            FinancialWorkflow.period_id == period.period_id,
+        )
+    )
+    wf_result = await db.execute(wf_stmt)
+    workflow = wf_result.scalar_one_or_none()
+
+    now = datetime.utcnow()
+    target_status = StatusID.SUBMITTED if data.is_submit else StatusID.DRAFT
+
+    if workflow:
+        workflow.status_id = int(target_status)
+        workflow.submitted_by = user.user_email
+        workflow.submitted_date = now
+        if data.comment is not None:
+            workflow.actual_comment = data.comment
+    else:
+        workflow = FinancialWorkflow(
+            company_id=data.company_id,
+            period_id=period.period_id,
+            status_id=int(target_status),
+            submitted_by=user.user_email,
+            submitted_date=now,
+            actual_comment=data.comment,
+        )
+        db.add(workflow)
+
+    await db.commit()
+
+    action = "submitted" if data.is_submit else "saved as draft"
+    return {
+        "success": True,
+        "message": f"Actual data {action} successfully",
+        "company_id": data.company_id,
+        "period_id": period.period_id,
+        "status_id": int(target_status),
+        "metrics_saved": len(metric_values),
+    }
+
+
+# ============================================================
+# ACTUAL ENTRY API CONTRACT (v2)
+# Exact request/response models for frontend integration
+# ============================================================
+
+
+class ActualEntryClusterOption(BaseModel):
+    cluster_id: str
+    cluster_name: str
+
+
+class ActualEntryClusterDropdownResponse(BaseModel):
+    items: List[ActualEntryClusterOption]
+
+
+class ActualEntryCompanyOption(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_id: str
+
+
+class ActualEntryCompanyDropdownResponse(BaseModel):
+    items: List[ActualEntryCompanyOption]
+
+
+class ActualEntryBudgetFetchResponse(BaseModel):
+    company_id: str
+    company_name: str
+    period_id: int
+    year: int
+    month: int
+    metric_id: int
+    actual_budget: Literal["BUDGET"] = "BUDGET"
+    amount: Optional[Decimal] = None
+
+
+class ActualEntryMetricAmountIn(BaseModel):
+    metric_id: int = Field(..., ge=1)
+    amount: Decimal
+
+
+class ActualEntrySaveRequest(BaseModel):
+    company_id: str = Field(min_length=1, max_length=20)
+    year: int = Field(..., ge=2000, le=2100)
+    month: int = Field(..., ge=1, le=12)
+    metrics: List[ActualEntryMetricAmountIn] = Field(min_length=1)
+    actual_comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ActualEntrySaveDraftResponse(BaseModel):
+    company_id: str
+    period_id: int
+    status_id: Literal[1]
+    status_name: Literal["DRAFT"]
+    saved_metrics: int
+    updated_at: datetime
+
+
+class ActualEntrySubmitResponse(BaseModel):
+    company_id: str
+    period_id: int
+    status_id: Literal[2]
+    status_name: Literal["SUBMITTED"]
+    submitted_by: str
+    submitted_date: datetime
+    saved_metrics: int
+
+
+def _ensure_finance_officer_or_admin(user: UserMaster) -> None:
+    allowed = {int(RoleID.FINANCIAL_OFFICER), int(RoleID.SYSTEM_ADMIN)}
+    if getattr(user, "current_role_id", None) not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Finance Officer or Admin access required",
+        )
+
+
+async def _ensure_fo_company_access(
+    db: AsyncSession,
+    user: UserMaster,
+    company_id: str,
+) -> None:
+    stmt = (
+        select(UserCompanyRoleMap.company_id)
+        .join(
+            CompanyMaster,
+            and_(
+                UserCompanyRoleMap.company_id == CompanyMaster.company_id,
+                CompanyMaster.is_active == True,
+            ),
+        )
+        .where(
+            and_(
+                UserCompanyRoleMap.user_id == user.user_id,
+                UserCompanyRoleMap.company_id == company_id,
+                UserCompanyRoleMap.is_active == True,
+                UserCompanyRoleMap.role_id.in_(
+                    [int(RoleID.FINANCIAL_OFFICER), int(RoleID.SYSTEM_ADMIN)]
+                ),
+            )
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied to company {company_id}",
+        )
+
+
+async def _get_period_with_guard(
+    db: AsyncSession,
+    year: int,
+    month: int,
+) -> PeriodMaster:
+    period_result = await db.execute(
+        select(PeriodMaster).where(
+            and_(
+                PeriodMaster.year == year,
+                PeriodMaster.month == month,
+            )
+        )
+    )
+    period = period_result.scalar_one_or_none()
+    if not period:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No period found for month={month}, year={year}",
+        )
+
+    days_after_end = (date.today() - period.end_date).days
+    if days_after_end > 22:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot enter the data this period",
+        )
+
+    return period
+
+
+async def _save_actual_entry(
+    db: AsyncSession,
+    user: UserMaster,
+    payload: ActualEntrySaveRequest,
+    target_status_id: int,
+) -> tuple[int, int, datetime]:
+    _ensure_finance_officer_or_admin(user)
+    await _ensure_fo_company_access(db, user, payload.company_id)
+    period = await _get_period_with_guard(db, payload.year, payload.month)
+
+    metric_values = {int(item.metric_id): item.amount for item in payload.metrics}
+    if not metric_values:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one metric value is required",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        for metric_id, amount in metric_values.items():
+            upsert_fact = (
+                insert(FinancialFact)
+                .values(
+                    company_id=payload.company_id,
+                    period_id=period.period_id,
+                    metric_id=metric_id,
+                    actual_budget="ACTUAL",
+                    amount=amount,
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        FinancialFact.company_id,
+                        FinancialFact.period_id,
+                        FinancialFact.metric_id,
+                        FinancialFact.actual_budget,
+                    ],
+                    set_={"amount": amount},
+                )
+            )
+            await db.execute(upsert_fact)
+
+        workflow_insert = insert(FinancialWorkflow).values(
+            company_id=payload.company_id,
+            period_id=period.period_id,
+            status_id=target_status_id,
+            submitted_by=user.user_email if target_status_id == int(StatusID.SUBMITTED) else None,
+            submitted_date=now if target_status_id == int(StatusID.SUBMITTED) else None,
+            actual_comment=payload.actual_comment,
+        )
+
+        workflow_updates = {
+            "status_id": target_status_id,
+            "actual_comment": payload.actual_comment,
+        }
+        if target_status_id == int(StatusID.SUBMITTED):
+            workflow_updates["submitted_by"] = user.user_email
+            workflow_updates["submitted_date"] = now
+
+        workflow_upsert = workflow_insert.on_conflict_do_update(
+            index_elements=[FinancialWorkflow.company_id, FinancialWorkflow.period_id],
+            set_=workflow_updates,
+        )
+        await db.execute(workflow_upsert)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    return period.period_id, len(metric_values), now
+
+
+@router.get(
+    "/actual-entry/clusters",
+    response_model=ActualEntryClusterDropdownResponse,
+)
+async def get_actual_entry_clusters(
+    user: UserMaster = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_finance_officer_or_admin(user)
+
+    stmt = (
+        select(ClusterMaster.cluster_id, ClusterMaster.cluster_name)
+        .select_from(UserMaster)
+        .join(
+            UserCompanyRoleMap,
+            and_(
+                UserMaster.user_id == UserCompanyRoleMap.user_id,
+                UserCompanyRoleMap.is_active == True,
+                UserCompanyRoleMap.role_id.in_(
+                    [int(RoleID.FINANCIAL_OFFICER), int(RoleID.SYSTEM_ADMIN)]
+                ),
+            ),
+        )
+        .join(
+            CompanyMaster,
+            and_(
+                UserCompanyRoleMap.company_id == CompanyMaster.company_id,
+                CompanyMaster.is_active == True,
+            ),
+        )
+        .join(
+            ClusterMaster,
+            and_(
+                CompanyMaster.cluster_id == ClusterMaster.cluster_id,
+                ClusterMaster.is_active == True,
+            ),
+        )
+        .where(
+            and_(
+                UserMaster.user_id == user.user_id,
+                UserMaster.is_active == True,
+            )
+        )
+        .distinct()
+        .order_by(ClusterMaster.cluster_name)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    return ActualEntryClusterDropdownResponse(
+        items=[
+            ActualEntryClusterOption(
+                cluster_id=row.cluster_id,
+                cluster_name=row.cluster_name,
+            )
+            for row in rows
+        ]
+    )
+
+
+@router.get(
+    "/actual-entry/companies",
+    response_model=ActualEntryCompanyDropdownResponse,
+)
+async def get_actual_entry_companies(
+    cluster_id: Optional[str] = None,
+    user: UserMaster = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_finance_officer_or_admin(user)
+
+    stmt = (
+        select(
+            CompanyMaster.company_id,
+            CompanyMaster.company_name,
+            CompanyMaster.cluster_id,
+        )
+        .select_from(UserMaster)
+        .join(
+            UserCompanyRoleMap,
+            and_(
+                UserMaster.user_id == UserCompanyRoleMap.user_id,
+                UserCompanyRoleMap.is_active == True,
+                UserCompanyRoleMap.role_id.in_(
+                    [int(RoleID.FINANCIAL_OFFICER), int(RoleID.SYSTEM_ADMIN)]
+                ),
+            ),
+        )
+        .join(
+            CompanyMaster,
+            and_(
+                UserCompanyRoleMap.company_id == CompanyMaster.company_id,
+                CompanyMaster.is_active == True,
+            ),
+        )
+        .where(
+            and_(
+                UserMaster.user_id == user.user_id,
+                UserMaster.is_active == True,
+            )
+        )
+    )
+    if cluster_id:
+        stmt = stmt.where(CompanyMaster.cluster_id == cluster_id)
+
+    stmt = stmt.distinct().order_by(CompanyMaster.company_name)
+    result = await db.execute(stmt)
+    rows = result.all()
+    return ActualEntryCompanyDropdownResponse(
+        items=[
+            ActualEntryCompanyOption(
+                company_id=row.company_id,
+                company_name=row.company_name,
+                cluster_id=row.cluster_id,
+            )
+            for row in rows
+        ]
+    )
+
+
+@router.get(
+    "/actual-entry/budget",
+    response_model=ActualEntryBudgetFetchResponse,
+)
+async def get_actual_entry_budget(
+    company_id: str,
+    year: int,
+    month: int,
+    metric_id: int = 1,
+    user: UserMaster = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_finance_officer_or_admin(user)
+    await _ensure_fo_company_access(db, user, company_id)
+
+    stmt = (
+        select(
+            FinancialFact.company_id,
+            CompanyMaster.company_name,
+            FinancialFact.period_id,
+            PeriodMaster.year,
+            PeriodMaster.month,
+            FinancialFact.metric_id,
+            FinancialFact.actual_budget,
+            FinancialFact.amount,
+        )
+        .join(PeriodMaster, FinancialFact.period_id == PeriodMaster.period_id)
+        .join(CompanyMaster, FinancialFact.company_id == CompanyMaster.company_id)
+        .where(
+            and_(
+                FinancialFact.company_id == company_id,
+                PeriodMaster.year == year,
+                PeriodMaster.month == month,
+                FinancialFact.metric_id == metric_id,
+                func.upper(FinancialFact.actual_budget) == "BUDGET",
+                CompanyMaster.is_active == True,
+            )
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Budget data not found for the selected company/period/metric",
+        )
+
+    return ActualEntryBudgetFetchResponse(
+        company_id=row.company_id,
+        company_name=row.company_name,
+        period_id=row.period_id,
+        year=row.year,
+        month=row.month,
+        metric_id=row.metric_id,
+        actual_budget="BUDGET",
+        amount=row.amount,
+    )
+
+
+@router.post(
+    "/actual-entry/draft",
+    response_model=ActualEntrySaveDraftResponse,
+)
+async def save_actual_entry_draft(
+    payload: ActualEntrySaveRequest,
+    user: UserMaster = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    period_id, saved_metrics, updated_at = await _save_actual_entry(
+        db=db,
+        user=user,
+        payload=payload,
+        target_status_id=int(StatusID.DRAFT),
+    )
+
+    return ActualEntrySaveDraftResponse(
+        company_id=payload.company_id,
+        period_id=period_id,
+        status_id=1,
+        status_name="DRAFT",
+        saved_metrics=saved_metrics,
+        updated_at=updated_at,
+    )
+
+
+@router.post(
+    "/actual-entry/submit",
+    response_model=ActualEntrySubmitResponse,
+)
+async def submit_actual_entry(
+    payload: ActualEntrySaveRequest,
+    user: UserMaster = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    period_id, saved_metrics, submitted_at = await _save_actual_entry(
+        db=db,
+        user=user,
+        payload=payload,
+        target_status_id=int(StatusID.SUBMITTED),
+    )
+
+    return ActualEntrySubmitResponse(
+        company_id=payload.company_id,
+        period_id=period_id,
+        status_id=2,
+        status_name="SUBMITTED",
+        submitted_by=user.user_email,
+        submitted_date=submitted_at,
+        saved_metrics=saved_metrics,
+    )

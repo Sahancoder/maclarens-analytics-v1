@@ -9,15 +9,15 @@
  * Uses Next.js rewrites to proxy /api/* to backend.
  */
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Configuration
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 const API_BASE = '/api';
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Common Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface ApiResponse<T> {
   data: T | null;
@@ -32,9 +32,9 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Auth Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface User {
   id: string;
@@ -57,9 +57,9 @@ export interface LoginResponse {
   user: User;
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Financial Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface FinancialMetric {
   name: string;
@@ -115,9 +115,9 @@ export interface BudgetComparison {
   achievement_pct: number | null;
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Company & Cluster Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface Company {
   id: string;
@@ -138,9 +138,164 @@ export interface Cluster {
   company_count?: number;
 }
 
-// ─────────────────────────────────────────────────────────────
+export interface AdminDashboardStats {
+  total_users: number;
+  active_companies: number;
+  total_clusters: number;
+  pending_reports: number;
+  new_users_this_month: number;
+}
+
+export interface AdminActivity {
+  id: string;
+  timestamp: string | null;
+  user_id: string | null;
+  user_email: string | null;
+  user_name: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  details: string | null;
+}
+
+export interface AdminActivityList {
+  activities: AdminActivity[];
+  total: number;
+}
+
+export interface AdminRole {
+  role_id: number;
+  role_name: string;
+}
+
+export interface AdminCluster {
+  cluster_id: string;
+  cluster_name: string;
+  is_active: boolean;
+  total_companies: number;
+  active_companies: number;
+  inactive_companies: number;
+  created_date?: string | null;
+}
+
+export interface AdminClusterList {
+  clusters: AdminCluster[];
+  total_clusters: number;
+  total_companies: number;
+  active_companies: number;
+  inactive_companies: number;
+}
+
+export interface AdminCompany {
+  company_id: string;
+  company_name: string;
+  cluster_id: string;
+  cluster_name: string | null;
+  fin_year_start_month: number | null;
+  is_active: boolean;
+  user_count: number;
+  created_date?: string | null;
+  modified_date?: string | null;
+}
+
+export interface AdminCompanyList {
+  companies: AdminCompany[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AdminUserRoleAssignment {
+  company_id: string;
+  company_name: string | null;
+  cluster_id: string | null;
+  cluster_name: string | null;
+  role_id: number;
+  role_name: string | null;
+  is_active: boolean;
+}
+
+export interface AdminUser {
+  user_id: string;
+  user_email: string;
+  first_name: string | null;
+  last_name: string | null;
+  is_active: boolean;
+  created_date?: string | null;
+  modified_date?: string | null;
+  roles: AdminUserRoleAssignment[];
+}
+
+export interface AdminUserList {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AdminAssignment {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  company_id: string;
+  company_name: string;
+  role_id: number;
+  role_name: string;
+  is_active: boolean;
+}
+
+export interface AdminAssignmentList {
+  assignments: AdminAssignment[];
+  total: number;
+}
+
+
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// Admin Dashboard Types
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+
+export interface SystemHealth {
+  overall_status: 'operational' | 'degraded' | 'down';
+  services: {
+    database: { status: string; response_time_ms?: number; error?: string };
+    redis: { status: string; response_time_ms?: number };
+    email_service: { status: string; provider?: string };
+    api: { status: string; version?: string };
+  };
+  timestamp: string;
+}
+
+export interface DashboardStats {
+  total_users: number;
+  active_companies: number;
+  total_clusters: number;
+  pending_reports: number;
+  system_health: SystemHealth;
+}
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  user_email: string;
+  user_name: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  details: string | null;
+}
+
+export interface ActivityResponse {
+  activities: ActivityLog[];
+  total: number;
+}
+
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Report Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+
 
 export interface Report {
   id: string;
@@ -180,9 +335,9 @@ export interface PendingReport extends Report {
   days_pending: number;
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Dashboard Types
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface StrategicOverview {
   mode: 'month' | 'ytd';
@@ -353,13 +508,13 @@ export interface PerformanceHierarchyResponse {
   clusters: HierarchyCluster[];
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Base Fetch Wrapper
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('auth_token');
+  return localStorage.getItem('mclarens_token');
 }
 
 async function apiFetch<T>(
@@ -404,9 +559,9 @@ async function apiFetch<T>(
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Auth API
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export const AuthAPI = {
   async login(email: string, password?: string): Promise<ApiResponse<LoginResponse>> {
@@ -417,7 +572,7 @@ export const AuthAPI = {
   },
 
   async devLogin(email: string): Promise<ApiResponse<LoginResponse>> {
-    return apiFetch<LoginResponse>('/auth/dev-login', {
+    return apiFetch<LoginResponse>('/auth/login/dev', {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
@@ -432,71 +587,233 @@ export const AuthAPI = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Admin API
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export const AdminAPI = {
-  // Clusters
-  async getClusters(): Promise<ApiResponse<Cluster[]>> {
-    return apiFetch<Cluster[]>('/admin/clusters');
+  async getDashboardStats(): Promise<ApiResponse<AdminDashboardStats>> {
+    return apiFetch<AdminDashboardStats>('/admin/dashboard');
   },
 
-  async createCluster(data: { name: string; code: string; description?: string }): Promise<ApiResponse<Cluster>> {
-    return apiFetch<Cluster>('/admin/clusters', {
+  async getRecentActivity(limit: number = 10): Promise<ApiResponse<AdminActivityList>> {
+    return apiFetch<AdminActivityList>(`/admin/activity?limit=${limit}`);
+  },
+
+  async getRoles(): Promise<ApiResponse<AdminRole[]>> {
+    return apiFetch<AdminRole[]>('/admin/roles');
+  },
+
+  async getClustersList(): Promise<ApiResponse<AdminClusterList>> {
+    return apiFetch<AdminClusterList>('/admin/clusters');
+  },
+
+  async getClusters(): Promise<ApiResponse<Cluster[]>> {
+    const response = await apiFetch<AdminClusterList>('/admin/clusters');
+    if (response.error || !response.data) {
+      return { data: null, error: response.error, status: response.status };
+    }
+    return {
+      data: response.data.clusters.map((c) => ({
+        id: c.cluster_id,
+        name: c.cluster_name,
+        code: c.cluster_id,
+        is_active: c.is_active,
+        company_count: c.total_companies,
+      })),
+      error: null,
+      status: response.status,
+    };
+  },
+
+  async createCluster(data: { cluster_name: string; is_active?: boolean }): Promise<ApiResponse<AdminCluster>> {
+    return apiFetch<AdminCluster>('/admin/clusters', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  async updateCluster(id: string, data: Partial<Cluster>): Promise<ApiResponse<Cluster>> {
-    return apiFetch<Cluster>(`/admin/clusters/${id}`, {
+  async updateCluster(id: string, data: { cluster_name?: string; is_active?: boolean }): Promise<ApiResponse<AdminCluster>> {
+    return apiFetch<AdminCluster>(`/admin/clusters/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
 
-  async deleteCluster(id: string): Promise<ApiResponse<{ message: string }>> {
-    return apiFetch(`/admin/clusters/${id}`, { method: 'DELETE' });
+  async deleteCluster(id: string): Promise<ApiResponse<null>> {
+    return apiFetch<null>(`/admin/clusters/${id}`, { method: 'DELETE' });
   },
 
-  // Companies
+  async getClusterCompanies(clusterId: string): Promise<ApiResponse<AdminCompany[]>> {
+    return apiFetch<AdminCompany[]>(`/admin/clusters/${clusterId}/companies`);
+  },
+
+  async getCompaniesList(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    cluster_id?: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminCompanyList>> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.page_size) query.set('page_size', String(params.page_size));
+    if (params?.search) query.set('search', params.search);
+    if (params?.cluster_id) query.set('cluster_id', params.cluster_id);
+    if (typeof params?.is_active === 'boolean') query.set('is_active', String(params.is_active));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<AdminCompanyList>(`/admin/companies${suffix}`);
+  },
+
   async getCompanies(clusterId?: string): Promise<ApiResponse<Company[]>> {
     const query = clusterId ? `?cluster_id=${clusterId}` : '';
-    return apiFetch<Company[]>(`/admin/companies${query}`);
+    const response = await apiFetch<AdminCompanyList>(`/admin/companies${query}`);
+    if (response.error || !response.data) {
+      return { data: null, error: response.error, status: response.status };
+    }
+    return {
+      data: response.data.companies.map((c) => ({
+        id: c.company_id,
+        name: c.company_name,
+        code: c.company_id,
+        cluster_id: c.cluster_id,
+        fy_start_month: c.fin_year_start_month ?? 1,
+        currency: 'LKR',
+        is_active: c.is_active,
+      })),
+      error: null,
+      status: response.status,
+    };
   },
 
-  async createCompany(data: Partial<Company>): Promise<ApiResponse<Company>> {
-    return apiFetch<Company>('/admin/companies', {
+  async createCompany(data: {
+    company_name: string;
+    cluster_id: string;
+    fin_year_start_month?: number | null;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminCompany>> {
+    return apiFetch<AdminCompany>('/admin/companies', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  async updateCompany(id: string, data: Partial<Company>): Promise<ApiResponse<Company>> {
-    return apiFetch<Company>(`/admin/companies/${id}`, {
+  async updateCompany(id: string, data: {
+    company_name?: string;
+    cluster_id?: string;
+    fin_year_start_month?: number | null;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminCompany>> {
+    return apiFetch<AdminCompany>(`/admin/companies/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
 
-  async deleteCompany(id: string): Promise<ApiResponse<{ message: string }>> {
-    return apiFetch(`/admin/companies/${id}`, { method: 'DELETE' });
+  async deleteCompany(id: string): Promise<ApiResponse<null>> {
+    return apiFetch<null>(`/admin/companies/${id}`, { method: 'DELETE' });
   },
 
-  // Users
-  async getCompanyUsers(companyId: string): Promise<ApiResponse<User[]>> {
-    return apiFetch<User[]>(`/admin/companies/${companyId}/users`);
+  async getCompany(companyId: string): Promise<ApiResponse<AdminCompany>> {
+    return apiFetch<AdminCompany>(`/admin/companies/${companyId}`);
   },
 
-  async assignUser(companyId: string, userId: string, role: string): Promise<ApiResponse<{ message: string }>> {
-    return apiFetch(`/admin/companies/${companyId}/users`, {
+  async getUsers(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    role_id?: number;
+    company_id?: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminUserList>> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.page_size) query.set('page_size', String(params.page_size));
+    if (params?.search) query.set('search', params.search);
+    if (params?.role_id) query.set('role_id', String(params.role_id));
+    if (params?.company_id) query.set('company_id', params.company_id);
+    if (typeof params?.is_active === 'boolean') query.set('is_active', String(params.is_active));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<AdminUserList>(`/admin/users${suffix}`);
+  },
+
+  async createUser(data: {
+    user_email: string;
+    first_name: string;
+    last_name: string;
+    role_id: number;
+    company_id: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminUser>> {
+    return apiFetch<AdminUser>('/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId, role }),
+      body: JSON.stringify(data),
     });
   },
 
-  // Budget Import
+  async updateUser(userId: string, data: {
+    first_name?: string;
+    last_name?: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminUser>> {
+    return apiFetch<AdminUser>(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateUserStatus(userId: string, isActive: boolean): Promise<ApiResponse<AdminUser>> {
+    return apiFetch<AdminUser>(`/admin/users/${userId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ is_active: isActive }),
+    });
+  },
+
+  async deleteUser(userId: string): Promise<ApiResponse<null>> {
+    return apiFetch<null>(`/admin/users/${userId}`, { method: 'DELETE' });
+  },
+
+  async getAssignments(params?: {
+    company_id?: string;
+    user_id?: string;
+    include_inactive?: boolean;
+  }): Promise<ApiResponse<AdminAssignmentList>> {
+    const query = new URLSearchParams();
+    if (params?.company_id) query.set('company_id', params.company_id);
+    if (params?.user_id) query.set('user_id', params.user_id);
+    if (typeof params?.include_inactive === 'boolean') query.set('include_inactive', String(params.include_inactive));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<AdminAssignmentList>(`/admin/assignments${suffix}`);
+  },
+
+  async createAssignment(data: {
+    user_id: string;
+    company_id: string;
+    role_id: number;
+    is_active?: boolean;
+  }): Promise<ApiResponse<AdminAssignment>> {
+    return apiFetch<AdminAssignment>('/admin/assignments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteAssignment(userId: string, companyId: string, roleId: number): Promise<ApiResponse<null>> {
+    return apiFetch<null>(`/admin/assignments/${userId}/${companyId}/${roleId}`, { method: 'DELETE' });
+  },
+
+  async getCompanyUsers(companyId: string, includeInactive: boolean = false): Promise<ApiResponse<AdminAssignment[]>> {
+    const query = includeInactive ? '?include_inactive=true' : '';
+    return apiFetch<AdminAssignment[]>(`/admin/companies/${companyId}/users${query}`);
+  },
+
+  async assignUser(companyId: string, userEmail: string, roleId: number): Promise<ApiResponse<AdminAssignment>> {
+    return apiFetch<AdminAssignment>(`/admin/companies/${companyId}/users`, {
+      method: 'POST',
+      body: JSON.stringify({ user_email: userEmail, role_id: roleId }),
+    });
+  },
+
   async importBudget(file: File): Promise<ApiResponse<{ rows_imported: number; errors: string[] }>> {
     const formData = new FormData();
     formData.append('file', file);
@@ -523,10 +840,6 @@ export const AdminAPI = {
     return response.blob();
   },
 };
-
-// ─────────────────────────────────────────────────────────────
-// FO (Finance Officer) API
-// ─────────────────────────────────────────────────────────────
 
 export const FOAPI = {
   async getMyCompanies(): Promise<ApiResponse<Company[]>> {
@@ -581,11 +894,65 @@ export const FOAPI = {
   async getBudget(companyId: string, year: number, month: number): Promise<ApiResponse<FinancialData | null>> {
     return apiFetch<FinancialData | null>(`/fo/budget/${companyId}/${year}/${month}`);
   },
-};
 
-// ─────────────────────────────────────────────────────────────
-// FD (Finance Director) API
-// ─────────────────────────────────────────────────────────────
+  async getUserClusters(): Promise<ApiResponse<{ cluster_id: string; cluster_name: string }[]>> {
+    return apiFetch('/fo/user-clusters');
+  },
+
+  async getUserCompanies(clusterId?: string): Promise<ApiResponse<{
+    company_id: string;
+    company_name: string;
+    cluster_id: string;
+    fin_year_start_month: number | null;
+  }[]>> {
+    const query = clusterId ? `?cluster_id=${clusterId}` : '';
+    return apiFetch(`/fo/user-companies${query}`);
+  },
+
+  async checkPeriod(year: number, month: number): Promise<ApiResponse<{
+    allowed: boolean;
+    message: string;
+    end_date: string | null;
+    days_exceeded: number | null;
+  }>> {
+    return apiFetch(`/fo/check-period?year=${year}&month=${month}`);
+  },
+
+  async getBudgetData(companyId: string, year: number, month: number): Promise<ApiResponse<{
+    company_id: string;
+    period_id: number;
+    year: number;
+    month: number;
+    metrics: Record<number, number>;
+  } | null>> {
+    return apiFetch(`/fo/budget-data/${companyId}/${year}/${month}`);
+  },
+
+  async saveActuals(data: {
+    company_id: string;
+    year: number;
+    month: number;
+    revenue: number;
+    gp: number;
+    other_income: number;
+    personal_exp: number;
+    admin_exp: number;
+    selling_exp: number;
+    finance_exp: number;
+    depreciation: number;
+    provisions: number;
+    exchange_gl: number;
+    non_ops_exp: number;
+    non_ops_income: number;
+    comment?: string;
+    is_submit: boolean;
+  }): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return apiFetch('/fo/save-actuals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
 
 export const FDAPI = {
   async getPendingReports(): Promise<ApiResponse<{ reports: PendingReport[]; total: number }>> {
@@ -642,9 +1009,9 @@ export const FDAPI = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // CEO Dashboard API
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export const CEOAPI = {
   async getDashboard(year?: number, month?: number): Promise<ApiResponse<any>> {
@@ -683,9 +1050,9 @@ export const CEOAPI = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // MD Dashboard API
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export const MDAPI = {
   async getStrategicOverview(mode: 'month' | 'ytd', year?: number, month?: number): Promise<ApiResponse<StrategicOverview>> {
@@ -741,9 +1108,9 @@ export const MDAPI = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Health Check API (existing)
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export const HealthAPI = {
   async check(): Promise<ApiResponse<{ status: string; service: string }>> {
@@ -763,9 +1130,9 @@ export const HealthAPI = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Utility Hooks (for convenience)
-// ─────────────────────────────────────────────────────────────
+// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export function formatCurrency(value: number, inMillions: boolean = false): string {
   if (inMillions) {
@@ -793,3 +1160,4 @@ export function getShortMonthName(month: number): string {
   ];
   return months[month] || '';
 }
+

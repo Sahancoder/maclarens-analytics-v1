@@ -34,6 +34,14 @@ import {
 } from "recharts";
 import { ComplianceTracker } from "@/components/md/ComplianceTracker";
 import { FinancialMiniView } from "@/components/md/FinancialMiniView";
+import {
+  useStrategicOverview,
+  usePerformers,
+  useClusterContribution,
+  useRiskRadar,
+  useClusterDrilldown,
+  usePerformanceHierarchy,
+} from "@/hooks/use-api";
 
 // ============ DATA STRUCTURES ============
 
@@ -59,7 +67,7 @@ interface Cluster {
   variancePercent: number;
   risk: "low" | "medium" | "high" | "critical";
   trend: "up" | "down" | "stable";
-  forecast: number;
+  forecast?: number;
   fiscalCycle: "Jan-Dec" | "Apr-Mar";
   companies: Company[];
 }
@@ -106,7 +114,7 @@ const groupDataYTD = {
   overheadPriorYear: 13000000,
 };
 
-const clusters: Cluster[] = [
+const fallbackClusters: Cluster[] = [
   {
     id: "liner", name: "Liner", pbt: 125800, budget: 120000, ytdPBT: 1258000,
     contribution: 21.1, variance: 5800, variancePercent: 4.8, risk: "low", trend: "up", fiscalCycle: "Jan-Dec",
@@ -440,59 +448,136 @@ export default function MDDashboard() {
   const [drilldownMonth, setDrilldownMonth] = useState<number>(10);
   const [drilldownYear, setDrilldownYear] = useState<number>(2025);
 
-  // Simulated data fetching functions
-  const getContributionByMonth = (year: number, month: number) => {
-    // Return mock monthly data for ALL clusters
-    // Measurement: Contribution Percentage (%)
-    return [
-      { name: "Liner", value: 21.1, pbt: 125800, risk: "low" },
-      { name: "Lube 01", value: 19.2, pbt: 114600, risk: "low" },
-      { name: "GAC Group", value: 18.4, pbt: 109700, risk: "low" },
-      { name: "Shipping", value: 16.3, pbt: 97000, risk: "low" },
-      { name: "Ship Supply", value: 12.3, pbt: 73100, risk: "low" },
-      { name: "Property", value: 8.0, pbt: 47800, risk: "low" },
-      { name: "Warehouse", value: 7.4, pbt: 44300, risk: "low" },
-      { name: "Mfg", value: 6.8, pbt: 40800, risk: "low" },
-      { name: "Hotel", value: 1.4, pbt: 8500, risk: "medium" }, // Hotel & Leisure
-      { name: "Strategic", value: -0.9, pbt: -5200, risk: "medium" }, // Strategic Investment
-      { name: "Lube 02", value: -2.5, pbt: -15000, risk: "high" }, // Lube 02
-      { name: "Bunkering", value: -7.5, pbt: -45000, risk: "critical" }, // Bunkering
-    ];
+  const overviewState = useStrategicOverview(overviewMode, selectedYear, selectedMonth);
+  const performersState = usePerformers(overviewMode, selectedYear, selectedMonth, 5);
+  const contributionState = useClusterContribution(overviewMode, selectedYear, selectedMonth);
+  const riskState = useRiskRadar(overviewMode, selectedYear, selectedMonth);
+  const hierarchyState = usePerformanceHierarchy(drilldownYear, drilldownMonth);
+  const drilldownState = useClusterDrilldown(
+    selectedCluster?.id ?? null,
+    overviewMode,
+    drilldownYear,
+    drilldownMonth
+  );
+
+  const toRisk = (achievementPct: number): "low" | "medium" | "high" | "critical" => {
+    if (achievementPct >= 90) return "low";
+    if (achievementPct >= 80) return "medium";
+    if (achievementPct >= 70) return "high";
+    return "critical";
   };
 
-  const getContributionYTD = (year: number) => {
-    // Return mock YTD data for ALL clusters
-    // Measurement: Contribution Percentage (%)
-    return [
-      { name: "Liner", value: 22.5, pbt: 1450000, risk: "low" },
-      { name: "Lube 01", value: 18.8, pbt: 1210000, risk: "low" },
-      { name: "GAC Group", value: 17.5, pbt: 1120000, risk: "low" },
-      { name: "Shipping", value: 15.9, pbt: 1020000, risk: "low" },
-      { name: "Ship Supply", value: 11.5, pbt: 740000, risk: "low" },
-      { name: "Property", value: 8.5, pbt: 550000, risk: "low" },
-      { name: "Warehouse", value: 7.8, pbt: 500000, risk: "low" },
-      { name: "Mfg", value: 7.0, pbt: 450000, risk: "low" },
-      { name: "Hotel", value: 1.2, pbt: 85000, risk: "medium" },
-      { name: "Strategic", value: -1.0, pbt: -52000, risk: "medium" },
-      { name: "Lube 02", value: -3.0, pbt: -150000, risk: "high" },
-      { name: "Bunkering", value: -8.5, pbt: -450000, risk: "critical" },
-    ];
-  };
+  const riskByCluster = useMemo(() => {
+    const map = new Map<string, "low" | "medium" | "high" | "critical">();
+    (riskState.data?.clusters || []).forEach((r) => {
+      map.set(r.cluster_id, r.risk_level);
+    });
+    return map;
+  }, [riskState.data]);
 
-  // Memoized chart data based on mode
+  const hierarchyByCluster = useMemo(() => {
+    const map = new Map<string, any>();
+    (hierarchyState.data?.clusters || []).forEach((cluster) => {
+      map.set(cluster.id, cluster);
+    });
+    return map;
+  }, [hierarchyState.data]);
+
+  const clusters = useMemo(() => {
+    const contributionClusters = contributionState.data?.clusters || [];
+    if (contributionClusters.length === 0) return fallbackClusters;
+
+    return contributionClusters.map((c) => {
+      const pbt = Number(c.pbt || 0);
+      const budget = Number(c.pbt_budget || 0);
+      const variance = pbt - budget;
+      const variancePercent = budget !== 0 ? (variance / budget) * 100 : 0;
+      const hierarchyCluster = hierarchyByCluster.get(c.cluster_id);
+      const drilldownCompanies =
+        selectedCluster?.id === c.cluster_id && drilldownState.data?.companies
+          ? drilldownState.data.companies
+          : null;
+
+      const companies = (drilldownCompanies || hierarchyCluster?.companies || []).map((co: any) => {
+        const actual = Number(co.pbt_actual || 0);
+        const pbtBudget = Number(co.pbt_budget || 0);
+        const companyVariance = actual - pbtBudget;
+        const companyVariancePct = pbtBudget !== 0 ? (companyVariance / pbtBudget) * 100 : 0;
+        return {
+          id: String(co.id),
+          name: co.name,
+          pbt: actual,
+          budget: pbtBudget,
+          variance: companyVariance,
+          variancePercent: companyVariancePct,
+          risk: toRisk(Number(co.achievement_pct || 0)),
+          trend: companyVariance >= 0 ? "up" : "down",
+        } as Company;
+      });
+
+      return {
+        id: c.cluster_id,
+        name: c.cluster_name,
+        pbt,
+        budget,
+        ytdPBT: pbt,
+        contribution: Number(c.pbt_contribution_pct || 0),
+        variance,
+        variancePercent,
+        risk: riskByCluster.get(c.cluster_id) || toRisk(Number(c.pbt_achievement_pct || 0)),
+        trend: variance >= 0 ? "up" : "down",
+        forecast: budget,
+        fiscalCycle: "Jan-Dec",
+        companies,
+      } as Cluster;
+    });
+  }, [contributionState.data, hierarchyByCluster, riskByCluster, drilldownState.data, selectedCluster?.id]);
+
   const chartData = useMemo(() => {
-    if (overviewMode === "month") {
-      return getContributionByMonth(selectedYear, selectedMonth);
-    } else {
-      return getContributionYTD(selectedYear);
+    if (!contributionState.data?.clusters?.length) {
+      return fallbackClusters.map((c) => ({
+        name: c.name,
+        value: c.contribution,
+        pbt: c.pbt,
+        risk: c.risk,
+      }));
     }
-  }, [overviewMode, selectedMonth, selectedYear]);
-  
+    return contributionState.data.clusters.map((c) => ({
+      name: c.cluster_name,
+      value: Number(c.pbt_contribution_pct || 0),
+      pbt: Number(c.pbt || 0),
+      risk: riskByCluster.get(c.cluster_id) || toRisk(Number(c.pbt_achievement_pct || 0)),
+    }));
+  }, [contributionState.data, riskByCluster]);
 
-  // Dynamic Group Data
   const groupData = useMemo(() => {
-    return overviewMode === "month" ? groupDataMonth : groupDataYTD;
-  }, [overviewMode]);
+    const overview = overviewState.data;
+    if (!overview) {
+      return overviewMode === "month" ? groupDataMonth : groupDataYTD;
+    }
+    const completion = overview.companies_total
+      ? (overview.companies_reporting / overview.companies_total) * 100
+      : 0;
+    return {
+      totalPBT: Number(overview.pbt.actual || 0),
+      budget: Number(overview.pbt.budget || 0),
+      ytdPBT: Number(overview.pbt.actual || 0),
+      priorYearPBT: Number(overview.pbt.budget || 0),
+      healthScore: Number(completion.toFixed(1)),
+      cashPositive: overview.companies_reporting,
+      cashNegative: Math.max(overview.companies_total - overview.companies_reporting, 0),
+      totalCompanies: overview.companies_total,
+      gp: Number(overview.gp.actual || 0),
+      gpMargin: Number(overview.gp_margin.actual || 0),
+      priorYearGp: Number(overview.gp.budget || 0),
+      priorYearGpMargin: Number(overview.gp_margin.budget || 0),
+      pbtAchievement: Number(overview.pbt_achievement.actual || 0),
+      revenue: Number(overview.revenue.actual || 0),
+      revenuePriorYear: Number(overview.revenue.budget || 0),
+      overhead: Number(overview.total_overhead.actual || 0),
+      overheadPriorYear: Number(overview.total_overhead.budget || 0),
+    };
+  }, [overviewState.data, overviewMode]);
 
   // Currency State
   const [currency, setCurrency] = useState<"LKR" | "USD">("LKR");
@@ -536,7 +621,7 @@ export default function MDDashboard() {
 
   // Sorted clusters for chart
   const sortedClusters = useMemo(() => 
-    [...clusters].sort((a, b) => b.pbt - a.pbt), []);
+    [...clusters].sort((a, b) => b.pbt - a.pbt), [clusters]);
 
   // Treemap data
   const treemapData = useMemo(() => 
@@ -546,7 +631,7 @@ export default function MDDashboard() {
       pbt: c.pbt,
       risk: c.risk,
       id: c.id,
-    })), []);
+    })), [clusters]);
 
   // Waterfall chart data
 
@@ -570,10 +655,36 @@ export default function MDDashboard() {
     const critical = clusters.filter(c => c.risk === "critical").length;
     const high = clusters.filter(c => c.risk === "high").length;
     return { critical, high };
-  }, []);
+  }, [clusters]);
 
   // Compute Top & Bottom 5 Performers by Achievement %
   const { topPerformers, bottomPerformers } = useMemo(() => {
+    if (performersState.data) {
+      const top = performersState.data.top_performers.map((p) => ({
+        id: p.company_id,
+        name: p.company_name,
+        pbt: p.pbt_actual,
+        budget: p.pbt_budget,
+        variance: p.variance,
+        variancePercent: p.pbt_budget !== 0 ? (p.variance / p.pbt_budget) * 100 : 0,
+        risk: toRisk(p.achievement_pct),
+        trend: p.variance >= 0 ? "up" : "down",
+        achievement: p.achievement_pct,
+      }));
+      const bottom = performersState.data.bottom_performers.map((p) => ({
+        id: p.company_id,
+        name: p.company_name,
+        pbt: p.pbt_actual,
+        budget: p.pbt_budget,
+        variance: p.variance,
+        variancePercent: p.pbt_budget !== 0 ? (p.variance / p.pbt_budget) * 100 : 0,
+        risk: toRisk(p.achievement_pct),
+        trend: p.variance >= 0 ? "up" : "down",
+        achievement: p.achievement_pct,
+      }));
+      return { topPerformers: top, bottomPerformers: bottom };
+    }
+
     // 1. Flatten all companies from all clusters
     const allCompanies = clusters.flatMap(cluster => cluster.companies);
     
@@ -593,7 +704,7 @@ export default function MDDashboard() {
       topPerformers: sorted.slice(0, 5),
       bottomPerformers: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement), // Sort bottom list ascending (lowest first)
     };
-  }, []);
+  }, [clusters, performersState.data]);
 
   // Compute YTD Segmented Performers (Jan-Dec vs Apr-Mar)
   const ytdSegments = useMemo(() => {
@@ -621,7 +732,7 @@ export default function MDDashboard() {
         janDec: getRanked(janDec),
         aprMar: getRanked(aprMar)
     };
-  }, []);
+  }, [clusters]);
 
   return (
     <div className="min-h-full bg-slate-50 overflow-x-hidden">

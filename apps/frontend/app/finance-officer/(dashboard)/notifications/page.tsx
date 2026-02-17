@@ -1,7 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, CheckCircle, XCircle, MessageSquare, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  deleteNotificationById,
+  extractActor,
+  extractCompanyAndPeriod,
+  fetchNotifications,
+  formatDateYYYYMMDD,
+  formatTimeAgo,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type BackendNotification,
+} from "@/lib/notifications-client";
 
 interface Notification {
   id: string;
@@ -16,59 +27,58 @@ interface Notification {
   read: boolean;
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    date: "2025.12.23",
-    company: "McLarens Maritime Academy (Pvt) Ltd",
-    month: "December 2025",
-    type: "approved",
-    message: "Your report has been approved",
-    from: "Sahan Viranga (Finance Director)",
-    timeAgo: "2 hours ago",
-    read: false,
-  },
-  {
-    id: "2",
-    date: "2025.12.22",
-    company: "GAC Shipping Limited",
-    month: "November 2025",
-    type: "rejected",
-    message: "Your report has been rejected",
-    comment: "The admin expenses seem incorrect. Please verify the figures for November. The variance is too high compared to the budget. Also, please check the depreciation calculation as it doesn't match with the asset register.",
-    from: "Sahan Viranga (Finance Director)",
-    timeAgo: "1 day ago",
-    read: false,
-  },
-  {
-    id: "3",
-    date: "2025.12.20",
-    company: "Spectra Logistics",
-    month: "November 2025",
-    type: "comment",
-    message: "New comment on your report",
-    comment: "Please clarify the exchange loss calculation. The rate used seems different from the central bank rate.",
-    from: "Sahan Viranga (Finance Director)",
-    timeAgo: "3 days ago",
-    read: true,
-  },
-  {
-    id: "4",
-    date: "2025.12.18",
-    company: "McLarens Maritime Academy (Pvt) Ltd",
-    month: "October 2025",
-    type: "approved",
-    message: "Your report has been approved",
-    from: "Sahan Viranga (Finance Director)",
-    timeAgo: "5 days ago",
-    read: true,
-  },
-];
+function mapType(type: string): Notification["type"] {
+  if (type === "report_approved") return "approved";
+  if (type === "report_rejected") return "rejected";
+  return "comment";
+}
+
+function mapNotification(item: BackendNotification): Notification {
+  const combinedText = `${item.title || ""} ${item.message || ""}`.trim();
+  const { company, period } = extractCompanyAndPeriod(combinedText);
+  const type = mapType(item.type);
+  const reasonMatch = combinedText.match(/rejected:\s*(.+)$/i);
+
+  return {
+    id: item.id,
+    date: formatDateYYYYMMDD(item.created_at),
+    company,
+    month: period,
+    type,
+    message: item.title || item.message || "Notification",
+    comment:
+      reasonMatch?.[1] ||
+      (type === "comment" ? item.message || undefined : undefined),
+    from: extractActor(combinedText),
+    timeAgo: formatTimeAgo(item.created_at),
+    read: item.is_read,
+  };
+}
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadNotifications = async () => {
+      try {
+        const items = await fetchNotifications(100);
+        if (!isMounted) return;
+        setNotifications(items.map(mapNotification));
+      } catch (error) {
+        console.error("Failed to load notifications", error);
+        if (isMounted) setNotifications([]);
+      }
+    };
+
+    loadNotifications();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredNotifications = notifications.filter((n) => {
     if (filter === "unread" && n.read) return false;
@@ -77,12 +87,31 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteNotificationById(id);
+    } catch (error) {
+      console.error("Failed to delete notification", error);
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const handleMarkAsRead = (id: string) => {
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+    } catch (error) {
+      console.error("Failed to mark notification as read", error);
+    }
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+    }
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   const getIcon = (type: string) => {
@@ -113,7 +142,7 @@ export default function NotificationsPage() {
             <p className="text-sm text-slate-500 mt-1">{unreadCount} unread notifications</p>
           </div>
           <button 
-            onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+            onClick={handleMarkAllAsRead}
             className="text-sm font-medium text-[#0b1f3a] hover:underline"
           >
             Mark all as read

@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from db.models import Cluster, Company, FinancialData
+from src.db.models import Cluster, Company, FinancialPnL
 
 
 class ExportService:
@@ -81,11 +81,11 @@ class ExportService:
                 
                 # Get financial data for this company/period
                 fin_result = await db.execute(
-                    select(FinancialData)
+                    select(FinancialPnL)
                     .where(
-                        FinancialData.company_id == company.id,
-                        FinancialData.year == year,
-                        FinancialData.month == month
+                        FinancialPnL.company_id == company.id,
+                        FinancialPnL.year == year,
+                        FinancialPnL.month == month
                     )
                 )
                 fin_data = fin_result.scalar_one_or_none()
@@ -279,12 +279,12 @@ class ExportService:
         """Get list of periods with financial data available"""
         result = await db.execute(
             select(
-                FinancialData.year,
-                FinancialData.month,
-                func.count(FinancialData.id).label('count')
+                FinancialPnL.year,
+                FinancialPnL.month,
+                func.count(FinancialPnL.company_id).label('count')
             )
-            .group_by(FinancialData.year, FinancialData.month)
-            .order_by(FinancialData.year.desc(), FinancialData.month.desc())
+            .group_by(FinancialPnL.year, FinancialPnL.month)
+            .order_by(FinancialPnL.year.desc(), FinancialPnL.month.desc())
         )
         
         periods = []

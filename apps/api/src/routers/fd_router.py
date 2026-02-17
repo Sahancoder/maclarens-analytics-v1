@@ -13,7 +13,6 @@ Endpoints:
 """
 from datetime import datetime
 from typing import Optional, List
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -213,7 +212,7 @@ def calculate_variance(actual: dict, budget: dict) -> dict:
     return variance
 
 
-async def get_submitter_info(db: AsyncSession, user_id: UUID) -> Optional[dict]:
+async def get_submitter_info(db: AsyncSession, user_id: str) -> Optional[dict]:
     """Get submitter user info"""
     if not user_id:
         return None
@@ -346,7 +345,7 @@ async def get_all_reports(
         query = query.where(Report.month == month)
     
     if company_id:
-        query = query.where(Report.company_id == UUID(company_id))
+        query = query.where(Report.company_id == company_id)
     
     result = await db.execute(query)
     reports = result.scalars().all()
@@ -415,7 +414,7 @@ async def get_report_for_review(
     """Get full report detail for FD review"""
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -477,7 +476,7 @@ async def get_report_for_review(
     
     # Get comments
     comments_result = await db.execute(
-        select(ReportComment).where(ReportComment.report_id == UUID(report_id))
+        select(ReportComment).where(ReportComment.report_id == report_id)
         .order_by(ReportComment.created_at)
     )
     comments = comments_result.scalars().all()
@@ -498,7 +497,7 @@ async def get_report_for_review(
     
     # Get status history
     history_result = await db.execute(
-        select(ReportStatusHistory).where(ReportStatusHistory.report_id == UUID(report_id))
+        select(ReportStatusHistory).where(ReportStatusHistory.report_id == report_id)
         .order_by(ReportStatusHistory.created_at)
     )
     history = history_result.scalars().all()
@@ -561,7 +560,7 @@ async def approve_report(
     
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -582,7 +581,7 @@ async def approve_report(
     # Add approval comment if provided
     if request and request.comment:
         comment = ReportComment(
-            report_id=UUID(report_id),
+            report_id=report_id,
             user_id=user.id,
             content=f"**Approved:** {request.comment}",
             is_system=False,
@@ -592,7 +591,7 @@ async def approve_report(
     
     # Create status history record
     history = ReportStatusHistory(
-        report_id=UUID(report_id),
+        report_id=report_id,
         from_status=ReportStatus.SUBMITTED,
         to_status=ReportStatus.APPROVED,
         changed_by=user.id,
@@ -644,7 +643,7 @@ async def reject_report(
     
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -664,7 +663,7 @@ async def reject_report(
     
     # Create status history record
     history = ReportStatusHistory(
-        report_id=UUID(report_id),
+        report_id=report_id,
         from_status=ReportStatus.SUBMITTED,
         to_status=ReportStatus.REJECTED,
         changed_by=user.id,
@@ -708,7 +707,7 @@ async def add_comment(
     """Add a comment to a report"""
     # Get report
     result = await db.execute(
-        select(Report).where(Report.id == UUID(report_id))
+        select(Report).where(Report.id == report_id)
     )
     report = result.scalar_one_or_none()
     
@@ -721,7 +720,7 @@ async def add_comment(
     
     # Create comment
     comment = ReportComment(
-        report_id=UUID(report_id),
+        report_id=report_id,
         user_id=user.id,
         content=request.content,
         is_system=False,

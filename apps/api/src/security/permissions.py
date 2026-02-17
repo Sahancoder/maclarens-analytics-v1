@@ -2,28 +2,27 @@
 Role-Based Access Control (RBAC) System
 Complete permission and access control implementation for McLarens Analytics
 
-Roles:
-- ADMIN: Full system access, user management
-- CEO: Dashboard access, view all companies (read-only)
-- COMPANY_DIRECTOR (FD): Review/approve reports for assigned companies
-- DATA_OFFICER (FO): Create/submit reports for assigned company
+Roles (Mapped to RoleMaster):
+- SYSTEM_ADMIN (ID: 3): Full system access
+- MANAGING_DIRECTOR (ID: 4): Dashboard access, view all
+- FINANCIAL_DIRECTOR (ID: 2): Review/approve reports
+- FINANCIAL_OFFICER (ID: 1): Create/submit reports
 """
 from enum import Enum
-from typing import List, Set, Optional, Callable, Any
-from functools import wraps
-from uuid import UUID
+from typing import List, Set, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import User, UserRole, Company, CompanyUserRole
-
+from src.db.models import (
+    UserMaster, UserCompanyMap
+)
+from src.config.constants import RoleID
 
 # ============ PERMISSIONS ============
 
 class Permission(str, Enum):
     """Fine-grained permissions for RBAC"""
-    # Report permissions
     READ_OWN_REPORTS = "read_own_reports"
     READ_ASSIGNED_REPORTS = "read_assigned_reports"
     READ_ALL_REPORTS = "read_all_reports"
@@ -31,80 +30,60 @@ class Permission(str, Enum):
     SUBMIT_REPORTS = "submit_reports"
     APPROVE_REPORTS = "approve_reports"
     REJECT_REPORTS = "reject_reports"
-    
-    # Financial data permissions
+
     VIEW_OWN_FINANCIALS = "view_own_financials"
     VIEW_ASSIGNED_FINANCIALS = "view_assigned_financials"
     VIEW_ALL_FINANCIALS = "view_all_financials"
     EDIT_FINANCIALS = "edit_financials"
     IMPORT_BUDGET = "import_budget"
-    
-    # Company permissions
+
     VIEW_OWN_COMPANY = "view_own_company"
     VIEW_ASSIGNED_COMPANIES = "view_assigned_companies"
     VIEW_ALL_COMPANIES = "view_all_companies"
     MANAGE_COMPANIES = "manage_companies"
-    
-    # User permissions
+
     VIEW_USERS = "view_users"
     MANAGE_USERS = "manage_users"
     ASSIGN_ROLES = "assign_roles"
-    
-    # Analytics/Dashboard permissions
+
     VIEW_ANALYTICS = "view_analytics"
     VIEW_DASHBOARDS = "view_dashboards"
     EXPORT_DATA = "export_data"
-    
-    # System permissions
+
     MANAGE_SYSTEM = "manage_system"
     VIEW_AUDIT_LOGS = "view_audit_logs"
 
 
 # ============ ROLE → PERMISSION MAPPING ============
 
-ROLE_PERMISSIONS: dict[UserRole, Set[Permission]] = {
-    UserRole.DATA_OFFICER: {
-        # Reports
+ROLE_PERMISSIONS: dict[int, Set[Permission]] = {
+    RoleID.FINANCIAL_OFFICER: {
         Permission.READ_OWN_REPORTS,
         Permission.CREATE_REPORTS,
         Permission.SUBMIT_REPORTS,
-        # Financials
         Permission.VIEW_OWN_FINANCIALS,
         Permission.EDIT_FINANCIALS,
-        # Company
         Permission.VIEW_OWN_COMPANY,
     },
-    
-    UserRole.COMPANY_DIRECTOR: {
-        # Reports
+    RoleID.FINANCIAL_DIRECTOR: {
         Permission.READ_ASSIGNED_REPORTS,
         Permission.APPROVE_REPORTS,
         Permission.REJECT_REPORTS,
-        # Financials
         Permission.VIEW_ASSIGNED_FINANCIALS,
-        # Company
         Permission.VIEW_ASSIGNED_COMPANIES,
-        # Analytics
         Permission.VIEW_ANALYTICS,
         Permission.VIEW_DASHBOARDS,
         Permission.EXPORT_DATA,
     },
-    
-    UserRole.CEO: {
-        # Reports (read-only, all companies)
+    RoleID.MANAGING_DIRECTOR: {
         Permission.READ_ALL_REPORTS,
-        # Financials
         Permission.VIEW_ALL_FINANCIALS,
-        # Company
         Permission.VIEW_ALL_COMPANIES,
-        # Analytics
         Permission.VIEW_ANALYTICS,
         Permission.VIEW_DASHBOARDS,
         Permission.EXPORT_DATA,
     },
-    
-    UserRole.ADMIN: {
-        # Full permissions
+    RoleID.SYSTEM_ADMIN: {
         Permission.READ_ALL_REPORTS,
         Permission.VIEW_ALL_FINANCIALS,
         Permission.IMPORT_BUDGET,
@@ -122,165 +101,137 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Permission]] = {
 
 # ============ PERMISSION CHECKING ============
 
-def has_permission(user: User, permission: Permission) -> bool:
-    """Check if user has a specific permission"""
-    if not user or not user.role:
+def has_permission(user: UserMaster, permission: Permission, role_id: int = None) -> bool:
+    """Check if user has a specific permission via their role"""
+    if not user:
         return False
-    
-    user_permissions = ROLE_PERMISSIONS.get(user.role, set())
+        
+    # If role_id is not passed, try to get from user context (middleware usually sets this)
+    if not role_id:
+        role_id = getattr(user, "current_role_id", None)
+        
+    if not role_id:
+        return False
+        
+    user_permissions = ROLE_PERMISSIONS.get(role_id, set())
     return permission in user_permissions
 
 
-def has_any_permission(user: User, permissions: List[Permission]) -> bool:
-    """Check if user has any of the given permissions"""
-    return any(has_permission(user, p) for p in permissions)
+def has_any_permission(user: UserMaster, permissions: List[Permission], role_id: int = None) -> bool:
+    return any(has_permission(user, p, role_id) for p in permissions)
 
 
-def has_all_permissions(user: User, permissions: List[Permission]) -> bool:
-    """Check if user has all of the given permissions"""
-    return all(has_permission(user, p) for p in permissions)
+def has_all_permissions(user: UserMaster, permissions: List[Permission], role_id: int = None) -> bool:
+    return all(has_permission(user, p, role_id) for p in permissions)
 
 
-def get_user_permissions(user: User) -> Set[Permission]:
-    """Get all permissions for a user"""
-    if not user or not user.role:
+def get_user_permissions(user: UserMaster, role_id: int = None) -> Set[Permission]:
+    if not user:
         return set()
-    return ROLE_PERMISSIONS.get(user.role, set())
+    if not role_id:
+        role_id = getattr(user, "current_role_id", None)
+    if not role_id:
+        return set()
+    return ROLE_PERMISSIONS.get(role_id, set())
 
 
 # ============ COMPANY ACCESS CONTROL ============
 
 async def get_accessible_company_ids(
-    db: AsyncSession, 
-    user: User
-) -> Optional[List[UUID]]:
+    db: AsyncSession,
+    user: UserMaster
+) -> Optional[List[str]]:
     """
     Get list of company IDs the user can access.
-    Returns None if user can access ALL companies (Admin/CEO).
-    Returns empty list if user has no access.
-    
-    This is the core IDOR prevention mechanism.
+    Returns None if user can access ALL companies (Admin/MD).
     """
     if not user:
         return []
-    
-    # Admin and CEO can access all companies
-    if user.role in (UserRole.ADMIN, UserRole.CEO):
+
+    # Get Primary Role ID from user context
+    role_id = getattr(user, "current_role_id", None)
+
+    # Admin and MD can access all companies
+    if role_id in (RoleID.SYSTEM_ADMIN, RoleID.MANAGING_DIRECTOR):
         return None  # None means "all"
-    
+
     accessible = set()
-    
-    # Direct company assignment (FO)
-    if user.company_id:
-        accessible.add(user.company_id)
-    
-    # Cluster-based assignment (FD with cluster access)
-    if user.cluster_id:
-        result = await db.execute(
-            select(Company.id).where(Company.cluster_id == user.cluster_id)
-        )
-        cluster_companies = result.scalars().all()
-        accessible.update(cluster_companies)
-    
-    # Check company_user_roles table for additional assignments
-    result = await db.execute(
-        select(CompanyUserRole.company_id).where(
-            CompanyUserRole.user_id == user.id
-        )
+
+    # Get from UserCompanyMap (direct assignment table in analytics schema)
+    stmt2 = select(UserCompanyMap.company_id).where(
+        UserCompanyMap.user_id == user.user_id,
+        UserCompanyMap.is_active == True
     )
-    role_companies = result.scalars().all()
-    accessible.update(role_companies)
-    
+    result2 = await db.execute(stmt2)
+    for row in result2.all():
+        accessible.add(row[0])
+
     return list(accessible)
 
 
 async def can_access_company(
-    db: AsyncSession, 
-    user: User, 
-    company_id: UUID
+    db: AsyncSession,
+    user: UserMaster,
+    company_id: str
 ) -> bool:
-    """
-    Check if user can access a specific company.
-    This is the primary IDOR prevention check.
-    """
+    """Check if user can access a specific company."""
     accessible = await get_accessible_company_ids(db, user)
-    
-    # None means all access
     if accessible is None:
         return True
-    
     return company_id in accessible
 
 
 async def filter_companies_for_user(
     db: AsyncSession,
-    user: User,
-    company_ids: List[UUID]
-) -> List[UUID]:
-    """Filter a list of company IDs to only those the user can access"""
+    user: UserMaster,
+    company_ids: List[str]
+) -> List[str]:
     accessible = await get_accessible_company_ids(db, user)
-    
     if accessible is None:
         return company_ids
-    
-    accessible_set = set(accessible)
-    return [cid for cid in company_ids if cid in accessible_set]
+    allowed = set(accessible)
+    return [company_id for company_id in company_ids if company_id in allowed]
 
 
-# ============ ROLE-SPECIFIC CHECKS ============
-
-def is_admin(user: User) -> bool:
-    """Check if user is an admin"""
-    return user and user.role == UserRole.ADMIN
+def is_admin(user: UserMaster) -> bool:
+    return bool(user and getattr(user, "current_role_id", None) == RoleID.SYSTEM_ADMIN)
 
 
-def is_ceo(user: User) -> bool:
-    """Check if user is CEO/MD"""
-    return user and user.role == UserRole.CEO
+def is_ceo(user: UserMaster) -> bool:
+    return bool(user and getattr(user, "current_role_id", None) == RoleID.MANAGING_DIRECTOR)
 
 
-def is_finance_director(user: User) -> bool:
-    """Check if user is Finance Director"""
-    return user and user.role == UserRole.COMPANY_DIRECTOR
+def is_finance_director(user: UserMaster) -> bool:
+    return bool(user and getattr(user, "current_role_id", None) == RoleID.FINANCIAL_DIRECTOR)
 
 
-def is_finance_officer(user: User) -> bool:
-    """Check if user is Finance Officer"""
-    return user and user.role == UserRole.DATA_OFFICER
+def is_finance_officer(user: UserMaster) -> bool:
+    return bool(user and getattr(user, "current_role_id", None) == RoleID.FINANCIAL_OFFICER)
 
 
-def can_approve_reports(user: User) -> bool:
-    """Check if user can approve/reject reports"""
+def can_approve_reports(user: UserMaster) -> bool:
     return has_permission(user, Permission.APPROVE_REPORTS)
 
 
-def can_create_reports(user: User) -> bool:
-    """Check if user can create/edit reports"""
+def can_create_reports(user: UserMaster) -> bool:
     return has_permission(user, Permission.CREATE_REPORTS)
 
 
-def can_view_all_companies(user: User) -> bool:
-    """Check if user can view all companies (Admin/CEO)"""
+def can_view_all_companies(user: UserMaster) -> bool:
     return has_permission(user, Permission.VIEW_ALL_COMPANIES)
 
 
-def can_manage_users(user: User) -> bool:
-    """Check if user can manage other users"""
+def can_manage_users(user: UserMaster) -> bool:
     return has_permission(user, Permission.MANAGE_USERS)
 
 
-# ============ ERROR CLASSES ============
-
 class AuthorizationError(Exception):
-    """Raised when user is not authorized for an action"""
-    def __init__(self, message: str = "Not authorized", required_permission: Optional[Permission] = None):
+    def __init__(self, message: str = "Not authorized"):
+        super().__init__(message)
         self.message = message
-        self.required_permission = required_permission
-        super().__init__(self.message)
 
 
 class CompanyAccessError(AuthorizationError):
-    """Raised when user tries to access a company they don't have access to"""
-    def __init__(self, company_id: UUID):
-        self.company_id = company_id
+    def __init__(self, company_id: str):
         super().__init__(f"Access denied to company {company_id}")
+        self.company_id = company_id

@@ -1,189 +1,194 @@
 """
-Authentication Router
-REST endpoints for authentication and session management
+Authentication Router — Production Grade
+=========================================
 
 Endpoints:
-- POST /auth/login - Email/password login (dev mode)
-- POST /auth/login/dev - Dev mode login (select any user)
-- GET  /auth/me - Get current user info
-- POST /auth/logout - Logout (client-side token invalidation)
-- GET  /auth/verify - Verify token validity
-"""
-from datetime import datetime
-from typing import Optional, List
-from uuid import UUID
+  POST /auth/microsoft-login   — Login via Microsoft Entra ID token
+  POST /auth/login/dev         — Dev-mode login by email (disabled in production)
+  POST /auth/check-access      — Verify portal access without issuing a token
+  GET  /auth/me                — Get current authenticated user info
+  POST /auth/logout            — Client-side logout acknowledgement
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+Flow:
+  1. Frontend sends Microsoft ID token + portal name
+  2. Backend verifies token, extracts email
+  3. Backend checks email + role against PORTAL_ROLE_MAP
+  4. If allowed → issues portal-aware JWT
+  5. If denied  → returns 403 with clear error message
+"""
+import logging
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from src.config.settings import settings, AuthMode
-from src.db.models import User, UserRole, Company, Cluster
-from src.db.session import AsyncSessionLocal
+from src.config.settings import settings
+from src.db.models import UserMaster
+from src.security.middleware import get_current_active_user, get_db
 from src.services.auth_service import AuthService
-from src.security.middleware import (
-    get_db,
-    get_current_user,
-    get_current_active_user,
-    get_current_user_optional,
-)
-from src.security.permissions import (
-    get_user_permissions,
-    get_accessible_company_ids,
-    Permission,
-)
-from src.security.rate_limit import rate_limit, RateLimitConfig
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-# ============ REQUEST/RESPONSE MODELS ============
-
-class LoginRequest(BaseModel):
-    """Email/password login request"""
-    email: EmailStr
-    password: str
-
-
-class DevLoginRequest(BaseModel):
-    """Dev mode login - select user by email"""
-    email: EmailStr
-
-
-class TokenResponse(BaseModel):
-    """JWT token response"""
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int  # seconds
-    user: "UserResponse"
-
+# ════════════════════════════════════════════════════════════════════
+#  REQUEST / RESPONSE MODELS
+# ════════════════════════════════════════════════════════════════════
 
 class UserResponse(BaseModel):
-    """User information response"""
     id: str
     email: str
     name: str
     role: str
-    company_id: Optional[str] = None
-    company_name: Optional[str] = None
-    cluster_id: Optional[str] = None
-    cluster_name: Optional[str] = None
-    is_active: bool
-    permissions: List[str]
-    accessible_company_ids: Optional[List[str]] = None  # None = all
+    role_id: int
+    portal: Optional[str] = None
+    companies: List[str]
 
 
-class AuthStatusResponse(BaseModel):
-    """Auth status response"""
-    authenticated: bool
-    auth_mode: str
-    user: Optional[UserResponse] = None
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
+    user: UserResponse
 
 
-class DevUsersResponse(BaseModel):
-    """Available dev users response"""
-    users: List["DevUserInfo"]
+class MicrosoftLoginRequest(BaseModel):
+    access_token: str
+    portal: Optional[str] = None
 
 
-class DevUserInfo(BaseModel):
-    """Dev user info"""
+class DevLoginRequest(BaseModel):
+    email: EmailStr
+    portal: Optional[str] = None
+
+
+class PortalAccessRequest(BaseModel):
     email: str
-    name: str
-    role: str
-    company: Optional[str] = None
+    portal: str
 
 
-# Enable forward refs
-TokenResponse.model_rebuild()
-DevUsersResponse.model_rebuild()
+class PortalAccessResponse(BaseModel):
+    has_access: bool
+    role: Optional[str] = None
+    role_id: Optional[int] = None
+    companies: List[str] = []
 
 
-# ============ HELPER FUNCTIONS ============
+# ════════════════════════════════════════════════════════════════════
+#  HELPER
+# ════════════════════════════════════════════════════════════════════
 
-async def build_user_response(db: AsyncSession, user: User) -> UserResponse:
-    """Build a complete user response with permissions and access info"""
-    # Get company name if assigned
-    company_name = None
-    if user.company_id:
-        result = await db.execute(
-            select(Company.name).where(Company.id == user.company_id)
-        )
-        company_name = result.scalar_one_or_none()
-    
-    # Get cluster name if assigned
-    cluster_name = None
-    if user.cluster_id:
-        result = await db.execute(
-            select(Cluster.name).where(Cluster.id == user.cluster_id)
-        )
-        cluster_name = result.scalar_one_or_none()
-    
-    # Get permissions
-    permissions = get_user_permissions(user)
-    
-    # Get accessible companies
-    accessible = await get_accessible_company_ids(db, user)
-    
-    return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        name=user.name,
-        role=user.role.value if hasattr(user.role, 'value') else str(user.role),
-        company_id=str(user.company_id) if user.company_id else None,
-        company_name=company_name,
-        cluster_id=str(user.cluster_id) if user.cluster_id else None,
-        cluster_name=cluster_name,
-        is_active=user.is_active,
-        permissions=[p.value for p in permissions],
-        accessible_company_ids=[str(cid) for cid in accessible] if accessible is not None else None
+def _auth_mode() -> str:
+    mode = settings.auth_mode.value if hasattr(settings.auth_mode, "value") else str(settings.auth_mode)
+    return mode.lower()
+
+
+def _build_token_response(
+    user: UserMaster,
+    role: str,
+    role_id: int,
+    companies: list[str],
+    portal: Optional[str] = None,
+) -> TokenResponse:
+    """Build a standardised TokenResponse with portal-aware JWT."""
+    access_token = AuthService.create_access_token(
+        user_id=user.user_id,
+        email=user.user_email,
+        role=role,
+        role_id=role_id,
+        portal=portal,
+        companies=companies,
+    )
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=settings.jwt_expiration_hours * 3600,
+        user=UserResponse(
+            id=user.user_id,
+            email=user.user_email,
+            name=f"{user.first_name} {user.last_name}".strip(),
+            role=role,
+            role_id=role_id,
+            portal=portal,
+            companies=companies,
+        ),
     )
 
 
-# ============ ENDPOINTS ============
+async def _login_with_rbac(
+    db: AsyncSession,
+    email: str,
+    portal: Optional[str],
+    error_prefix: str = "Access denied",
+) -> TokenResponse:
+    """
+    Shared login logic for both Microsoft and dev endpoints.
 
-@router.post("/login", response_model=TokenResponse)
-async def login(
-    request: LoginRequest,
+    1. If portal is provided → check_portal_access (role_id filter)
+    2. If no portal          → verify_user_by_email (any active role)
+    3. If access granted     → build JWT with portal claim
+    4. If denied             → raise 403
+    """
+    if portal:
+        user_context = await AuthService.check_portal_access(db, email, portal)
+    else:
+        user_context = await AuthService.verify_user_by_email(db, email)
+
+    if not user_context:
+        detail = (
+            f"{error_prefix}. Your account ({email}) does not have the required "
+            f"role for the '{portal}' portal."
+            if portal
+            else f"{error_prefix}. User {email} is not provisioned or inactive."
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+    return _build_token_response(
+        user=user_context["user"],
+        role=user_context["role"],
+        role_id=user_context["role_id"],
+        companies=user_context["accessible_companies"],
+        portal=portal,
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ENDPOINTS
+# ════════════════════════════════════════════════════════════════════
+
+@router.post("/microsoft-login", response_model=TokenResponse)
+async def microsoft_login(
+    request: MicrosoftLoginRequest,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(rate_limit(*RateLimitConfig.AUTH, key_prefix="auth")),
 ):
     """
-    Login with email and password.
-    Returns JWT token for authenticated requests.
+    Login with Microsoft Entra ID token.
+
+    Flow:
+      1. Verify the Entra ID token (signature + claims)
+      2. Extract email from token claims
+      3. Run RBAC check: email + portal → allowed?
+      4. Issue portal-aware JWT
     """
-    user = await AuthService.authenticate(db, request.email, request.password)
-    
-    if not user:
+    # Verify the Microsoft token
+    payload = await AuthService.verify_entra_token(request.access_token)
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid or expired Microsoft token",
         )
-    
-    if not user.is_active:
+
+    email = AuthService.email_from_entra_claims(payload)
+    if not email:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email claim not found in Microsoft token",
         )
-    
-    # Update last login
-    user.last_login = datetime.utcnow()
-    await db.commit()
-    
-    # Create token
-    token = AuthService.create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        role=user.role.value if hasattr(user.role, 'value') else str(user.role)
-    )
-    
-    user_response = await build_user_response(db, user)
-    
-    return TokenResponse(
-        access_token=token,
-        expires_in=settings.jwt_expiration_hours * 3600,
-        user=user_response
-    )
+
+    logger.info("Microsoft login: email=%s, portal=%s", email, request.portal)
+    return await _login_with_rbac(db, email, request.portal, "Access denied")
 
 
 @router.post("/login/dev", response_model=TokenResponse)
@@ -192,157 +197,79 @@ async def dev_login(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Dev mode login - login as any user without password.
-    Only available when AUTH_MODE=dev.
+    Dev-mode login by email. Disabled when AUTH_MODE != 'dev'.
+
+    Same RBAC logic as Microsoft login, but accepts email directly
+    instead of requiring a Microsoft token.
     """
-    if settings.auth_mode != AuthMode.DEV:
+    if _auth_mode() != "dev":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Dev login only available in development mode"
+            detail="Dev login is disabled when AUTH_MODE is not 'dev'.",
         )
-    
-    user = await AuthService.get_user_by_email(db, request.email)
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User {request.email} not found"
-        )
-    
-    # Update last login
-    user.last_login = datetime.utcnow()
-    await db.commit()
-    
-    # Create token
-    token = AuthService.create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        role=user.role.value if hasattr(user.role, 'value') else str(user.role)
-    )
-    
-    user_response = await build_user_response(db, user)
-    
-    return TokenResponse(
-        access_token=token,
-        expires_in=settings.jwt_expiration_hours * 3600,
-        user=user_response
-    )
+
+    logger.info("Dev login: email=%s, portal=%s", request.email, request.portal)
+    return await _login_with_rbac(db, request.email, request.portal, "Access denied")
 
 
-@router.get("/dev/users", response_model=DevUsersResponse)
-async def get_dev_users(
+@router.post("/check-access", response_model=PortalAccessResponse)
+async def check_portal_access(
+    request: PortalAccessRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get list of available users for dev login.
-    Only available when AUTH_MODE=dev.
+    Check if a user has access to a specific portal WITHOUT issuing a token.
+
+    Used by the frontend callback page to verify access after Microsoft
+    authentication, before requesting a full login token.
+
+    SQL logic:
+      SELECT EXISTS (
+        SELECT 1
+        FROM analytics.user_master um
+        JOIN analytics.user_company_role_map ucrm ON um.user_id = ucrm.user_id
+        WHERE LOWER(TRIM(um.user_email)) = :email
+          AND um.is_active = true
+          AND ucrm.is_active = true
+          AND ucrm.role_id IN (:allowed_role_ids)
+      );
     """
-    if settings.auth_mode != AuthMode.DEV:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only available in development mode"
-        )
-    
-    result = await db.execute(
-        select(User).where(User.is_active == True).order_by(User.role, User.name)
+    user_context = await AuthService.check_portal_access(db, request.email, request.portal)
+
+    if not user_context:
+        return PortalAccessResponse(has_access=False)
+
+    return PortalAccessResponse(
+        has_access=True,
+        role=user_context["role"],
+        role_id=user_context["role_id"],
+        companies=user_context["accessible_companies"],
     )
-    users = result.scalars().all()
-    
-    dev_users = []
-    for user in users:
-        # Get company name
-        company_name = None
-        if user.company_id:
-            company_result = await db.execute(
-                select(Company.name).where(Company.id == user.company_id)
-            )
-            company_name = company_result.scalar_one_or_none()
-        
-        dev_users.append(DevUserInfo(
-            email=user.email,
-            name=user.name,
-            role=user.role.value if hasattr(user.role, 'value') else str(user.role),
-            company=company_name
-        ))
-    
-    return DevUsersResponse(users=dev_users)
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+async def get_me(
+    user: UserMaster = Depends(get_current_active_user),
 ):
-    """Get current authenticated user information"""
-    return await build_user_response(db, user)
+    """Get the currently authenticated user's info from their JWT."""
+    role = getattr(user, "current_role", None) or "Unknown"
+    role_id = getattr(user, "current_role_id", None) or 0
+    companies = getattr(user, "accessible_companies", []) or []
 
-
-@router.get("/verify", response_model=AuthStatusResponse)
-async def verify_auth(
-    request: Request,
-    user: Optional[User] = Depends(get_current_user_optional),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Verify current authentication status.
-    Returns user info if authenticated, or auth mode if not.
-    """
-    auth_mode = settings.auth_mode.value if hasattr(settings.auth_mode, 'value') else str(settings.auth_mode)
-    
-    if user:
-        user_response = await build_user_response(db, user)
-        return AuthStatusResponse(
-            authenticated=True,
-            auth_mode=auth_mode,
-            user=user_response
-        )
-    
-    return AuthStatusResponse(
-        authenticated=False,
-        auth_mode=auth_mode,
-        user=None
+    return UserResponse(
+        id=user.user_id,
+        email=user.user_email,
+        name=f"{user.first_name} {user.last_name}".strip(),
+        role=role,
+        role_id=role_id,
+        companies=companies,
     )
 
 
 @router.post("/logout")
-async def logout(
-    user: User = Depends(get_current_active_user),
-):
+async def logout():
     """
     Logout endpoint.
-    
-    Note: Since we use stateless JWTs, the actual token invalidation
-    must happen on the client side by removing the token.
-    
-    For server-side invalidation, you would need to implement a token
-    blacklist (e.g., in Redis) - not included in this basic implementation.
+    JWT is stateless — actual logout is handled client-side by deleting the token.
     """
-    return {
-        "message": "Logged out successfully",
-        "note": "Please remove the token from client storage"
-    }
-
-
-@router.get("/config")
-async def get_auth_config():
-    """
-    Get authentication configuration (for frontend).
-    Returns auth mode and Entra ID configuration if applicable.
-    """
-    auth_mode = settings.auth_mode.value if hasattr(settings.auth_mode, 'value') else str(settings.auth_mode)
-    
-    config = {
-        "auth_mode": auth_mode,
-        "dev_mode": auth_mode == "dev",
-    }
-    
-    # Include Entra config for SSO
-    if settings.azure_tenant_id and settings.azure_client_id:
-        config["entra"] = {
-            "tenant_id": settings.azure_tenant_id,
-            "client_id": settings.azure_client_id,
-            "authority": f"https://login.microsoftonline.com/{settings.azure_tenant_id}",
-            "redirect_uri": f"{settings.app_url}/auth/callback",
-        }
-    
-    return config
+    return {"message": "Logged out"}

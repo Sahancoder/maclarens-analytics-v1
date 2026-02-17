@@ -30,6 +30,11 @@ export function useAuth() {
 
   const hasRole = (role: string | string[]): boolean => {
     if (!user) return false;
+    
+    // Admin has access to everything (superuser)
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'system_admin';
+    if (isAdmin) return true;
+
     const roles = Array.isArray(role) ? role : [role];
     return roles.some(r => 
       user.role?.toLowerCase() === r.toLowerCase() ||

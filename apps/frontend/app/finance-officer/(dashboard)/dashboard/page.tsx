@@ -1,54 +1,41 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, FileText } from "lucide-react";
-
-const COMPANIES_DATA = [
-  { code: "ONE", name: "ONE", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "UMI", name: "UMI", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "MSC", name: "MSC", cluster: "Liner", yearEnd: "December", isActive: true },
-  { code: "MMA", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "MOL", name: "M O L Logistics Lanka", cluster: "Shipping Services & Logistics", yearEnd: "December", isActive: true },
-  { code: "CHR", name: "C.H. Robinson Worldwide", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "SwiftShipping", name: "Swift Shipping Services", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "UnitedMaritime", name: "United Maritime", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "Shermans", name: "Shermans Logistics", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "GMSL", name: "GAC Marine Services", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GSL", name: "GAC Shipping Limited", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GACTugs", name: "GAC Tugs", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "MSL", name: "McLarens Shipping Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GLL", name: "GAC Logistics Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "SPIL", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "SPL", name: "Spectra Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "IOSM", name: "Interocean Ship Management", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "AMOS", name: "Amos International Lanka", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "CTL", name: "Continental Tech Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "WOSS", name: "World Subsea Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "MLL-Auto", name: "McLarens Lubricants - Auto", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "McKupler", name: "McKupler Inc", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "Carplan", name: "Carplan Lubricants", cluster: "Lubricant II", yearEnd: "March", isActive: true },
-  { code: "Yantrataksan", name: "Yantrataksan Technologies", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Pidilite", name: "Pidilite Lanka", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Macbertan", name: "Macbertan", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "IOE", name: "Interocean Energy", cluster: "Bunkering & Renewables", yearEnd: "March", isActive: true },
-  { code: "GAHL", name: "Galle Agency House", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MAL", name: "McLarens Automotive", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MDL", name: "McLarens Developers", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "Topas", name: "Topaz Hotels", cluster: "Hotel & Leisure", yearEnd: "March", isActive: true },
-  { code: "MGML", name: "McLarens Group Management", cluster: "Strategic Investment", yearEnd: "March", isActive: true },
-];
+import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FOAPI } from "@/lib/api-client";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026"];
+
+// Metric ID constants (matching backend metric_master)
+const METRIC = {
+  REVENUE: 1, GP: 2, GP_MARGIN: 3, OTHER_INCOME: 4,
+  PERSONAL_EXP: 5, ADMIN_EXP: 6, SELLING_EXP: 7, FINANCE_EXP: 8,
+  DEPRECIATION: 9, TOTAL_OVERHEAD: 10, PROVISIONS: 11, EXCHANGE: 12,
+  PBT_BEFORE: 13, PBT_AFTER: 14, NON_OPS_EXP: 15, NON_OPS_INCOME: 16,
+  NP_MARGIN: 17, EBIT: 18, EBITDA: 19,
+};
 
 interface FormData {
   revenue: string; gp: string; otherIncome: string;
   personalExpenses: string; adminExpenses: string; sellingExpenses: string;
   financialExpenses: string; depreciation: string;
-  provisions: string; // Negative values can be entered directly
-  exchange: string;   // Negative values can be entered directly
+  provisions: string;
+  exchange: string;
   nonOpsExpenses: string; nonOpsIncome: string;
   comment: string;
+}
+
+interface ClusterItem {
+  cluster_id: string;
+  cluster_name: string;
+}
+
+interface CompanyItem {
+  company_id: string;
+  company_name: string;
+  cluster_id: string;
+  fin_year_start_month: number | null;
 }
 
 
@@ -185,11 +172,11 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
 }
 
 
-function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
-  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string;
+function ConfirmModal({ isOpen, onClose, onConfirm, company, month, loading }: {
+  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string; loading?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
-  
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -200,7 +187,7 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
-        
+
         <div className="mb-6">
           <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-lg border border-emerald-200 mb-4">
             <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-shrink-0" />
@@ -208,7 +195,7 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
               All required fields have been completed for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month}</span>
             </p>
           </div>
-          
+
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
               className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
@@ -217,15 +204,15 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
             </span>
           </label>
         </div>
-        
+
         <div className="flex gap-3 justify-end">
-          <button onClick={() => { onClose(); setConfirmed(false); }} 
+          <button onClick={() => { onClose(); setConfirmed(false); }}
             className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             Cancel
           </button>
-          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed}
+          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed || loading}
             className="h-10 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            Submit Data
+            {loading ? "Submitting..." : "Submit Data"}
           </button>
         </div>
       </div>
@@ -234,12 +221,27 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
 }
 
 export default function ActualEntryPage() {
-  const [cluster, setCluster] = useState("");
-  const [company, setCompany] = useState("");
+  // --- Selection state ---
+  const [clusterName, setClusterName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
+
+  // --- Data from backend ---
+  const [clustersList, setClustersList] = useState<ClusterItem[]>([]);
+  const [companiesList, setCompaniesList] = useState<CompanyItem[]>([]);
+  const [budgetMetrics, setBudgetMetrics] = useState<Record<number, number> | null>(null);
+
+  // --- Period warning ---
+  const [periodWarning, setPeriodWarning] = useState<string | null>(null);
+  const [periodAllowed, setPeriodAllowed] = useState(true);
+
+  // --- UI state ---
   const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingRejectedReport, setEditingRejectedReport] = useState<any>(null);
+
+  // --- Form data ---
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
@@ -247,8 +249,139 @@ export default function ActualEntryPage() {
     comment: "",
   });
 
-  // Check for rejected report data on component mount
-  // Check for rejected report data OR draft data on component mount
+  // --- Derived: selected company object ---
+  const selectedCompany = useMemo(
+    () => companiesList.find(c => c.company_name === companyName) || null,
+    [companyName, companiesList]
+  );
+
+  // --- Derived: selected cluster_id ---
+  const selectedClusterId = useMemo(
+    () => clustersList.find(c => c.cluster_name === clusterName)?.cluster_id || null,
+    [clusterName, clustersList]
+  );
+
+  // ==============================
+  // 1. Fetch clusters on mount
+  // ==============================
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await FOAPI.getUserClusters();
+      if (!cancelled && res.data) {
+        setClustersList(res.data);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ==============================
+  // 2. Fetch companies when cluster changes
+  // ==============================
+  useEffect(() => {
+    if (!selectedClusterId) {
+      setCompaniesList([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const res = await FOAPI.getUserCompanies(selectedClusterId);
+      if (!cancelled && res.data) {
+        setCompaniesList(res.data);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedClusterId]);
+
+  // Reset company when cluster changes
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    setCompanyName("");
+  }, [clusterName]);
+
+  // ==============================
+  // 3. Check period when year + month change (22-day rule)
+  // ==============================
+  useEffect(() => {
+    if (!year || !month) {
+      setPeriodWarning(null);
+      setPeriodAllowed(true);
+      return;
+    }
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    if (monthIndex <= 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const res = await FOAPI.checkPeriod(Number(year), monthIndex);
+      if (!cancelled && res.data) {
+        if (!res.data.allowed) {
+          setPeriodWarning(res.data.message);
+          setPeriodAllowed(false);
+        } else {
+          setPeriodWarning(null);
+          setPeriodAllowed(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [year, month]);
+
+  // ==============================
+  // 4. Fetch budget data when company + year + month are set
+  // ==============================
+  useEffect(() => {
+    if (!selectedCompany || !year || !month) {
+      setBudgetMetrics(null);
+      return;
+    }
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    if (monthIndex <= 0) {
+      setBudgetMetrics(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      // Try financial_fact first
+      const factRes = await FOAPI.getBudgetData(selectedCompany.company_id, Number(year), monthIndex);
+      if (!cancelled && factRes.data && factRes.data.metrics) {
+        setBudgetMetrics(factRes.data.metrics);
+        return;
+      }
+      // Fallback to existing budget endpoint (view-based)
+      if (!cancelled) {
+        const viewRes = await FOAPI.getBudget(selectedCompany.company_id, Number(year), monthIndex);
+        if (!cancelled && viewRes.data) {
+          setBudgetMetrics({
+            [METRIC.REVENUE]: viewRes.data.revenue_lkr || 0,
+            [METRIC.GP]: viewRes.data.gp || 0,
+            [METRIC.OTHER_INCOME]: viewRes.data.other_income || 0,
+            [METRIC.PERSONAL_EXP]: viewRes.data.personal_exp || 0,
+            [METRIC.ADMIN_EXP]: viewRes.data.admin_exp || 0,
+            [METRIC.SELLING_EXP]: viewRes.data.selling_exp || 0,
+            [METRIC.FINANCE_EXP]: viewRes.data.finance_exp || 0,
+            [METRIC.DEPRECIATION]: viewRes.data.depreciation || 0,
+            [METRIC.PROVISIONS]: viewRes.data.provisions || 0,
+            [METRIC.EXCHANGE]: viewRes.data.exchange_gl || 0,
+            [METRIC.NON_OPS_EXP]: viewRes.data.non_ops_exp || 0,
+            [METRIC.NON_OPS_INCOME]: viewRes.data.non_ops_income || 0,
+          });
+        } else if (!cancelled) {
+          setBudgetMetrics(null);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedCompany, month, year]);
+
+  // ==============================
+  // Load rejected report or draft on mount
+  // ==============================
   useEffect(() => {
     const storedReport = sessionStorage.getItem('editingRejectedReport');
     if (storedReport) {
@@ -256,31 +389,25 @@ export default function ActualEntryPage() {
         const reportData = JSON.parse(storedReport);
         setEditingRejectedReport(reportData);
         setFormData(reportData.formData);
-        
-        const companyInfo = COMPANIES_DATA.find(c => c.code === reportData.companyCode);
-        if (companyInfo) {
-          setCluster(reportData.cluster);
-          setCompany(reportData.companyName);
-        }
-        
-        const monthName = reportData.period.split(' ')[0];
-        setMonth(monthName);
+        if (reportData.cluster) setClusterName(reportData.cluster);
+        if (reportData.companyName) setCompanyName(reportData.companyName);
+        const monthName = reportData.period?.split(' ')[0];
+        if (monthName) setMonth(monthName);
         sessionStorage.removeItem('editingRejectedReport');
       } catch (error) {
         console.error('Error loading rejected report:', error);
       }
     } else {
-      // Check for saved draft if not editing a rejected report
       const savedDraft = localStorage.getItem("dataEntryDraft");
       if (savedDraft) {
         try {
           const draftData = JSON.parse(savedDraft);
-          // Only load if it looks like our data
           if (draftData.formData) {
             setFormData(draftData.formData);
-            if (draftData.cluster) setCluster(draftData.cluster);
-            if (draftData.company) setCompany(draftData.company);
+            if (draftData.cluster) setClusterName(draftData.cluster);
+            if (draftData.company) setCompanyName(draftData.company);
             if (draftData.month) setMonth(draftData.month);
+            if (draftData.year) setYear(draftData.year);
           }
         } catch (e) {
           console.error("Error loading draft", e);
@@ -289,50 +416,93 @@ export default function ActualEntryPage() {
     }
   }, []);
 
-  const clusters = useMemo(() => Array.from(new Set(COMPANIES_DATA.filter(c => c.isActive).map(c => c.cluster))).sort(), []);
-  const companies = useMemo(() => cluster ? COMPANIES_DATA.filter(c => c.isActive && c.cluster === cluster) : [], [cluster]);
-  const companyData = useMemo(() => COMPANIES_DATA.find(c => c.name === company), [company]);
-  const financialYear = useMemo(() => companyData ? (companyData.yearEnd === "December" ? "FY 2025" : "FY 2025-26") : "", [companyData]);
-
-  useEffect(() => { 
-    // Only reset company if the new cluster doesn't contain the current company
-    // But since companies is derived from cluster, if cluster changes, companies changes.
-    // We should check if current company is valid for new cluster.
-    const isValid = COMPANIES_DATA.some(c => c.name === company && c.cluster === cluster);
-    if (!isValid) setCompany(""); 
-  }, [cluster, company]); // Added company dependency to satisfy exhaustive-deps, though logic slighty changed from original `useEffect(() => { setCompany(""); }, [cluster]);` which blindly reset.
-  // Actually, let's keep original behavior but strictly cleaner if needed. 
-  // The original was: useEffect(() => { setCompany(""); }, [cluster]); 
-  // If we behave like original:
-  // useEffect(() => { setCompany(""); }, [cluster]); 
-  // using saved draft might set cluster then company. If we strictly follow react, setting cluster triggers this.
-  // We need to be careful not to clear company immediately after loading draft.
-  // The loading logic sets both. React batching might help, or we might need a ref to skip first reset.
-  
-  // Ref to track if initial load happened to avoid clearing company
-  const isInitialMount = useRef(true);
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    setCompany("");
-  }, [cluster]);
-
-  const update = useCallback((field: keyof FormData, value: string | "+" | "-") => {
+  // ==============================
+  // Handlers
+  // ==============================
+  const update = useCallback((field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  const handleSaveDraft = () => {
+  const buildSavePayload = useCallback((isSubmit: boolean) => {
+    if (!selectedCompany) return null;
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    if (monthIndex <= 0 || !year) return null;
+
+    const n = (v: string) => parseFloat(v) || 0;
+    return {
+      company_id: selectedCompany.company_id,
+      year: Number(year),
+      month: monthIndex,
+      revenue: n(formData.revenue),
+      gp: n(formData.gp),
+      other_income: n(formData.otherIncome),
+      personal_exp: n(formData.personalExpenses),
+      admin_exp: n(formData.adminExpenses),
+      selling_exp: n(formData.sellingExpenses),
+      finance_exp: n(formData.financialExpenses),
+      depreciation: n(formData.depreciation),
+      provisions: n(formData.provisions),
+      exchange_gl: n(formData.exchange),
+      non_ops_exp: n(formData.nonOpsExpenses),
+      non_ops_income: n(formData.nonOpsIncome),
+      comment: formData.comment || undefined,
+      is_submit: isSubmit,
+    };
+  }, [selectedCompany, year, month, formData]);
+
+  const handleSaveDraft = async () => {
+    // Save to localStorage as before
     const draftData = {
-      cluster,
-      company,
+      cluster: clusterName,
+      company: companyName,
       month,
+      year,
       formData,
-      lastModified: new Date().toISOString()
+      lastModified: new Date().toISOString(),
     };
     localStorage.setItem("dataEntryDraft", JSON.stringify(draftData));
-    alert("Draft saved successfully!");
+
+    // Also save to backend (status_id = 1 = Draft)
+    const payload = buildSavePayload(false);
+    if (payload) {
+      setSaving(true);
+      const res = await FOAPI.saveActuals(payload);
+      setSaving(false);
+      if (res.data?.success) {
+        alert("Draft saved successfully!");
+      } else {
+        alert(`Draft saved locally. Backend: ${res.error || "Could not save to server."}`);
+      }
+    } else {
+      alert("Draft saved locally!");
+    }
+  };
+
+  const handleSubmit = async () => {
+    setShowModal(false);
+    const payload = buildSavePayload(true);
+    if (!payload) {
+      alert("Please select company, year, and month before submitting.");
+      return;
+    }
+
+    setSaving(true);
+    const res = await FOAPI.saveActuals(payload);
+    setSaving(false);
+
+    if (res.data?.success) {
+      localStorage.removeItem("dataEntryDraft");
+      alert("Actual data submitted to Finance Director for review!");
+      // Reset form
+      setFormData({
+        revenue: "", gp: "", otherIncome: "",
+        personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
+        provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
+        comment: "",
+      });
+    } else {
+      alert(`Submission failed: ${res.error || "Unknown error"}`);
+    }
   };
 
   const handleClear = () => {
@@ -340,12 +510,36 @@ export default function ActualEntryPage() {
       setFormData({
         revenue: "", gp: "", otherIncome: "",
         personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
-        provisions: "", provisionsSign: "+", exchange: "", exchangeSign: "+", nonOpsExpenses: "", nonOpsIncome: "",
+        provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
         comment: "",
       });
     }
   };
 
+  // ==============================
+  // Budget display values
+  // ==============================
+  const formatBudget = (value: number | null | undefined) =>
+    Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const budgetValues = useMemo(() => ({
+    revenue: formatBudget(budgetMetrics?.[METRIC.REVENUE]),
+    gp: formatBudget(budgetMetrics?.[METRIC.GP]),
+    otherIncome: formatBudget(budgetMetrics?.[METRIC.OTHER_INCOME]),
+    personalExpenses: formatBudget(budgetMetrics?.[METRIC.PERSONAL_EXP]),
+    adminExpenses: formatBudget(budgetMetrics?.[METRIC.ADMIN_EXP]),
+    sellingExpenses: formatBudget(budgetMetrics?.[METRIC.SELLING_EXP]),
+    financialExpenses: formatBudget(budgetMetrics?.[METRIC.FINANCE_EXP]),
+    depreciation: formatBudget(budgetMetrics?.[METRIC.DEPRECIATION]),
+    provisions: formatBudget(budgetMetrics?.[METRIC.PROVISIONS]),
+    exchange: formatBudget(budgetMetrics?.[METRIC.EXCHANGE]),
+    nonOpsExpenses: formatBudget(budgetMetrics?.[METRIC.NON_OPS_EXP]),
+    nonOpsIncome: formatBudget(budgetMetrics?.[METRIC.NON_OPS_INCOME]),
+  }), [budgetMetrics]);
+
+  // ==============================
+  // Auto-calculated metrics
+  // ==============================
   const calc = useMemo(() => {
     const n = (v: string) => parseFloat(v) || 0;
     const revenue = n(formData.revenue), gp = n(formData.gp), otherIncome = n(formData.otherIncome);
@@ -360,14 +554,15 @@ export default function ActualEntryPage() {
     const pbtBefore = (gp + otherIncome) - totalOverheads + provisions + exchange;
     const npMargin = revenue > 0 ? ((pbtBefore / revenue) * 100).toFixed(2) : "0.00";
     const pbtAfter = pbtBefore + nonOpsInc - nonOpsExp;
-    // EBIT = PBT before financial expenses (pbtBefore already excludes financial expenses in totalOverheads, so add them back)
     const ebit = pbtBefore + financial;
-    // EBITDA = EBIT before depreciation (add back depreciation)
     const ebitda = ebit + depreciation;
 
     return { gpMargin, totalOverheads: totalOverheads.toFixed(2), pbtBefore: pbtBefore.toFixed(2), npMargin, pbtAfter: pbtAfter.toFixed(2), ebit: ebit.toFixed(2), ebitda: ebitda.toFixed(2) };
   }, [formData]);
 
+  // ==============================
+  // Progress tracking
+  // ==============================
   const filled = (v: string) => v !== "" && !isNaN(parseFloat(v));
   const gpOk = filled(formData.revenue) && filled(formData.gp);
   const overheadsOk = filled(formData.personalExpenses) && filled(formData.adminExpenses) && filled(formData.sellingExpenses) && filled(formData.financialExpenses) && filled(formData.depreciation);
@@ -395,9 +590,13 @@ export default function ActualEntryPage() {
     { label: "EBIT", done: pbtAfterOk },
     { label: "EBITDA", done: pbtAfterOk },
   ];
-  
+
   const completedCount = progress.filter(p => p.done).length;
   const pct = Math.round((completedCount / progress.length) * 100);
+
+  // Dropdown options derived from backend data
+  const clusterOptions = useMemo(() => clustersList.map(c => c.cluster_name), [clustersList]);
+  const companyOptions = useMemo(() => companiesList.map(c => c.company_name), [companiesList]);
 
 
   return (
@@ -411,29 +610,35 @@ export default function ActualEntryPage() {
               <span className="text-sm font-semibold">Editing Rejected Report</span>
             </div>
             <div className="flex-1 text-sm text-amber-700">
-              <span className="font-medium">{editingRejectedReport.companyName}</span> - {editingRejectedReport.period} 
-              <span className="mx-2">•</span>
-              <span className="italic">Rejection: {editingRejectedReport.rejectionReason.substring(0, 80)}...</span>
+              <span className="font-medium">{editingRejectedReport.companyName}</span> - {editingRejectedReport.period}
+              <span className="mx-2">&bull;</span>
+              <span className="italic">Rejection: {editingRejectedReport.rejectionReason?.substring(0, 80)}...</span>
             </div>
           </div>
         </div>
       )}
 
-      
-      {/* Header Banner - Actual Entry - Removed as per request */}
-      
+      {/* Period Warning Banner */}
+      {periodWarning && (
+        <div className="bg-red-50 border-b-2 border-red-200 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <span className="text-sm font-semibold text-red-800">{periodWarning}</span>
+          </div>
+        </div>
+      )}
 
-      
+
       {/* Selection Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Dropdown label="Cluster" value={cluster} options={clusters} onChange={setCluster} placeholder="Select Cluster" searchable />
-          <Dropdown label="Company" value={company} options={companies.map(c => c.name)} onChange={setCompany} placeholder="Select Company" disabled={!cluster} searchable />
-          <Dropdown label="Reporting Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!company} />
-          <Dropdown label="Reporting Month" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!company} />
+          <Dropdown label="Cluster" value={clusterName} options={clusterOptions} onChange={setClusterName} placeholder="Select Cluster" searchable />
+          <Dropdown label="Company" value={companyName} options={companyOptions} onChange={setCompanyName} placeholder="Select Company" disabled={!clusterName} searchable />
+          <Dropdown label="Reporting Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!companyName} />
+          <Dropdown label="Reporting Month" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!companyName} />
         </div>
-        {companyData && (
-          <div className="mt-3 text-sm text-slate-500">Company Code: <span className="font-medium text-slate-800">{companyData.code}</span></div>
+        {selectedCompany && (
+          <div className="mt-3 text-sm text-slate-500">Company Code: <span className="font-medium text-slate-800">{selectedCompany.company_id}</span></div>
         )}
       </div>
 
@@ -446,9 +651,9 @@ export default function ActualEntryPage() {
               <div className="pt-4">
                 <GridHeader />
                 <div className="space-y-1">
-                    <EntryRow label="Revenue" budget="12,500,000" value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
-                    <EntryRow label="Gross Profit (GP)" budget="4,200,000" value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
-                    <EntryRow label="Other Income" budget="150,000" value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
+                    <EntryRow label="Revenue" budget={budgetValues.revenue} value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
+                    <EntryRow label="Gross Profit (GP)" budget={budgetValues.gp} value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
+                    <EntryRow label="Other Income" budget={budgetValues.otherIncome} value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-12 gap-4">
                     <div className="col-span-12 sm:col-span-8 flex justify-end items-center">
@@ -467,11 +672,11 @@ export default function ActualEntryPage() {
               <div className="pt-4">
                 <GridHeader />
                 <div className="space-y-1">
-                    <EntryRow label="Personal Related" budget="1,200,000" value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
-                    <EntryRow label="Admin & Establishment" budget="450,000" value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
-                    <EntryRow label="Selling & Distribution" budget="320,000" value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
-                    <EntryRow label="Financial Expenses" budget="125,000" value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
-                    <EntryRow label="Depreciation" budget="85,000" value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
+                    <EntryRow label="Personal Related" budget={budgetValues.personalExpenses} value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
+                    <EntryRow label="Admin & Establishment" budget={budgetValues.adminExpenses} value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
+                    <EntryRow label="Selling & Distribution" budget={budgetValues.sellingExpenses} value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
+                    <EntryRow label="Financial Expenses" budget={budgetValues.financialExpenses} value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
+                    <EntryRow label="Depreciation" budget={budgetValues.depreciation} value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-12 gap-4">
                     <div className="col-span-12 sm:col-span-8 flex justify-end items-center">
@@ -490,10 +695,10 @@ export default function ActualEntryPage() {
                <div className="pt-4">
                 <GridHeader />
                 <div className="space-y-1">
-                    <EntryRow label="Provisions" budget="0.00" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
-                    <EntryRow label="Exchange (Loss/Gain)" budget="0.00" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
-                    <EntryRow label="Non-Operating Expenses" budget="50,000" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
-                    <EntryRow label="Non-Operating Income" budget="0.00" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
+                    <EntryRow label="Provisions" budget={budgetValues.provisions} value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
+                    <EntryRow label="Exchange (Loss/Gain)" budget={budgetValues.exchange} value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
+                    <EntryRow label="Non-Operating Expenses" budget={budgetValues.nonOpsExpenses} value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
+                    <EntryRow label="Non-Operating Income" budget={budgetValues.nonOpsIncome} value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
                 </div>
               </div>
             </Section>
@@ -521,7 +726,7 @@ export default function ActualEntryPage() {
           </div>
         </div>
 
-        {/* Progress Panel - Light Green */}
+        {/* Progress Panel */}
         <div className="hidden lg:flex w-60 bg-white border-l border-slate-200 flex-col">
           <div className="p-5 border-b border-slate-200">
             <div className="flex items-center justify-between mb-3">
@@ -564,10 +769,11 @@ export default function ActualEntryPage() {
             Clear
           </button>
           <div className="flex gap-3">
-            <button type="button" onClick={handleSaveDraft} className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors">
-              Save Draft
+            <button type="button" onClick={handleSaveDraft} disabled={saving}
+              className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50">
+              {saving ? "Saving..." : "Save Draft"}
             </button>
-            <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !company || !month}
+            <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !companyName || !month || !year || !periodAllowed || saving}
               className="h-10 px-6 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Submit
             </button>
@@ -575,7 +781,7 @@ export default function ActualEntryPage() {
         </div>
       </div>
 
-      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={() => { setShowModal(false); localStorage.removeItem("dataEntryDraft"); alert("Actual data submitted to Finance Director for review!"); }} company={company} month={month} />
+      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={handleSubmit} company={companyName} month={month} loading={saving} />
     </div>
   );
 }

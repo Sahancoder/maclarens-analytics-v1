@@ -1,230 +1,182 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Layers, Building2, Edit, ToggleLeft, ToggleRight, ChevronRight, X, Trash2, ChevronDown } from "lucide-react";
-
-interface Cluster {
-  id: string;
-  name: string;
-  companies: number;
-  activeCompanies: number;
-  status: "active" | "inactive";
-  createdAt: string;
-}
-
-const clustersData: Cluster[] = [
-  { id: "1", name: "Liner", companies: 3, activeCompanies: 3, status: "active", createdAt: "Jan 2020" },
-  { id: "2", name: "Shipping Services & Logistics", companies: 6, activeCompanies: 5, status: "active", createdAt: "Jan 2020" },
-  { id: "3", name: "GAC Cluster", companies: 5, activeCompanies: 4, status: "active", createdAt: "Jan 2020" },
-  { id: "4", name: "Warehouse & Logistics", companies: 2, activeCompanies: 2, status: "active", createdAt: "Mar 2021" },
-  { id: "5", name: "Ship Supply Services", companies: 4, activeCompanies: 4, status: "active", createdAt: "Jan 2020" },
-  { id: "6", name: "Lubricant I", companies: 2, activeCompanies: 2, status: "active", createdAt: "Jan 2020" },
-  { id: "7", name: "Lubricant II", companies: 1, activeCompanies: 1, status: "active", createdAt: "Jun 2022" },
-  { id: "8", name: "Manufacturing", companies: 3, activeCompanies: 3, status: "active", createdAt: "Jan 2020" },
-  { id: "9", name: "Bunkering & Renewables", companies: 1, activeCompanies: 1, status: "active", createdAt: "Sep 2023" },
-  { id: "10", name: "Property", companies: 3, activeCompanies: 3, status: "active", createdAt: "Jan 2020" },
-  { id: "11", name: "Hotel & Leisure", companies: 1, activeCompanies: 1, status: "active", createdAt: "Jan 2020" },
-  { id: "12", name: "Strategic Investment", companies: 1, activeCompanies: 1, status: "active", createdAt: "Jan 2020" },
-];
+import { useEffect, useState } from "react";
+import { Edit, Layers, Plus, ToggleLeft, ToggleRight, X } from "lucide-react";
+import { AdminAPI, type AdminCluster, type AdminCompany } from "@/lib/api-client";
 
 export default function ClustersPage() {
-  const [allCompanies, setAllCompanies] = useState([
-    { id: "1", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics" },
-    { id: "2", name: "GAC Shipping Limited", cluster: "GAC Cluster" },
-    { id: "3", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics" },
-    { id: "4", name: "Interocean Energy", cluster: "Bunkering & Renewables" },
-    { id: "5", name: "ONE", cluster: "Liner" },
-    { id: "6", name: "MSC", cluster: "Liner" },
-    { id: "7", name: "GAC Marine Services", cluster: "GAC Cluster" },
-    { id: "8", name: "McOcean", cluster: "Ship Supply Services" },
-    { id: "9", name: "McShaw", cluster: "Lubricant I" }, 
-    { id: "10", name: "Alliance Agencies", cluster: "Shipping Services & Logistics" }
-  ]);
-
-  const [clusters, setClusters] = useState(clustersData);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
-  const [viewingCluster, setViewingCluster] = useState<Cluster | null>(null);
-
-  // Add Company Modal State
-  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
-  const [newCompanyData, setNewCompanyData] = useState({
-    name: "",
-    cluster: "",
-    fyStartMonth: "April"
+  const [clusters, setClusters] = useState<AdminCluster[]>([]);
+  const [summary, setSummary] = useState({
+    total_clusters: 0,
+    total_companies: 0,
+    active_companies: 0,
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  /* Helpers */
-  const getClusterCompanies = (clusterName: string) => {
-    return allCompanies.filter(c => c.cluster === clusterName);
-  };
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<AdminCluster | null>(null);
+  const [viewing, setViewing] = useState<AdminCluster | null>(null);
+  const [clusterCompanies, setClusterCompanies] = useState<AdminCompany[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
-  const toggleStatus = (id: string) => {
-    setClusters((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, status: c.status === "active" ? "inactive" : "active" } : c
-      )
-    );
-  };
-  
-  const totalCompanies = clusters.reduce((sum, c) => sum + c.companies, 0);
-  const totalActive = clusters.reduce((sum, c) => sum + c.activeCompanies, 0);
+  const [newClusterName, setNewClusterName] = useState("");
+  const [editClusterName, setEditClusterName] = useState("");
 
-  // Handlers for Add Company
-  const handleAddCompanyClick = () => {
-    if (!viewingCluster) return;
-    setNewCompanyData({
-      name: "",
-      cluster: viewingCluster.name,
-      fyStartMonth: "April"
+  const loadClusters = async () => {
+    setLoading(true);
+    setError(null);
+    const response = await AdminAPI.getClustersList();
+    if (response.error || !response.data) {
+      setError(response.error || "Failed to load clusters");
+      setClusters([]);
+      setLoading(false);
+      return;
+    }
+
+    setClusters(response.data.clusters);
+    setSummary({
+      total_clusters: response.data.total_clusters,
+      total_companies: response.data.total_companies,
+      active_companies: response.data.active_companies,
     });
-    setShowAddCompanyModal(true);
+    setLoading(false);
   };
 
-  const handleCreateCompany = async () => {
-    // Validation
-    if (!newCompanyData.name.trim()) {
-      alert("Company name is required");
-      return;
-    }
-    
-    // Check for duplicate name
-    if (allCompanies.some(c => c.name.toLowerCase() === newCompanyData.name.trim().toLowerCase())) {
-      alert("A company with this name already exists");
-      return;
-    }
+  useEffect(() => {
+    loadClusters();
+  }, []);
 
-    setIsSubmitting(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const newCompany = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newCompanyData.name.trim(),
-      cluster: newCompanyData.cluster
-    };
-
-    setAllCompanies([...allCompanies, newCompany]);
-
-    // Update cluster counts
-    setClusters(prev => prev.map(c => 
-      c.name === newCompanyData.cluster 
-        ? { ...c, companies: c.companies + 1, activeCompanies: c.activeCompanies + 1 } 
-        : c
-    ));
-    
-    setIsSubmitting(false);
-    setShowAddCompanyModal(false);
+  const openEdit = (cluster: AdminCluster) => {
+    setEditing(cluster);
+    setEditClusterName(cluster.cluster_name);
   };
 
-  const months = ["January", "April"];
+  const openView = async (cluster: AdminCluster) => {
+    setViewing(cluster);
+    const response = await AdminAPI.getClusterCompanies(cluster.cluster_id);
+    setClusterCompanies(response.data || []);
+  };
+
+  const createCluster = async () => {
+    if (!newClusterName.trim()) {
+      setError("Cluster name is required.");
+      return;
+    }
+
+    setSubmitting(true);
+    const response = await AdminAPI.createCluster({
+      cluster_name: newClusterName.trim(),
+      is_active: true,
+    });
+    setSubmitting(false);
+
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+
+    setShowAdd(false);
+    setNewClusterName("");
+    await loadClusters();
+  };
+
+  const saveClusterEdit = async () => {
+    if (!editing) return;
+    if (!editClusterName.trim()) {
+      setError("Cluster name is required.");
+      return;
+    }
+
+    setSubmitting(true);
+    const response = await AdminAPI.updateCluster(editing.cluster_id, {
+      cluster_name: editClusterName.trim(),
+    });
+    setSubmitting(false);
+
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+
+    setEditing(null);
+    await loadClusters();
+  };
+
+  const toggleClusterStatus = async (cluster: AdminCluster) => {
+    const response = await AdminAPI.updateCluster(cluster.cluster_id, {
+      is_active: !cluster.is_active,
+    });
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+    await loadClusters();
+  };
+
+  const deactivateCluster = async (cluster: AdminCluster) => {
+    const response = await AdminAPI.deleteCluster(cluster.cluster_id);
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+    setEditing(null);
+    await loadClusters();
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="p-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+      <div className="p-8 space-y-6">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Cluster Management</h1>
-            <p className="text-base text-slate-500 mt-2">Organize companies into clusters for reporting and analytics</p>
+            <p className="text-slate-500 mt-1">Live cluster and company aggregation</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 h-11 px-5 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors"
-          >
+          <button onClick={() => setShowAdd(true)} className="h-10 px-4 rounded-lg bg-[#0b1f3a] text-white text-sm font-medium inline-flex items-center gap-2">
             <Plus className="h-4 w-4" /> Add Cluster
           </button>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Layers className="h-5 w-5 text-purple-600" />
-              </div>
-              <span className="text-sm font-medium text-slate-600">Total Clusters</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">{clusters.length}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-blue-600" />
-              </div>
-              <span className="text-sm font-medium text-slate-600">Total Companies</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">{totalCompanies}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-emerald-600" />
-              </div>
-              <span className="text-sm font-medium text-slate-600">Active Companies</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">{totalActive}</p>
-          </div>
+        {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SummaryCard title="Total Clusters" value={summary.total_clusters} />
+          <SummaryCard title="Total Companies" value={summary.total_companies} />
+          <SummaryCard title="Active Companies" value={summary.active_companies} />
         </div>
 
-        {/* Clusters Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {clusters.map((cluster) => (
-            <div
-              key={cluster.id}
-              className={`bg-white rounded-xl border p-6 transition-all ${
-                cluster.status === "active" ? "border-slate-200" : "border-slate-200 opacity-60"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {loading && <p className="text-sm text-slate-500">Loading clusters...</p>}
+          {!loading && clusters.length === 0 && <p className="text-sm text-slate-500">No clusters found.</p>}
+          {!loading && clusters.map((cluster) => (
+            <div key={cluster.cluster_id} className={`rounded-xl border p-4 bg-white ${cluster.is_active ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
+              <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                    <Layers className="h-6 w-6 text-purple-600" />
+                  <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                    <Layers className="h-5 w-5 text-indigo-600" />
                   </div>
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">{cluster.name}</h3>
-                    <p className="text-xs text-slate-500">Created {cluster.createdAt}</p>
+                    <h3 className="text-base font-semibold text-slate-900">{cluster.cluster_name}</h3>
+                    <p className="text-xs text-slate-500">{cluster.cluster_id}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleStatus(cluster.id)}
-                  className={`${cluster.status === "active" ? "text-emerald-500" : "text-slate-400"}`}
-                >
-                  {cluster.status === "active" ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+                <button onClick={() => toggleClusterStatus(cluster)} className={cluster.is_active ? "text-emerald-500" : "text-slate-400"}>
+                  {cluster.is_active ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
                 </button>
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg mb-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-slate-900">{cluster.companies}</p>
-                  <p className="text-xs text-slate-500">Companies</p>
-                </div>
-                <div className="h-10 w-px bg-slate-200" />
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">{cluster.activeCompanies}</p>
-                  <p className="text-xs text-slate-500">Active</p>
-                </div>
-                <div className="h-10 w-px bg-slate-200" />
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-slate-400">{cluster.companies - cluster.activeCompanies}</p>
-                  <p className="text-xs text-slate-500">Inactive</p>
-                </div>
+              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                <Metric label="Companies" value={cluster.total_companies} />
+                <Metric label="Active" value={cluster.active_companies} />
+                <Metric label="Inactive" value={cluster.inactive_companies} />
               </div>
 
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setEditingCluster(cluster)}
-                  className="flex-1 h-9 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-1"
-                >
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => openEdit(cluster)} className="flex-1 h-9 rounded-lg border border-slate-300 text-sm inline-flex items-center justify-center gap-1">
                   <Edit className="h-4 w-4" /> Edit
                 </button>
-                <button 
-                  onClick={() => setViewingCluster(cluster)}
-                  className="flex-1 h-9 text-sm font-medium text-[#0b1f3a] bg-[#0b1f3a]/10 rounded-lg hover:bg-[#0b1f3a]/20 transition-colors flex items-center justify-center gap-1"
-                >
-                  View Companies <ChevronRight className="h-4 w-4" />
+                <button onClick={() => openView(cluster)} className="flex-1 h-9 rounded-lg bg-slate-100 text-sm">
+                  View Companies
                 </button>
               </div>
             </div>
@@ -232,221 +184,131 @@ export default function ClustersPage() {
         </div>
       </div>
 
-      {/* Edit Cluster Modal */}
-      {editingCluster && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-[#0b1f3a]">Edit Cluster</h3>
-              <button onClick={() => setEditingCluster(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Cluster Name</label>
-                <input 
-                  type="text" 
-                  defaultValue={editingCluster.name}
-                  className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" 
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-between gap-2">
-              <button 
-                onClick={() => {
-                  alert("Cluster deleted!");
-                  setEditingCluster(null);
-                }}
-                className="h-9 px-4 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
-              >
-                <Trash2 className="h-4 w-4" /> Delete Cluster
-              </button>
-              <div className="flex gap-2">
-                <button onClick={() => setEditingCluster(null)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
-                  Cancel
-                </button>
-                <button className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors">
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {showAdd && (
+        <Modal title="Add Cluster" onClose={() => setShowAdd(false)}>
+          <input
+            value={newClusterName}
+            onChange={(e) => setNewClusterName(e.target.value)}
+            placeholder="Cluster name"
+            className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
+          />
+          <ModalActions
+            onCancel={() => setShowAdd(false)}
+            onSubmit={createCluster}
+            submitLabel={submitting ? "Creating..." : "Create Cluster"}
+            disabled={submitting}
+          />
+        </Modal>
       )}
 
-      {/* View Companies Modal */}
-      {viewingCluster && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-[#0b1f3a]">Companies in {viewingCluster.name}</h3>
-              <button onClick={() => setViewingCluster(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="p-5 overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-xs font-semibold text-slate-700 uppercase">Assigned Companies</h4>
-                <button 
-                  onClick={handleAddCompanyClick}
-                  className="text-xs font-medium text-[#0b1f3a] hover:underline flex items-center gap-1"
-                >
-                  <Plus className="h-3 w-3" /> Add Company
-                </button>
-              </div>
-              
-              <div className="space-y-2">
-                {getClusterCompanies(viewingCluster.name).length > 0 ? (
-                  getClusterCompanies(viewingCluster.name).map((company) => (
-                    <div key={company.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                          <Building2 className="h-4 w-4 text-slate-400" />
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">{company.name}</span>
-                      </div>
-                      <button className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors">
-                        Remove
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-6 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-                    <p className="text-sm text-slate-500">No companies assigned to this cluster</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-              <button onClick={() => setViewingCluster(null)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Company Modal (Stacked) */}
-      {showAddCompanyModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-[#0b1f3a]">Add New Company</h3>
-              <button 
-                onClick={() => setShowAddCompanyModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-                disabled={isSubmitting}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {/* Company Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Company Name <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  value={newCompanyData.name}
-                  onChange={(e) => setNewCompanyData({...newCompanyData, name: e.target.value})}
-                  placeholder="e.g. Acme Logistics"
-                  className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
-                  disabled={isSubmitting}
-                />
-              </div>
-
-              {/* Cluster (Read-only) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Cluster <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  value={newCompanyData.cluster}
-                  readOnly
-                  className="w-full h-10 px-3 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
-                />
-              </div>
-
-              {/* FY Start Month */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Financial Year Start Month <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <select 
-                    value={newCompanyData.fyStartMonth}
-                    onChange={(e) => setNewCompanyData({...newCompanyData, fyStartMonth: e.target.value})}
-                    className="w-full h-10 px-3 pr-8 text-sm text-slate-900 border border-slate-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]"
-                    disabled={isSubmitting}
-                  >
-                    {months.map((month) => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1.5">YTD values are calculated based on the financial year start month.</p>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-              <button 
-                onClick={() => setShowAddCompanyModal(false)}
-                className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
-                disabled={isSubmitting}
-              >
+      {editing && (
+        <Modal title="Edit Cluster" onClose={() => setEditing(null)}>
+          <input
+            value={editClusterName}
+            onChange={(e) => setEditClusterName(e.target.value)}
+            placeholder="Cluster name"
+            className="h-10 w-full border border-slate-300 rounded-lg px-3 text-sm"
+          />
+          <div className="flex justify-between gap-2">
+            <button
+              onClick={() => deactivateCluster(editing)}
+              className="h-9 px-3 rounded-lg border border-rose-300 text-rose-700 text-sm"
+            >
+              Deactivate
+            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setEditing(null)} className="h-9 px-3 rounded-lg border border-slate-300 text-sm">
                 Cancel
               </button>
-              <button 
-                onClick={handleCreateCompany}
-                disabled={isSubmitting}
-                className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+              <button
+                onClick={saveClusterEdit}
+                disabled={submitting}
+                className="h-9 px-3 rounded-lg bg-[#0b1f3a] text-white text-sm disabled:opacity-60"
               >
-                {isSubmitting ? (
-                  <>
-                    <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Company"
-                )}
+                {submitting ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Add Cluster Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-[#0b1f3a]">Add New Cluster</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">Cluster Name</label>
-                <input type="text" className="w-full h-10 px-3 text-sm text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0b1f3a] focus:ring-1 focus:ring-[#0b1f3a]" placeholder="e.g., Renewables" />
+      {viewing && (
+        <Modal title={`Companies - ${viewing.cluster_name}`} onClose={() => setViewing(null)}>
+          <div className="border border-slate-200 rounded-lg max-h-64 overflow-y-auto">
+            {clusterCompanies.length === 0 && <p className="text-sm text-slate-500 p-3">No companies found.</p>}
+            {clusterCompanies.map((company) => (
+              <div key={company.company_id} className="px-3 py-2 border-b border-slate-100 last:border-0">
+                <p className="text-sm text-slate-900">{company.company_name}</p>
+                <p className="text-xs text-slate-500">{company.company_id}</p>
               </div>
-            </div>
-
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-              <button onClick={() => setShowAddModal(false)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
-                Cancel
-              </button>
-              <button className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors">
-                Create Cluster
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
+          <ModalActions onCancel={() => setViewing(null)} onSubmit={() => setViewing(null)} submitLabel="Close" />
+        </Modal>
       )}
+    </div>
+  );
+}
+
+function SummaryCard({ title, value }: { title: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-xs uppercase text-slate-500">{title}</p>
+      <p className="text-3xl font-bold text-slate-900 mt-2">{value}</p>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-2">
+      <p className="text-lg font-semibold text-slate-900">{value}</p>
+      <p className="text-[11px] text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-xl bg-white border border-slate-200">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+          <button onClick={onClose} className="text-slate-500"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-4 space-y-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModalActions({
+  onCancel,
+  onSubmit,
+  submitLabel,
+  disabled,
+}: {
+  onCancel: () => void;
+  onSubmit: () => void;
+  submitLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
+      <button onClick={onCancel} className="h-9 px-3 text-sm border border-slate-300 rounded-lg">
+        Cancel
+      </button>
+      <button onClick={onSubmit} disabled={disabled} className="h-9 px-3 text-sm rounded-lg bg-[#0b1f3a] text-white disabled:opacity-60">
+        {submitLabel}
+      </button>
     </div>
   );
 }

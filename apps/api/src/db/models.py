@@ -1,524 +1,678 @@
 """
-SQLAlchemy Database Models for McLarens Analytics
-Updated for EPIC 1 - Complete schema with all required tables
+SQLAlchemy models for McLarens Analytics (analytics schema).
+
+The codebase still imports legacy names (User, Company, Report, FinancialMonthly, etc.),
+so this module provides compatibility aliases and hybrid properties while mapping to the
+current text-ID schema.
 """
-from datetime import datetime
-from typing import Optional
-from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, 
-    ForeignKey, Text, Enum as SQLEnum, Index, UniqueConstraint,
-    CheckConstraint
-)
-from sqlalchemy.orm import relationship, DeclarativeBase
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-import uuid
+from __future__ import annotations
+
+from datetime import datetime, timezone
 import enum
+import uuid
+
+
+def _utcnow():
+    """Timezone-aware UTC timestamp for column defaults."""
+    return datetime.now(timezone.utc)
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    cast,
+    func,
+    literal,
+    select,
+)
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import DeclarativeBase, relationship, synonym
 
 
 class Base(DeclarativeBase):
     pass
 
 
-# ============ ENUMS ============
+# ============================================================
+# Enums
+# ============================================================
+
 
 class UserRole(str, enum.Enum):
-    """User roles in the system"""
-    FINANCE_OFFICER = "finance_officer"       # FO - Finance Officer
-    FINANCE_DIRECTOR = "finance_director"  # FD - Finance Director
-    ADMIN = "admin"                     # System Admin
-    CEO = "ceo"                         # MD - Managing Director
+    FINANCE_OFFICER = "Finance Officer"
+    FINANCE_DIRECTOR = "Finance Director"
+    ADMIN = "Admin"
+    MD = "MD"  # formerly CEO
 
 
-class ReportStatus(str, enum.Enum):
-    """Report workflow status"""
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CORRECTION_REQUIRED = "correction_required"
+UserRoleEnum = UserRole
 
 
 class Scenario(str, enum.Enum):
-    """Financial data scenario type"""
-    ACTUAL = "actual"
-    BUDGET = "budget"
+    ACTUAL = "Actual"
+    BUDGET = "Budget"
 
 
-class FiscalStartMonth(int, enum.Enum):
-    """Fiscal year start month (1=Jan, 4=Apr, etc.)"""
-    JANUARY = 1
-    FEBRUARY = 2
-    MARCH = 3
-    APRIL = 4
-    MAY = 5
-    JUNE = 6
-    JULY = 7
-    AUGUST = 8
-    SEPTEMBER = 9
-    OCTOBER = 10
-    NOVEMBER = 11
-    DECEMBER = 12
+class ReportStatus(str, enum.Enum):
+    DRAFT = "Draft"
+    SUBMITTED = "Submitted"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
 
 
 class NotificationType(str, enum.Enum):
-    """Notification types for categorization"""
     REPORT_SUBMITTED = "report_submitted"
     REPORT_APPROVED = "report_approved"
     REPORT_REJECTED = "report_rejected"
     COMMENT_ADDED = "comment_added"
-    REMINDER = "reminder"
     SYSTEM = "system"
 
 
+class FiscalCycle(str, enum.Enum):
+    DECEMBER = "december"  # Jan - Dec
+    MARCH = "march"        # Apr - Mar
+
+
+class FiscalStartMonth(int, enum.Enum):
+    JANUARY = 1
+    APRIL = 4
+
+
 class EmailStatus(str, enum.Enum):
-    """Email outbox status"""
     PENDING = "pending"
     SENT = "sent"
     FAILED = "failed"
 
 
-# ============ MASTER DATA ============
-
-class Cluster(Base):
-    """
-    Cluster - Groups of companies (e.g., Regional clusters)
-    """
-    __tablename__ = "clusters"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(100), nullable=False, unique=True)
-    code = Column(String(20), nullable=False, unique=True)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    companies = relationship("Company", back_populates="cluster", lazy="dynamic")
-    users = relationship("User", back_populates="cluster", lazy="dynamic")
-    
-    __table_args__ = (
-        Index('idx_cluster_code', 'code'),
-        Index('idx_cluster_active', 'is_active'),
-    )
+# ============================================================
+# Master Tables
+# ============================================================
 
 
-class Company(Base):
-    """
-    Company - Individual business entity with FY configuration
-    """
-    __tablename__ = "companies"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
-    code = Column(String(50), nullable=False, unique=True)
-    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.id"), nullable=False)
-    
-    # Fiscal Year configuration (1-12, where 1=Jan, 4=Apr)
-    fy_start_month = Column(Integer, default=1, nullable=False)
-    
-    # Additional metadata
-    currency = Column(String(3), default="LKR")  # ISO 4217
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    cluster = relationship("Cluster", back_populates="companies")
-    users = relationship("User", back_populates="company", lazy="dynamic")
-    reports = relationship("Report", back_populates="company", lazy="dynamic")
-    financial_monthly = relationship("FinancialMonthly", back_populates="company", lazy="dynamic")
-    
-    __table_args__ = (
-        Index('idx_company_code', 'code'),
-        Index('idx_company_cluster', 'cluster_id'),
-        Index('idx_company_active', 'is_active'),
-        Index('idx_company_name', 'name'),
-        CheckConstraint('fy_start_month >= 1 AND fy_start_month <= 12', name='ck_fy_start_month'),
-    )
+class RoleMaster(Base):
+    __tablename__ = "role_master"
+    __table_args__ = {"schema": "analytics"}
+
+    role_id = Column(Integer, primary_key=True, autoincrement=False)
+    role_name = Column(Text, nullable=False)
+
+    user_company_roles = relationship("UserCompanyRoleMap", back_populates="role")
 
 
-class User(Base):
-    """
-    User - System user with role and company/cluster assignment
-    """
-    __tablename__ = "users"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=True)  # Nullable for SSO users
-    name = Column(String(255), nullable=False)
-    role = Column(SQLEnum(UserRole), nullable=False)
-    
-    # Assignment (nullable for Admin/CEO who don't need specific assignment)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
-    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.id"), nullable=True)
-    
-    # Microsoft Entra ID integration
-    azure_oid = Column(String(255), nullable=True, unique=True)
-    
-    # Status
-    is_active = Column(Boolean, default=True)
-    last_login = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    company = relationship("Company", back_populates="users")
-    cluster = relationship("Cluster", back_populates="users")
-    notifications = relationship("Notification", back_populates="user", lazy="dynamic")
-    
-    __table_args__ = (
-        Index('idx_user_email', 'email'),
-        Index('idx_user_role', 'role'),
-        Index('idx_user_company', 'company_id'),
-        Index('idx_user_azure_oid', 'azure_oid'),
-    )
+class UserMaster(Base):
+    __tablename__ = "user_master"
+    __table_args__ = {"schema": "analytics"}
+
+    user_id = Column(Text, primary_key=True)
+    # DB column is citext for case-insensitive email matching; Text is compatible
+    user_email = Column(Text, nullable=False, unique=True)  # maps to citext in DB
+    first_name = Column(Text, nullable=True)
+    last_name = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_date = Column(DateTime(timezone=True), nullable=False)
+    modified_date = Column(DateTime(timezone=True), nullable=False)
+
+    company_maps = relationship("UserCompanyMap", back_populates="user")
+    role_maps = relationship("UserCompanyRoleMap", back_populates="user")
+
+    id = synonym("user_id")
+    email = synonym("user_email")
+
+    @property
+    def name(self) -> str:
+        fn = (self.first_name or "").strip()
+        ln = (self.last_name or "").strip()
+        full = f"{fn} {ln}".strip()
+        return full or self.user_email
+
+    @property
+    def role(self):
+        cr = getattr(self, "current_role", None)
+        if cr is None:
+            return None
+        # Direct match
+        for member in UserRole:
+            if member.value == cr or member.name == cr:
+                return member
+        # Legacy/Alias mapping
+        role_map = {
+            "SYSTEM_ADMIN": UserRole.ADMIN,
+            "admin": UserRole.ADMIN,
+            "Admin": UserRole.ADMIN,
+            
+            "Finance Officer": UserRole.FINANCE_OFFICER,
+            "DATA_OFFICER": UserRole.FINANCE_OFFICER,
+            
+            "Finance Director": UserRole.FINANCE_DIRECTOR,
+            "COMPANY_DIRECTOR": UserRole.FINANCE_DIRECTOR,
+            
+            "MD": UserRole.MD,
+            "CEO": UserRole.MD,
+            "MANAGING_DIRECTOR": UserRole.MD,
+        }
+        return role_map.get(cr)
+
+    @property
+    def company_id(self):
+        companies = getattr(self, "accessible_companies", None)
+        if companies:
+            return companies[0]
+        return getattr(self, "_company_id", None)
+
+    @company_id.setter
+    def company_id(self, value):
+        self._company_id = value
+
+    @property
+    def cluster_id(self):
+        return getattr(self, "_cluster_id", None)
+
+    @cluster_id.setter
+    def cluster_id(self, value):
+        self._cluster_id = value
+
+    created_at = synonym("created_date")
+    updated_at = synonym("modified_date")
 
 
-class CompanyUserRole(Base):
-    """
-    Many-to-many: User can be assigned to multiple companies
-    (FD can review multiple companies)
-    """
-    __tablename__ = "company_user_roles"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
-    role = Column(SQLEnum(UserRole), nullable=False)
-    is_primary = Column(Boolean, default=False)  # Primary assignment
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        UniqueConstraint('user_id', 'company_id', 'role', name='uq_user_company_role'),
-        Index('idx_cur_user', 'user_id'),
-        Index('idx_cur_company', 'company_id'),
-    )
+class ClusterMaster(Base):
+    __tablename__ = "cluster_master"
+    __table_args__ = {"schema": "analytics"}
+
+    cluster_id = Column(Text, primary_key=True)
+    cluster_name = Column(Text, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_date = Column(DateTime(timezone=True), nullable=False)
+    modified_date = Column(DateTime(timezone=True), nullable=False)
+
+    companies = relationship("CompanyMaster", back_populates="cluster")
+
+    id = synonym("cluster_id")
+    name = synonym("cluster_name")
+    code = synonym("cluster_id")
+    created_at = synonym("created_date")
+    updated_at = synonym("modified_date")
+
+    @property
+    def description(self):
+        return None
+
+    @hybrid_property
+    def fiscal_cycle(self):
+        return FiscalCycle.DECEMBER
+
+    @fiscal_cycle.expression
+    def fiscal_cycle(cls):
+        return literal(FiscalCycle.DECEMBER.value)
 
 
-# ============ FINANCIAL DATA ============
+class CompanyMaster(Base):
+    __tablename__ = "company_master"
+    __table_args__ = {"schema": "analytics"}
+
+    company_id = Column(Text, primary_key=True)
+    cluster_id = Column(Text, ForeignKey("analytics.cluster_master.cluster_id"), nullable=False)
+    company_name = Column(Text, nullable=False)
+    fin_year_start_month = Column(Integer, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_date = Column(DateTime(timezone=True), nullable=False)
+    modified_date = Column(DateTime(timezone=True), nullable=False)
+
+    cluster = relationship("ClusterMaster", back_populates="companies")
+    user_maps = relationship("UserCompanyMap", back_populates="company")
+    role_maps = relationship("UserCompanyRoleMap", back_populates="company")
+
+    id = synonym("company_id")
+    name = synonym("company_name")
+    code = synonym("company_id")
+    fy_start_month = synonym("fin_year_start_month")
+    created_at = synonym("created_date")
+    updated_at = synonym("modified_date")
+
+    @property
+    def currency(self):
+        return "LKR"
+
+
+class UserCompanyMap(Base):
+    __tablename__ = "user_company_map"
+    __table_args__ = {"schema": "analytics"}
+
+    user_id = Column(Text, ForeignKey("analytics.user_master.user_id"), primary_key=True)
+    company_id = Column(Text, ForeignKey("analytics.company_master.company_id"), primary_key=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    assigned_date = Column(Date, nullable=True)
+
+    user = relationship("UserMaster", back_populates="company_maps")
+    company = relationship("CompanyMaster", back_populates="user_maps")
+
+
+class UserCompanyRoleMap(Base):
+    __tablename__ = "user_company_role_map"
+    __table_args__ = {"schema": "analytics"}
+
+    user_id = Column(Text, ForeignKey("analytics.user_master.user_id"), primary_key=True)
+    company_id = Column(Text, ForeignKey("analytics.company_master.company_id"), primary_key=True)
+    role_id = Column(Integer, ForeignKey("analytics.role_master.role_id"), primary_key=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    user = relationship("UserMaster", back_populates="role_maps")
+    company = relationship("CompanyMaster", back_populates="role_maps")
+    role = relationship("RoleMaster", back_populates="user_company_roles")
+
+
+# ============================================================
+# Period / Metric / Status Masters
+# ============================================================
+
+
+class PeriodMaster(Base):
+    __tablename__ = "period_master"
+    __table_args__ = {"schema": "analytics"}
+
+    period_id = Column(Integer, primary_key=True)
+    month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+
+
+class MetricMaster(Base):
+    __tablename__ = "metric_master"
+    __table_args__ = {"schema": "analytics"}
+
+    metric_id = Column(Integer, primary_key=True)
+    metric_name = Column(Text, nullable=False)
+    metric_category = Column(Text, nullable=True)
+
+
+class StatusMaster(Base):
+    __tablename__ = "status_master"
+    __table_args__ = {"schema": "analytics"}
+
+    status_id = Column(Integer, primary_key=True)
+    status_name = Column(Text, nullable=False)
+
+
+# ============================================================
+# Financial Data
+# ============================================================
+
+
+class FinancialFact(Base):
+    __tablename__ = "financial_fact"
+    __table_args__ = {"schema": "analytics"}
+
+    company_id = Column(Text, ForeignKey("analytics.company_master.company_id"), primary_key=True)
+    period_id = Column(Integer, ForeignKey("analytics.period_master.period_id"), primary_key=True)
+    metric_id = Column(Integer, ForeignKey("analytics.metric_master.metric_id"), primary_key=True)
+    actual_budget = Column(Text, primary_key=True)
+    amount = Column(Numeric, nullable=True)
+
+    company = relationship("CompanyMaster")
+    metric = relationship("MetricMaster")
+    period = relationship("PeriodMaster")
+
 
 class FinancialMonthly(Base):
     """
-    Monthly financial data - ACTUAL or BUDGET scenario
-    Matches Excel P&L Template structure
+    Read model over analytics.financial_monthly_view.
     """
-    __tablename__ = "financial_monthly"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    __tablename__ = "financial_monthly_view"
+    __table_args__ = {"schema": "analytics"}
+
+    company_id = Column(Text, primary_key=True)
+    period_id = Column(Integer, primary_key=True)
+    scenario = Column(Text, primary_key=True)
     year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
-    scenario = Column(SQLEnum(Scenario), nullable=False)  # ACTUAL or BUDGET
-    
-    # Exchange Rate (Monthly average)
-    exchange_rate = Column(Float, default=1.0)  # LKR to USD
-    
-    # ========== REVENUE ==========
-    revenue_lkr = Column(Float, default=0)  # Revenue in LKR
-    
-    # ========== GROSS PROFIT ==========
-    gp = Column(Float, default=0)  # Gross Profit
-    
-    # ========== OTHER INCOME ==========
-    other_income = Column(Float, default=0)
-    
-    # ========== EXPENSE BREAKDOWN ==========
-    personal_exp = Column(Float, default=0)      # Personal Related Expenses
-    admin_exp = Column(Float, default=0)         # Admin & Establishment Expenses
-    selling_exp = Column(Float, default=0)       # Selling & Distribution Expenses
-    finance_exp = Column(Float, default=0)       # Finance Expenses
-    depreciation = Column(Float, default=0)      # Depreciation
-    
-    # ========== ADJUSTMENTS ==========
-    provisions = Column(Float, default=0)        # Provisions (Write-back)/Write-off
-    exchange_gl = Column(Float, default=0)       # Exchange Gain/Loss
-    
-    # ========== NON-OPERATING ITEMS ==========
-    non_ops_exp = Column(Float, default=0)       # Non Operating Expenses
-    non_ops_income = Column(Float, default=0)    # Non Operating Income
-    
-    # ========== METADATA ==========
-    imported_at = Column(DateTime, nullable=True)  # When budget was imported
-    imported_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    version = Column(Integer, default=1)  # For tracking reimports
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    company = relationship("Company", back_populates="financial_monthly")
-    
-    __table_args__ = (
-        # CRITICAL: Unique constraint prevents duplicate entries
-        UniqueConstraint('company_id', 'year', 'month', 'scenario', 
-                        name='uq_financial_monthly_company_period_scenario'),
-        Index('idx_fm_company_period', 'company_id', 'year', 'month'),
-        Index('idx_fm_period', 'year', 'month'),
-        Index('idx_fm_scenario', 'scenario'),
-        CheckConstraint('month >= 1 AND month <= 12', name='ck_month_valid'),
-    )
-    
-    # ========== COMPUTED PROPERTIES ==========
-    
-    @property
-    def revenue_usd(self) -> float:
-        """Revenue(USD) = Revenue(LKR) / exchange_rate"""
-        if self.exchange_rate and self.exchange_rate > 0:
-            return self.revenue_lkr / self.exchange_rate
-        return 0
-    
-    @property
-    def gp_margin(self) -> float:
-        """GP Margin = GP / Revenue(LKR)"""
-        if self.revenue_lkr and self.revenue_lkr != 0:
-            return self.gp / self.revenue_lkr
-        return 0
-    
-    @property
-    def total_overheads(self) -> float:
-        """Total Overheads = Sum of 5 expense categories"""
+
+    revenue_lkr = Column(Numeric, nullable=True)
+    gp = Column(Numeric, nullable=True)
+    gp_margin = Column(Numeric, nullable=True)
+    other_income = Column(Numeric, nullable=True)
+    personal_exp = Column(Numeric, nullable=True)
+    admin_exp = Column(Numeric, nullable=True)
+    selling_exp = Column(Numeric, nullable=True)
+    finance_exp = Column(Numeric, nullable=True)
+    depreciation = Column(Numeric, nullable=True)
+    total_overhead = Column(Numeric, nullable=True)
+    provisions = Column(Numeric, nullable=True)
+    exchange_gl = Column(Numeric, nullable=True)
+    pbt_before_non_ops = Column(Numeric, nullable=True)
+    pbt_after_non_ops = Column(Numeric, nullable=True)
+    non_ops_exp = Column(Numeric, nullable=True)
+    non_ops_income = Column(Numeric, nullable=True)
+    np_margin = Column(Numeric, nullable=True)
+    ebit = Column(Numeric, nullable=True)
+    ebitda = Column(Numeric, nullable=True)
+    exchange_rate = Column(Numeric, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=True)
+
+    @hybrid_property
+    def id(self):
+        return f"{self.company_id}_{self.year}_{self.month}_{self.scenario}"
+
+    @id.expression
+    def id(cls):
         return (
-            self.personal_exp +
-            self.admin_exp +
-            self.selling_exp +
-            self.finance_exp +
-            self.depreciation
+            cls.company_id
+            + literal("_")
+            + cast(cls.year, String)
+            + literal("_")
+            + cast(cls.month, String)
+            + literal("_")
+            + cls.scenario
         )
-    
+
     @property
-    def pbt_before(self) -> float:
-        """PBT Before Non Ops = GP + Other Income - Total Overheads + Provisions + Exchange"""
-        return (
-            self.gp +
-            self.other_income -
-            self.total_overheads +
-            self.provisions +
-            self.exchange_gl
-        )
-    
-    @property
-    def np_margin(self) -> float:
-        """NP Margin = PBT Before Non Ops / Revenue(LKR)"""
-        if self.revenue_lkr and self.revenue_lkr != 0:
-            return self.pbt_before / self.revenue_lkr
-        return 0
-    
-    @property
-    def pbt_after(self) -> float:
-        """PBT After Non Ops = PBT Before - Non Ops Expenses + Non Ops Income"""
-        return self.pbt_before - self.non_ops_exp + self.non_ops_income
-    
-    @property
-    def ebit(self) -> float:
-        """EBIT = PBT Before + Finance Expenses"""
-        return self.pbt_before + self.finance_exp
-    
-    @property
-    def ebitda(self) -> float:
-        """EBITDA = PBT Before + Finance Expenses + Depreciation"""
-        return self.pbt_before + self.finance_exp + self.depreciation
+    def updated_at(self):
+        return self.created_at
 
 
-# ============ WORKFLOW / REPORTING ============
+FinancialMonthlyView = FinancialMonthly
+FinancialData = FinancialMonthly
+
+
+class FinancialPnL(Base):
+    """
+    Read model over analytics.vw_financial_pnl.
+    Pivoted view that joins actual + budget rows side-by-side with _actual/_budget suffixes.
+    Used by services that need both scenarios in one row (dashboards, exports, rankings).
+    """
+    __tablename__ = "vw_financial_pnl"
+    __table_args__ = {"schema": "analytics"}
+
+    company_id = Column(Text, primary_key=True)
+    period_id = Column(Integer, primary_key=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+
+    # Actual columns
+    revenue_lkr_actual = Column(Numeric, nullable=True)
+    gp_actual = Column(Numeric, nullable=True)
+    gp_margin_actual = Column(Numeric, nullable=True)
+    other_income_actual = Column(Numeric, nullable=True)
+    personal_exp_actual = Column(Numeric, nullable=True)
+    admin_exp_actual = Column(Numeric, nullable=True)
+    selling_exp_actual = Column(Numeric, nullable=True)
+    finance_exp_actual = Column(Numeric, nullable=True)
+    depreciation_actual = Column(Numeric, nullable=True)
+    total_overheads_actual = Column(Numeric, nullable=True)
+    provisions_actual = Column(Numeric, nullable=True)
+    exchange_gl_actual = Column(Numeric, nullable=True)
+    pbt_before_actual = Column(Numeric, nullable=True)
+    pbt_after_actual = Column(Numeric, nullable=True)
+    non_ops_exp_actual = Column(Numeric, nullable=True)
+    non_ops_income_actual = Column(Numeric, nullable=True)
+    np_margin_actual = Column(Numeric, nullable=True)
+    ebit_computed_actual = Column(Numeric, nullable=True)
+    ebitda_computed_actual = Column(Numeric, nullable=True)
+
+    # Budget columns
+    revenue_lkr_budget = Column(Numeric, nullable=True)
+    gp_budget = Column(Numeric, nullable=True)
+    gp_margin_budget = Column(Numeric, nullable=True)
+    other_income_budget = Column(Numeric, nullable=True)
+    personal_exp_budget = Column(Numeric, nullable=True)
+    admin_exp_budget = Column(Numeric, nullable=True)
+    selling_exp_budget = Column(Numeric, nullable=True)
+    finance_exp_budget = Column(Numeric, nullable=True)
+    depreciation_budget = Column(Numeric, nullable=True)
+    total_overheads_budget = Column(Numeric, nullable=True)
+    provisions_budget = Column(Numeric, nullable=True)
+    exchange_gl_budget = Column(Numeric, nullable=True)
+    pbt_before_budget = Column(Numeric, nullable=True)
+    pbt_after_budget = Column(Numeric, nullable=True)
+    non_ops_exp_budget = Column(Numeric, nullable=True)
+    non_ops_income_budget = Column(Numeric, nullable=True)
+    np_margin_budget = Column(Numeric, nullable=True)
+    ebit_computed_budget = Column(Numeric, nullable=True)
+    ebitda_computed_budget = Column(Numeric, nullable=True)
+
+    exchange_rate = Column(Numeric, nullable=True)
+
+    company = relationship("CompanyMaster", foreign_keys=[company_id],
+                           primaryjoin="FinancialPnL.company_id == CompanyMaster.company_id",
+                           viewonly=True, lazy="joined")
+
+
+# ============================================================
+# Workflow (financial_workflow)
+# ============================================================
+
 
 class Report(Base):
-    """
-    Report header - Represents a monthly submission from FO to FD
-    """
-    __tablename__ = "reports"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
-    year = Column(Integer, nullable=False)
-    month = Column(Integer, nullable=False)
-    status = Column(SQLEnum(ReportStatus), default=ReportStatus.DRAFT)
-    
-    # Submission info
-    submitted_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    submitted_at = Column(DateTime, nullable=True)
-    
-    # Approval info  
-    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
-    rejection_reason = Column(Text, nullable=True)
-    
-    # FO Comment/Analysis
-    fo_comment = Column(Text, nullable=True)
-    
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    company = relationship("Company", back_populates="reports")
-    comments = relationship("ReportComment", back_populates="report", lazy="dynamic")
-    status_history = relationship("ReportStatusHistory", back_populates="report", 
-                                  order_by="ReportStatusHistory.created_at", lazy="dynamic")
-    
-    __table_args__ = (
-        UniqueConstraint('company_id', 'year', 'month', name='uq_report_company_period'),
-        Index('idx_report_company_period', 'company_id', 'year', 'month'),
-        Index('idx_report_status', 'status'),
-        Index('idx_report_submitted_by', 'submitted_by'),
-    )
+    __tablename__ = "financial_workflow"
+    __table_args__ = {"schema": "analytics"}
+
+    company_id = Column(Text, ForeignKey("analytics.company_master.company_id"), primary_key=True)
+    period_id = Column(Integer, ForeignKey("analytics.period_master.period_id"), primary_key=True)
+    status_id = Column(Integer, ForeignKey("analytics.status_master.status_id"), nullable=False)
+
+    submitted_by = Column(Text, nullable=True)
+    submitted_date = Column(DateTime(timezone=True), nullable=True)
+    actual_comment = Column(Text, nullable=True)
+    budget_comment = Column(Text, nullable=True)
+    approved_by = Column(Text, nullable=True)
+    approved_date = Column(DateTime(timezone=True), nullable=True)
+    rejected_by = Column(Text, nullable=True)
+    rejected_date = Column(DateTime(timezone=True), nullable=True)
+    reject_reason = Column(Text, nullable=True)
+
+    company = relationship("CompanyMaster", lazy="joined")
+    period_ref = relationship("PeriodMaster", lazy="joined")
+    status_ref = relationship("StatusMaster", lazy="joined")
+
+    @hybrid_property
+    def id(self):
+        return f"{self.company_id}_{self.period_id}"
+
+    @id.expression
+    def id(cls):
+        return cls.company_id + literal("_") + cast(cls.period_id, String)
+
+    @hybrid_property
+    def year(self):
+        if self.period_ref:
+            return self.period_ref.year
+        return None
+
+    @year.expression
+    def year(cls):
+        return (
+            select(PeriodMaster.year)
+            .where(PeriodMaster.period_id == cls.period_id)
+            .correlate_except(PeriodMaster)
+            .scalar_subquery()
+        )
+
+    @hybrid_property
+    def month(self):
+        if self.period_ref:
+            return self.period_ref.month
+        return None
+
+    @month.expression
+    def month(cls):
+        return (
+            select(PeriodMaster.month)
+            .where(PeriodMaster.period_id == cls.period_id)
+            .correlate_except(PeriodMaster)
+            .scalar_subquery()
+        )
+
+    @hybrid_property
+    def status(self):
+        status_map = {
+            1: ReportStatus.DRAFT,
+            2: ReportStatus.SUBMITTED,
+            3: ReportStatus.APPROVED,
+            4: ReportStatus.REJECTED,
+        }
+        return status_map.get(self.status_id, ReportStatus.DRAFT)
+
+    @status.setter
+    def status(self, value):
+        if isinstance(value, ReportStatus):
+            value = value.value
+        status_map = {
+            ReportStatus.DRAFT.value: 1,
+            ReportStatus.SUBMITTED.value: 2,
+            ReportStatus.APPROVED.value: 3,
+            ReportStatus.REJECTED.value: 4,
+        }
+        if isinstance(value, str):
+            self.status_id = status_map.get(value, self.status_id)
+
+    @status.expression
+    def status(cls):
+        return (
+            select(StatusMaster.status_name)
+            .where(StatusMaster.status_id == cls.status_id)
+            .correlate_except(StatusMaster)
+            .scalar_subquery()
+        )
+
+    submitted_at = synonym("submitted_date")
+    approved_at = synonym("approved_date")
+    rejected_at = synonym("rejected_date")
+    fo_comment = synonym("actual_comment")
+    rejection_reason = synonym("reject_reason")
+
+    @hybrid_property
+    def reviewed_at(self):
+        return self.approved_date or self.rejected_date
+
+    @reviewed_at.expression
+    def reviewed_at(cls):
+        return func.coalesce(cls.approved_date, cls.rejected_date)
+
+    @hybrid_property
+    def created_at(self):
+        return self.submitted_date
+
+    @created_at.expression
+    def created_at(cls):
+        return cls.submitted_date
+
+    @hybrid_property
+    def updated_at(self):
+        return self.approved_date or self.rejected_date or self.submitted_date
+
+    @updated_at.expression
+    def updated_at(cls):
+        return func.coalesce(cls.approved_date, cls.rejected_date, cls.submitted_date)
+
+
+FinancialWorkflow = Report
+
+
+# ============================================================
+# Optional / Legacy Tables (stubs used by routers/services)
+# ============================================================
 
 
 class ReportComment(Base):
-    """
-    Comments on reports (from FO analysis or FD feedback)
-    """
     __tablename__ = "report_comments"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    report_id = Column(UUID(as_uuid=True), ForeignKey("reports.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    is_system = Column(Boolean, default=False)  # System-generated comment
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    report = relationship("Report", back_populates="comments")
-    
-    __table_args__ = (
-        Index('idx_comment_report', 'report_id'),
-    )
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
+
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    report_id = Column(Text, nullable=True)
+    report_company_id = Column(Text, nullable=True)
+    report_period_id = Column(Integer, nullable=True)
+    user_id = Column(Text, nullable=True)
+    content = Column(Text, nullable=True)
+    is_system = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class ReportStatusHistory(Base):
-    """
-    Audit trail of report status changes
-    """
     __tablename__ = "report_status_history"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    report_id = Column(UUID(as_uuid=True), ForeignKey("reports.id"), nullable=False)
-    from_status = Column(SQLEnum(ReportStatus), nullable=True)  # Null for initial creation
-    to_status = Column(SQLEnum(ReportStatus), nullable=False)
-    changed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    reason = Column(Text, nullable=True)  # For rejections
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    report = relationship("Report", back_populates="status_history")
-    
-    __table_args__ = (
-        Index('idx_status_history_report', 'report_id'),
-        Index('idx_status_history_created', 'created_at'),
-    )
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
 
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    report_id = Column(Text, nullable=True)
+    report_company_id = Column(Text, nullable=True)
+    report_period_id = Column(Integer, nullable=True)
+    from_status = Column(Text, nullable=True)
+    to_status = Column(Text, nullable=True)
+    changed_by = Column(Text, nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
-# ============ NOTIFICATIONS & EMAIL ============
 
 class Notification(Base):
-    """
-    In-app notifications for users
-    """
     __tablename__ = "notifications"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    type = Column(SQLEnum(NotificationType), default=NotificationType.SYSTEM)
-    title = Column(String(255), nullable=False)
-    message = Column(Text, nullable=False)
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
+
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Text, nullable=True)
+    type = Column(Text, nullable=True)
+    title = Column(Text, nullable=True)
+    message = Column(Text, nullable=True)
+    link = Column(Text, nullable=True)
     is_read = Column(Boolean, default=False)
-    link = Column(String(500), nullable=True)  # Link to related page
-    extra_data = Column(JSONB, nullable=True)  # Additional data (report_id, etc.) - renamed from 'metadata'
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    user = relationship("User", back_populates="notifications")
-    
-    __table_args__ = (
-        Index('idx_notification_user', 'user_id'),
-        Index('idx_notification_unread', 'user_id', 'is_read'),
-        Index('idx_notification_created', 'created_at'),
-    )
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class EmailOutbox(Base):
-    """
-    Email outbox for async email sending
-    Emails are queued here and sent by a background worker
-    """
     __tablename__ = "email_outbox"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    to_email = Column(String(255), nullable=False)
-    to_name = Column(String(255), nullable=True)
-    subject = Column(String(500), nullable=False)
-    body_html = Column(Text, nullable=False)
-    body_text = Column(Text, nullable=True)  # Plain text fallback
-    
-    # Status tracking
-    status = Column(SQLEnum(EmailStatus), default=EmailStatus.PENDING)
-    attempts = Column(Integer, default=0)
-    last_attempt = Column(DateTime, nullable=True)
-    sent_at = Column(DateTime, nullable=True)
-    error_message = Column(Text, nullable=True)
-    
-    # Metadata
-    related_type = Column(String(50), nullable=True)  # 'report', 'notification', etc.
-    related_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        Index('idx_email_status', 'status'),
-        Index('idx_email_pending', 'status', 'created_at'),
-    )
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
 
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    to_email = Column(Text, nullable=False)
+    to_name = Column(Text, nullable=True)
+    subject = Column(Text, nullable=False)
+    body_text = Column(Text, nullable=True)
+    body_html = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default=EmailStatus.PENDING.value)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    last_error = Column(Text, nullable=True)
+    related_type = Column(Text, nullable=True)
+    related_id = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
 
-# ============ FX RATES ============
 
 class FxRate(Base):
-    """
-    Historical FX rates for currency conversion
-    """
     __tablename__ = "fx_rates"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    from_currency = Column(String(3), nullable=False, default="LKR")
-    to_currency = Column(String(3), nullable=False, default="USD")
-    year = Column(Integer, nullable=False)
-    month = Column(Integer, nullable=False)
-    rate = Column(Float, nullable=False)  # 1 from_currency = rate to_currency
-    source = Column(String(100), nullable=True)  # Where rate came from
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        UniqueConstraint('from_currency', 'to_currency', 'year', 'month', 
-                        name='uq_fx_rate_currencies_period'),
-        Index('idx_fx_rate_period', 'year', 'month'),
-    )
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
 
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    date = Column(Date, nullable=False)
+    currency = Column(Text, nullable=False, default="USD")
+    rate = Column(Numeric, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
-# ============ AUDIT LOG ============
 
 class AuditLog(Base):
-    """
-    System-wide audit logging
-    """
     __tablename__ = "audit_logs"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    action = Column(String(100), nullable=False)
-    entity_type = Column(String(50), nullable=False)
-    entity_id = Column(String(100), nullable=True)
-    details = Column(JSONB, nullable=True)  # Changed to JSONB for better querying
-    ip_address = Column(String(50), nullable=True)
-    user_agent = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        Index('idx_audit_user', 'user_id'),
-        Index('idx_audit_action', 'action'),
-        Index('idx_audit_entity', 'entity_type', 'entity_id'),
-        Index('idx_audit_created', 'created_at'),
-    )
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
+
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Text, nullable=True)
+    action = Column(Text, nullable=False)
+    entity_type = Column(Text, nullable=True)
+    entity_id = Column(Text, nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
-# ============ LEGACY COMPATIBILITY ============
-# These are aliases for backward compatibility with existing code
+# ============================================================
+# Compatibility Aliases
+# ============================================================
 
-FinancialData = FinancialMonthly  # Alias for old code
+
+User = UserMaster
+Company = CompanyMaster
+Cluster = ClusterMaster
+CompanyUserRole = UserCompanyRoleMap
+

@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/system-admin";
-import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
+import {
+  canAccessPortal,
+  getDashboardRoute,
+  getDashboardRouteForPortal,
+  normalizeRole,
+} from "@/lib/role-routing";
 
 export default function SystemAdminDashboardLayout({
   children,
@@ -23,12 +28,13 @@ export default function SystemAdminDashboardLayout({
     }
 
     try {
-      const user = JSON.parse(userRaw) as { role?: string };
+      const user = JSON.parse(userRaw) as { role?: string; portal?: string };
       const role = normalizeRole(user.role);
-      const target = getDashboardRoute(role);
 
-      if (target && target !== "/system-admin/dashboard") {
-        router.push(target);
+      if (!canAccessPortal(user.role, "system-admin")) {
+        const portalTarget = getDashboardRouteForPortal(user.portal);
+        const roleTarget = getDashboardRoute(role);
+        router.push(portalTarget || roleTarget || "/system-admin/login");
         return;
       }
     } catch {
@@ -64,4 +70,3 @@ export default function SystemAdminDashboardLayout({
     </div>
   );
 }
-

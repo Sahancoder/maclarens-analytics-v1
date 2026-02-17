@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/md";
-import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
+import {
+  canAccessPortal,
+  getDashboardRoute,
+  getDashboardRouteForPortal,
+  normalizeRole,
+} from "@/lib/role-routing";
 
 export default function MDDashboardLayout({
   children,
@@ -23,12 +28,13 @@ export default function MDDashboardLayout({
     }
 
     try {
-      const user = JSON.parse(userRaw) as { role?: string };
+      const user = JSON.parse(userRaw) as { role?: string; portal?: string };
       const role = normalizeRole(user.role);
-      const target = getDashboardRoute(role);
 
-      if (target && target !== "/md/dashboard") {
-        router.push(target);
+      if (!canAccessPortal(user.role, "md")) {
+        const portalTarget = getDashboardRouteForPortal(user.portal);
+        const roleTarget = getDashboardRoute(role);
+        router.push(portalTarget || roleTarget || "/md/login");
         return;
       }
     } catch {
@@ -66,4 +72,3 @@ export default function MDDashboardLayout({
     </div>
   );
 }
-

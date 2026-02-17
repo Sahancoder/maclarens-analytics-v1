@@ -4,11 +4,11 @@ All financial calculations happen here, NOT in frontend.
 Matches Excel P&L Template formulas exactly.
 """
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+# from uuid import UUID  <-- Removed UUID import
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
-from src.db.models import FinancialData, Company, Cluster, FiscalCycle
+from src.db.models import FinancialPnL, Company, Cluster, FiscalCycle
 
 
 class FinancialService:
@@ -54,78 +54,82 @@ class FinancialService:
         }
     
     @staticmethod
-    def compute_full_pnl(data: FinancialData) -> Dict[str, Any]:
+    def compute_full_pnl(data: FinancialPnL) -> Dict[str, Any]:
         """
         Compute all P&L metrics matching Excel template exactly.
         Uses model's computed properties for consistency.
         """
+        exchange_rate = float(data.exchange_rate or 1) or 1
+        rev_lkr_actual = float(data.revenue_lkr_actual or 0)
+        rev_lkr_budget = float(data.revenue_lkr_budget or 0)
+
         return {
             # Revenue
-            "revenue_usd_actual": round(data.revenue_usd_actual, 2),
-            "revenue_usd_budget": round(data.revenue_usd_budget, 2),
-            "revenue_lkr_actual": data.revenue_lkr_actual,
-            "revenue_lkr_budget": data.revenue_lkr_budget,
+            "revenue_usd_actual": round(rev_lkr_actual / exchange_rate, 2),
+            "revenue_usd_budget": round(rev_lkr_budget / exchange_rate, 2),
+            "revenue_lkr_actual": rev_lkr_actual,
+            "revenue_lkr_budget": rev_lkr_budget,
             
             # GP
-            "gp_actual": data.gp_actual,
-            "gp_budget": data.gp_budget,
-            "gp_margin_actual": round(data.gp_margin_actual * 100, 2),  # As percentage
-            "gp_margin_budget": round(data.gp_margin_budget * 100, 2),
+            "gp_actual": float(data.gp_actual or 0),
+            "gp_budget": float(data.gp_budget or 0),
+            "gp_margin_actual": round(float(data.gp_margin_actual or 0) * 100, 2),  # As percentage
+            "gp_margin_budget": round(float(data.gp_margin_budget or 0) * 100, 2),
             
             # Other Income
-            "other_income_actual": data.other_income_actual,
-            "other_income_budget": data.other_income_budget,
+            "other_income_actual": float(data.other_income_actual or 0),
+            "other_income_budget": float(data.other_income_budget or 0),
             
             # Expense Breakdown
-            "personal_exp_actual": data.personal_exp_actual,
-            "personal_exp_budget": data.personal_exp_budget,
-            "admin_exp_actual": data.admin_exp_actual,
-            "admin_exp_budget": data.admin_exp_budget,
-            "selling_exp_actual": data.selling_exp_actual,
-            "selling_exp_budget": data.selling_exp_budget,
-            "finance_exp_actual": data.finance_exp_actual,
-            "finance_exp_budget": data.finance_exp_budget,
-            "depreciation_actual": data.depreciation_actual,
-            "depreciation_budget": data.depreciation_budget,
+            "personal_exp_actual": float(data.personal_exp_actual or 0),
+            "personal_exp_budget": float(data.personal_exp_budget or 0),
+            "admin_exp_actual": float(data.admin_exp_actual or 0),
+            "admin_exp_budget": float(data.admin_exp_budget or 0),
+            "selling_exp_actual": float(data.selling_exp_actual or 0),
+            "selling_exp_budget": float(data.selling_exp_budget or 0),
+            "finance_exp_actual": float(data.finance_exp_actual or 0),
+            "finance_exp_budget": float(data.finance_exp_budget or 0),
+            "depreciation_actual": float(data.depreciation_actual or 0),
+            "depreciation_budget": float(data.depreciation_budget or 0),
             
             # Total Overheads (computed)
-            "total_overheads_actual": round(data.total_overheads_actual, 2),
-            "total_overheads_budget": round(data.total_overheads_budget, 2),
+            "total_overheads_actual": round(float(data.total_overheads_actual or 0), 2),
+            "total_overheads_budget": round(float(data.total_overheads_budget or 0), 2),
             
             # Adjustments
-            "provisions_actual": data.provisions_actual,
-            "provisions_budget": data.provisions_budget,
-            "exchange_gl_actual": data.exchange_gl_actual,
-            "exchange_gl_budget": data.exchange_gl_budget,
+            "provisions_actual": float(data.provisions_actual or 0),
+            "provisions_budget": float(data.provisions_budget or 0),
+            "exchange_gl_actual": float(data.exchange_gl_actual or 0),
+            "exchange_gl_budget": float(data.exchange_gl_budget or 0),
             
             # PBT Before (computed)
-            "pbt_before_actual": round(data.pbt_before_actual, 2),
-            "pbt_before_budget": round(data.pbt_before_budget, 2),
+            "pbt_before_actual": round(float(data.pbt_before_actual or 0), 2),
+            "pbt_before_budget": round(float(data.pbt_before_budget or 0), 2),
             
             # NP Margin (computed)
-            "np_margin_actual": round(data.np_margin_actual * 100, 2),
-            "np_margin_budget": round(data.np_margin_budget * 100, 2),
+            "np_margin_actual": round(float(data.np_margin_actual or 0) * 100, 2),
+            "np_margin_budget": round(float(data.np_margin_budget or 0) * 100, 2),
             
             # Non-Operating Items
-            "non_ops_exp_actual": data.non_ops_exp_actual,
-            "non_ops_exp_budget": data.non_ops_exp_budget,
-            "non_ops_income_actual": data.non_ops_income_actual,
-            "non_ops_income_budget": data.non_ops_income_budget,
+            "non_ops_exp_actual": float(data.non_ops_exp_actual or 0),
+            "non_ops_exp_budget": float(data.non_ops_exp_budget or 0),
+            "non_ops_income_actual": float(data.non_ops_income_actual or 0),
+            "non_ops_income_budget": float(data.non_ops_income_budget or 0),
             
             # PBT After (computed)
-            "pbt_after_actual": round(data.pbt_after_actual, 2),
-            "pbt_after_budget": round(data.pbt_after_budget, 2),
+            "pbt_after_actual": round(float(data.pbt_after_actual or 0), 2),
+            "pbt_after_budget": round(float(data.pbt_after_budget or 0), 2),
             
             # EBIT & EBITDA (computed)
-            "ebit_actual": round(data.ebit_computed_actual, 2),
-            "ebit_budget": round(data.ebit_computed_budget, 2),
-            "ebitda_actual": round(data.ebitda_computed_actual, 2),
-            "ebitda_budget": round(data.ebitda_computed_budget, 2),
+            "ebit_actual": round(float(data.ebit_computed_actual or 0), 2),
+            "ebit_budget": round(float(data.ebit_computed_budget or 0), 2),
+            "ebitda_actual": round(float(data.ebitda_computed_actual or 0), 2),
+            "ebitda_budget": round(float(data.ebitda_computed_budget or 0), 2),
             
             # Variance calculations
-            "pbt_variance": round(data.pbt_before_actual - data.pbt_before_budget, 2),
+            "pbt_variance": round(float(data.pbt_before_actual or 0) - float(data.pbt_before_budget or 0), 2),
             "pbt_variance_percent": round(
-                FinancialService.calculate_variance_simple(data.pbt_before_actual, data.pbt_before_budget), 2
+                FinancialService.calculate_variance_simple(float(data.pbt_before_actual or 0), float(data.pbt_before_budget or 0)), 2
             ),
         }
     
@@ -141,25 +145,34 @@ class FinancialService:
                 return (year - 1, 4)  # Previous Apr to current month
     
     @staticmethod
+    def _apply_filters(query, company_id=None, cluster_id=None):
+        """Helper to apply filters without casting to UUID"""
+        if company_id:
+            query = query.where(FinancialPnL.company_id == str(company_id))
+        if cluster_id:
+            # Join Company if not already joined? 
+            # Ideally caller handles joins, but for safety:
+            # We assume join isn't duplicated or we add it safely.
+            # But simpler: FinancialService checks often join Company.
+            query = query.where(Company.cluster_id == str(cluster_id))
+        return query
+
+    @staticmethod
     async def get_monthly_data(
         db: AsyncSession,
         year: int,
         month: int,
         company_id: Optional[str] = None,
         cluster_id: Optional[str] = None
-    ) -> List[FinancialData]:
+    ) -> List[FinancialPnL]:
         """Get monthly financial data"""
-        query = select(FinancialData).options(
-            selectinload(FinancialData.company).selectinload(Company.cluster)
-        ).where(
-            and_(FinancialData.year == year, FinancialData.month == month)
+        query = select(FinancialPnL).options(
+            selectinload(FinancialPnL.company).selectinload(Company.cluster)
+        ).join(Company).where(
+            and_(FinancialPnL.year == year, FinancialPnL.month == month)
         )
         
-        if company_id:
-            query = query.where(FinancialData.company_id == UUID(company_id))
-        
-        if cluster_id:
-            query = query.join(Company).where(Company.cluster_id == UUID(cluster_id))
+        query = FinancialService._apply_filters(query, company_id, cluster_id)
         
         result = await db.execute(query)
         return result.scalars().all()
@@ -172,13 +185,13 @@ class FinancialService:
         month: int
     ) -> Optional[Dict[str, Any]]:
         """Get full P&L for a single company with all computed fields"""
-        query = select(FinancialData).options(
-            selectinload(FinancialData.company)
+        query = select(FinancialPnL).options(
+            selectinload(FinancialPnL.company)
         ).where(
             and_(
-                FinancialData.company_id == UUID(company_id),
-                FinancialData.year == year,
-                FinancialData.month == month
+                FinancialPnL.company_id == str(company_id),
+                FinancialPnL.year == year,
+                FinancialPnL.month == month
             )
         )
         
@@ -194,7 +207,7 @@ class FinancialService:
         pnl["company_code"] = data.company.code if data.company else ""
         pnl["year"] = data.year
         pnl["month"] = data.month
-        pnl["exchange_rate"] = data.exchange_rate
+        pnl["exchange_rate"] = float(data.exchange_rate or 1)
         
         return pnl
     
@@ -206,13 +219,13 @@ class FinancialService:
         month: int
     ) -> Dict[str, Any]:
         """Get aggregated P&L summary for a cluster"""
-        query = select(FinancialData).options(
-            selectinload(FinancialData.company)
+        query = select(FinancialPnL).options(
+            selectinload(FinancialPnL.company)
         ).join(Company).where(
             and_(
-                Company.cluster_id == UUID(cluster_id),
-                FinancialData.year == year,
-                FinancialData.month == month
+                Company.cluster_id == str(cluster_id),
+                FinancialPnL.year == year,
+                FinancialPnL.month == month
             )
         )
         
@@ -239,30 +252,30 @@ class FinancialService:
         }
         
         for data in data_list:
-            totals["revenue_lkr_actual"] += data.revenue_lkr_actual or 0
-            totals["revenue_lkr_budget"] += data.revenue_lkr_budget or 0
-            totals["gp_actual"] += data.gp_actual or 0
-            totals["gp_budget"] += data.gp_budget or 0
-            totals["other_income_actual"] += data.other_income_actual or 0
-            totals["other_income_budget"] += data.other_income_budget or 0
-            totals["personal_exp_actual"] += data.personal_exp_actual or 0
-            totals["personal_exp_budget"] += data.personal_exp_budget or 0
-            totals["admin_exp_actual"] += data.admin_exp_actual or 0
-            totals["admin_exp_budget"] += data.admin_exp_budget or 0
-            totals["selling_exp_actual"] += data.selling_exp_actual or 0
-            totals["selling_exp_budget"] += data.selling_exp_budget or 0
-            totals["finance_exp_actual"] += data.finance_exp_actual or 0
-            totals["finance_exp_budget"] += data.finance_exp_budget or 0
-            totals["depreciation_actual"] += data.depreciation_actual or 0
-            totals["depreciation_budget"] += data.depreciation_budget or 0
-            totals["provisions_actual"] += data.provisions_actual or 0
-            totals["provisions_budget"] += data.provisions_budget or 0
-            totals["exchange_gl_actual"] += data.exchange_gl_actual or 0
-            totals["exchange_gl_budget"] += data.exchange_gl_budget or 0
-            totals["non_ops_exp_actual"] += data.non_ops_exp_actual or 0
-            totals["non_ops_exp_budget"] += data.non_ops_exp_budget or 0
-            totals["non_ops_income_actual"] += data.non_ops_income_actual or 0
-            totals["non_ops_income_budget"] += data.non_ops_income_budget or 0
+            totals["revenue_lkr_actual"] += float(data.revenue_lkr_actual or 0)
+            totals["revenue_lkr_budget"] += float(data.revenue_lkr_budget or 0)
+            totals["gp_actual"] += float(data.gp_actual or 0)
+            totals["gp_budget"] += float(data.gp_budget or 0)
+            totals["other_income_actual"] += float(data.other_income_actual or 0)
+            totals["other_income_budget"] += float(data.other_income_budget or 0)
+            totals["personal_exp_actual"] += float(data.personal_exp_actual or 0)
+            totals["personal_exp_budget"] += float(data.personal_exp_budget or 0)
+            totals["admin_exp_actual"] += float(data.admin_exp_actual or 0)
+            totals["admin_exp_budget"] += float(data.admin_exp_budget or 0)
+            totals["selling_exp_actual"] += float(data.selling_exp_actual or 0)
+            totals["selling_exp_budget"] += float(data.selling_exp_budget or 0)
+            totals["finance_exp_actual"] += float(data.finance_exp_actual or 0)
+            totals["finance_exp_budget"] += float(data.finance_exp_budget or 0)
+            totals["depreciation_actual"] += float(data.depreciation_actual or 0)
+            totals["depreciation_budget"] += float(data.depreciation_budget or 0)
+            totals["provisions_actual"] += float(data.provisions_actual or 0)
+            totals["provisions_budget"] += float(data.provisions_budget or 0)
+            totals["exchange_gl_actual"] += float(data.exchange_gl_actual or 0)
+            totals["exchange_gl_budget"] += float(data.exchange_gl_budget or 0)
+            totals["non_ops_exp_actual"] += float(data.non_ops_exp_actual or 0)
+            totals["non_ops_exp_budget"] += float(data.non_ops_exp_budget or 0)
+            totals["non_ops_income_actual"] += float(data.non_ops_income_actual or 0)
+            totals["non_ops_income_budget"] += float(data.non_ops_income_budget or 0)
         
         # Compute derived fields
         total_overheads_actual = (
@@ -333,14 +346,14 @@ class FinancialService:
         # Build date range condition
         if start_year == year:
             date_condition = and_(
-                FinancialData.year == year,
-                FinancialData.month >= start_month,
-                FinancialData.month <= month
+                FinancialPnL.year == year,
+                FinancialPnL.month >= start_month,
+                FinancialPnL.month <= month
             )
         else:
             date_condition = and_(
-                ((FinancialData.year == start_year) & (FinancialData.month >= start_month)) |
-                ((FinancialData.year == year) & (FinancialData.month <= month))
+                ((FinancialPnL.year == start_year) & (FinancialPnL.month >= start_month)) |
+                ((FinancialPnL.year == year) & (FinancialPnL.month <= month))
             )
         
         # Use pbt_before computed from raw fields
@@ -348,20 +361,20 @@ class FinancialService:
             Cluster.id,
             Cluster.name,
             Cluster.code,
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('ytd_actual'),
-            func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                     (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                      FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                      FinancialData.depreciation_budget) +
-                     FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+            func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                     (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                      FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                      FinancialPnL.depreciation_budget) +
+                     FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
             ).label('ytd_budget')
-        ).select_from(FinancialData).join(
-            Company, FinancialData.company_id == Company.id
+        ).select_from(FinancialPnL).join(
+            Company, FinancialPnL.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
         ).where(date_condition).group_by(Cluster.id, Cluster.name, Cluster.code)
@@ -376,31 +389,33 @@ class FinancialService:
         month: int
     ) -> List[Dict[str, Any]]:
         """Get cluster performance with monthly and YTD metrics"""
-        # Monthly aggregation by cluster using computed PBT
+        # Note: Cluster.fiscal_cycle column may be missing in V2 schema.
+        # We default to December cycle if not available, since V2 ClusterMaster schema doesn't have it.
+        # If CompanyMaster has it, we would need to check individual companies which complicates 'Cluster' logic.
+        
         monthly_query = select(
             Cluster.id,
             Cluster.name,
             Cluster.code,
-            Cluster.fiscal_cycle,
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('monthly_actual'),
-            func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                     (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                      FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                      FinancialData.depreciation_budget) +
-                     FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+            func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                     (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                      FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                      FinancialPnL.depreciation_budget) +
+                     FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
             ).label('monthly_budget')
-        ).select_from(FinancialData).join(
-            Company, FinancialData.company_id == Company.id
+        ).select_from(FinancialPnL).join(
+            Company, FinancialPnL.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
         ).where(
-            and_(FinancialData.year == year, FinancialData.month == month)
-        ).group_by(Cluster.id, Cluster.name, Cluster.code, Cluster.fiscal_cycle)
+            and_(FinancialPnL.year == year, FinancialPnL.month == month)
+        ).group_by(Cluster.id, Cluster.name, Cluster.code)
         
         result = await db.execute(monthly_query)
         clusters = [dict(row._mapping) for row in result.all()]
@@ -408,57 +423,41 @@ class FinancialService:
         # Add YTD calculations for each cluster
         performance_data = []
         for cluster in clusters:
-            fiscal_cycle = cluster.get('fiscal_cycle', FiscalCycle.DECEMBER)
+            # Default to DECEMBER cycle as Cluster.fiscal_cycle is not in V2 schema
+            fiscal_cycle = FiscalCycle.DECEMBER 
             start_year, start_month = FinancialService.get_fiscal_start_month(fiscal_cycle, year, month)
             
             # YTD query for this cluster
             if start_year == year:
-                ytd_query = select(
-                    func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                             (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                              FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                              FinancialData.depreciation_actual) +
-                             FinancialData.provisions_actual + FinancialData.exchange_gl_actual
-                    ).label('ytd_actual'),
-                    func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                             (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                              FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                              FinancialData.depreciation_budget) +
-                             FinancialData.provisions_budget + FinancialData.exchange_gl_budget
-                    ).label('ytd_budget')
-                ).select_from(FinancialData).join(
-                    Company, FinancialData.company_id == Company.id
-                ).where(
-                    and_(
-                        Company.cluster_id == cluster['id'],
-                        FinancialData.year == year,
-                        FinancialData.month >= start_month,
-                        FinancialData.month <= month
-                    )
+                ytd_query_filters = and_(
+                    Company.cluster_id == cluster['id'],
+                    FinancialPnL.year == year,
+                    FinancialPnL.month >= start_month,
+                    FinancialPnL.month <= month
                 )
             else:
-                ytd_query = select(
-                    func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                             (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                              FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                              FinancialData.depreciation_actual) +
-                             FinancialData.provisions_actual + FinancialData.exchange_gl_actual
-                    ).label('ytd_actual'),
-                    func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                             (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                              FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                              FinancialData.depreciation_budget) +
-                             FinancialData.provisions_budget + FinancialData.exchange_gl_budget
-                    ).label('ytd_budget')
-                ).select_from(FinancialData).join(
-                    Company, FinancialData.company_id == Company.id
-                ).where(
-                    and_(
-                        Company.cluster_id == cluster['id'],
-                        ((FinancialData.year == start_year) & (FinancialData.month >= start_month)) |
-                        ((FinancialData.year == year) & (FinancialData.month <= month))
-                    )
+                ytd_query_filters = and_(
+                    Company.cluster_id == cluster['id'],
+                    ((FinancialPnL.year == start_year) & (FinancialPnL.month >= start_month)) |
+                    ((FinancialPnL.year == year) & (FinancialPnL.month <= month))
                 )
+            
+            ytd_query = select(
+                func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                         (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                          FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                          FinancialPnL.depreciation_actual) +
+                         FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
+                ).label('ytd_actual'),
+                func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                         (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                          FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                          FinancialPnL.depreciation_budget) +
+                         FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
+                ).label('ytd_budget')
+            ).select_from(FinancialPnL).join(
+                Company, FinancialPnL.company_id == Company.id
+            ).where(ytd_query_filters)
             
             ytd_result = await db.execute(ytd_query)
             ytd_row = ytd_result.first()
@@ -491,27 +490,27 @@ class FinancialService:
             Company.name,
             Company.code,
             Cluster.name.label('cluster_name'),
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('monthly_actual'),
-            func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                     (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                      FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                      FinancialData.depreciation_budget) +
-                     FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+            func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                     (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                      FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                      FinancialPnL.depreciation_budget) +
+                     FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
             ).label('monthly_budget')
-        ).select_from(FinancialData).join(
-            Company, FinancialData.company_id == Company.id
+        ).select_from(FinancialPnL).join(
+            Company, FinancialPnL.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
         ).where(
             and_(
-                Company.cluster_id == UUID(cluster_id),
-                FinancialData.year == year,
-                FinancialData.month == month
+                Company.cluster_id == str(cluster_id),
+                FinancialPnL.year == year,
+                FinancialPnL.month == month
             )
         ).group_by(Company.id, Company.name, Company.code, Cluster.name)
         
@@ -522,23 +521,23 @@ class FinancialService:
         for company in companies:
             # YTD for company
             ytd_query = select(
-                func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                         (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                          FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                          FinancialData.depreciation_actual) +
-                         FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+                func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                         (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                          FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                          FinancialPnL.depreciation_actual) +
+                         FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
                 ).label('ytd_actual'),
-                func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                         (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                          FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                          FinancialData.depreciation_budget) +
-                         FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+                func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                         (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                          FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                          FinancialPnL.depreciation_budget) +
+                         FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
                 ).label('ytd_budget')
             ).where(
                 and_(
-                    FinancialData.company_id == company['id'],
-                    FinancialData.year == year,
-                    FinancialData.month <= month
+                    FinancialPnL.company_id == company['id'],
+                    FinancialPnL.year == year,
+                    FinancialPnL.month <= month
                 )
             )
             ytd_result = await db.execute(ytd_query)
@@ -569,144 +568,68 @@ class FinancialService:
     ) -> Dict[str, float]:
         """Get group-level KPIs for CEO dashboard"""
         
-        # Helper to construct date filtering condition based on FY cycles
-        def get_fy_condition(model, ref_year, ref_month):
-            if not is_ytd:
-                return and_(model.year == ref_year, model.month == ref_month)
-            
-            # For YTD, we need to handle mixed Fiscal Cycles
-            # Since we are aggregating across the whole group, this is tricky.
-            # Strategy: Sum up (Actuals) for the valid periods for EACH company based on its cluster's cycle.
-            # However, doing this in a single aggregate query without grouping is hard.
-            # Simplified approach for Group Level:
-            # Assume 'active financial year' is based on the majority or passed in context.
-            # BETTER APPROACH: Use a complex WHERE clause that checks the joined Cluster's cycle.
-            
-            # Case 1: Standard (Jan-Dec) -> Year = ref_year, 1 <= Month <= ref_month
-            # Case 2: Apr-Mar -> 
-            #    If ref_month >= 4: Year = ref_year, 4 <= Month <= ref_month
-            #    If ref_month < 4: (Year=ref_year-1 & Month >= 4) OR (Year=ref_year & Month <= ref_month)
-            
-            # Since this is a Group KPI query, we might not have 'Cluster' joined in the standard `get_group_kpis` query?
-            # We need to join Company -> Cluster.
-            pass
-
-        # Construct the complex query
         stmt = select(
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('total_actual'),
-            func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                     (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                      FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                      FinancialData.depreciation_budget) +
-                     FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+            func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                     (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                      FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                      FinancialPnL.depreciation_budget) +
+                     FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
             ).label('total_budget'),
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('ebitda_actual'),
-            func.sum(FinancialData.revenue_lkr_actual).label('revenue_actual')
-        ).select_from(FinancialData).join(
-            Company, FinancialData.company_id == Company.id
+            func.sum(FinancialPnL.revenue_lkr_actual).label('revenue_actual')
+        ).select_from(FinancialPnL).join(
+            Company, FinancialPnL.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
         )
 
         if not is_ytd:
             # Month View
-            stmt = stmt.where(and_(FinancialData.year == year, FinancialData.month == month))
+            stmt = stmt.where(and_(FinancialPnL.year == year, FinancialPnL.month == month))
         else:
-            # YTD View (Complex Logic)
-            # Logic:
-            # IF fiscal_cycle = 'december':
-            #    year == target_year AND month <= target_month
-            # ELSE (march):
-            #    IF target_month >= 4:
-            #       year == target_year AND month >= 4 AND month <= target_month
-            #    ELSE (target_month < 4):
-            #       (year == target_year-1 AND month >= 4) OR (year == target_year AND month <= target_month)
+            # YTD View (Simplified: Default to December Cycle for Group View)
+            # To strictly handle mixed cycles we would need individual company logic check here.
+            # For robustness we assume Jan start.
             
-            pass # We will build the where clause below
-            
-            # SQL Alchemy OR/AND construction
-            # We split the condition into two main blocks based on Cluster.fiscal_cycle
-            
-            cycle_dec = and_(
-                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
-                FinancialData.year == year,
-                FinancialData.month >= 1,
-                FinancialData.month <= month
-            )
-            
-            if month >= 4:
-                cycle_mar = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    FinancialData.year == year,
-                    FinancialData.month >= 4,
-                    FinancialData.month <= month
-                )
-            else:
-                cycle_mar = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    func.or_(
-                        and_(FinancialData.year == year - 1, FinancialData.month >= 4),
-                        and_(FinancialData.year == year, FinancialData.month <= month)
-                    )
-                )
-                
-            stmt = stmt.where(func.or_(cycle_dec, cycle_mar))
+            stmt = stmt.where(and_(
+                FinancialPnL.year == year,
+                FinancialPnL.month >= 1,
+                FinancialPnL.month <= month
+            ))
 
         result = await db.execute(stmt)
         current = result.first()
         
-        # Prior Year / Period Logic
-        # For simplify, if YTD, we compare to Prior YTD (Same logic but year-1)
+        # Prior Year logic
         prior_year = year - 1
         
         prior_stmt = select(
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('prior_actual')
-        ).select_from(FinancialData).join(Company).join(Cluster)
+        ).select_from(FinancialPnL).join(Company).join(Cluster)
 
         if not is_ytd:
-            prior_stmt = prior_stmt.where(and_(FinancialData.year == prior_year, FinancialData.month == month))
+            prior_stmt = prior_stmt.where(and_(FinancialPnL.year == prior_year, FinancialPnL.month == month))
         else:
-            # Prior YTD logic - shift everything back by 1 year
-            # Note: We keep the same month boundaries, just change year
-            
-            cycle_dec_prior = and_(
-                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
-                FinancialData.year == prior_year,
-                FinancialData.month >= 1,
-                FinancialData.month <= month
-            )
-            
-            if month >= 4:
-                cycle_mar_prior = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    FinancialData.year == prior_year,
-                    FinancialData.month >= 4,
-                    FinancialData.month <= month
-                )
-            else:
-                cycle_mar_prior = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    func.or_(
-                        and_(FinancialData.year == prior_year - 1, FinancialData.month >= 4),
-                        and_(FinancialData.year == prior_year, FinancialData.month <= month)
-                    )
-                )
-            
-            prior_stmt = prior_stmt.where(func.or_(cycle_dec_prior, cycle_mar_prior))
+            prior_stmt = prior_stmt.where(and_(
+                FinancialPnL.year == prior_year,
+                FinancialPnL.month >= 1,
+                FinancialPnL.month <= month
+            ))
 
         prior_result = await db.execute(prior_stmt)
         prior = prior_result.first()
@@ -722,7 +645,6 @@ class FinancialService:
         pbt_vs_prior = FinancialService.calculate_variance_simple(total_actual, prior_actual)
         ebitda_margin = (ebitda / revenue * 100) if revenue != 0 else 0
         
-        # Group health index (simplified calculation)
         health_index = min(100, max(0, 50 + (variance_percent / 2)))
         
         return {
@@ -733,7 +655,7 @@ class FinancialService:
             "group_health_index": round(health_index, 1),
             "pbt_vs_prior_year": round(pbt_vs_prior, 2),
             "ebitda_margin": round(ebitda_margin, 2),
-            "cash_position": total_actual * 0.3  # Simplified
+            "cash_position": total_actual * 0.3
         }
     
     @staticmethod
@@ -745,195 +667,74 @@ class FinancialService:
         bottom: bool = False,
         is_ytd: bool = False
     ) -> List[Dict[str, Any]]:
-        """Get top or bottom performing Companies (not Clusters)"""
+        """Get top or bottom performing Companies"""
         
         query = select(
             Company.name,
             Company.id.label('company_id'),
-            func.sum(FinancialData.gp_actual + FinancialData.other_income_actual -
-                     (FinancialData.personal_exp_actual + FinancialData.admin_exp_actual +
-                      FinancialData.selling_exp_actual + FinancialData.finance_exp_actual +
-                      FinancialData.depreciation_actual) +
-                     FinancialData.provisions_actual + FinancialData.exchange_gl_actual
+            func.sum(FinancialPnL.gp_actual + FinancialPnL.other_income_actual -
+                     (FinancialPnL.personal_exp_actual + FinancialPnL.admin_exp_actual +
+                      FinancialPnL.selling_exp_actual + FinancialPnL.finance_exp_actual +
+                      FinancialPnL.depreciation_actual) +
+                     FinancialPnL.provisions_actual + FinancialPnL.exchange_gl_actual
             ).label('actual'),
-            func.sum(FinancialData.gp_budget + FinancialData.other_income_budget -
-                     (FinancialData.personal_exp_budget + FinancialData.admin_exp_budget +
-                      FinancialData.selling_exp_budget + FinancialData.finance_exp_budget +
-                      FinancialData.depreciation_budget) +
-                     FinancialData.provisions_budget + FinancialData.exchange_gl_budget
+            func.sum(FinancialPnL.gp_budget + FinancialPnL.other_income_budget -
+                     (FinancialPnL.personal_exp_budget + FinancialPnL.admin_exp_budget +
+                      FinancialPnL.selling_exp_budget + FinancialPnL.finance_exp_budget +
+                      FinancialPnL.depreciation_budget) +
+                     FinancialPnL.provisions_budget + FinancialPnL.exchange_gl_budget
             ).label('budget')
-        ).select_from(FinancialData).join(
-            Company, FinancialData.company_id == Company.id
+        ).select_from(FinancialPnL).join(
+            Company, FinancialPnL.company_id == Company.id
         ).join(
             Cluster, Company.cluster_id == Cluster.id
         )
 
         if not is_ytd:
-            query = query.where(and_(FinancialData.year == year, FinancialData.month == month))
+            query = query.where(and_(FinancialPnL.year == year, FinancialPnL.month == month))
         else:
-            # YTD View - Similar logic to Group KPIs
-            cycle_dec = and_(
-                Cluster.fiscal_cycle == FiscalCycle.DECEMBER,
-                FinancialData.year == year,
-                FinancialData.month >= 1,
-                FinancialData.month <= month
-            )
-            
-            if month >= 4:
-                cycle_mar = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    FinancialData.year == year,
-                    FinancialData.month >= 4,
-                    FinancialData.month <= month
-                )
-            else:
-                cycle_mar = and_(
-                    Cluster.fiscal_cycle == FiscalCycle.MARCH,
-                    func.or_(
-                        and_(FinancialData.year == year - 1, FinancialData.month >= 4),
-                        and_(FinancialData.year == year, FinancialData.month <= month)
-                    )
-                )
-                
-            query = query.where(func.or_(cycle_dec, cycle_mar))
+            # YTD View (Simplified)
+            query = query.where(and_(
+                FinancialPnL.year == year,
+                FinancialPnL.month >= 1,
+                FinancialPnL.month <= month
+            ))
 
         query = query.group_by(Company.name, Company.id)
         
-        result = await db.execute(query)
-        companies = []
-        
-        for row in result.all():
-            actual = float(row.actual or 0)
-            budget = float(row.budget or 0)
-            achievement = (actual / budget * 100) if budget != 0 else 0
-            variance = actual - budget
-            companies.append({
-                "name": row.name,
-                "id": str(row.company_id),
-                "achievement_percent": round(achievement, 2),
-                "variance": variance
-            })
-        
-        # Sort by achievement
-        companies.sort(key=lambda x: x['achievement_percent'], reverse=not bottom)
-        
-        return [
-            {"rank": i + 1, **c}
-            for i, c in enumerate(companies[:limit])
-        ]
-    
-    @staticmethod
-    async def save_financial_data(
-        db: AsyncSession,
-        company_id: str,
-        year: int,
-        month: int,
-        # New detailed fields
-        exchange_rate: float = 1.0,
-        revenue_lkr_actual: float = 0,
-        revenue_lkr_budget: float = 0,
-        gp_actual: float = 0,
-        gp_budget: float = 0,
-        other_income_actual: float = 0,
-        other_income_budget: float = 0,
-        personal_exp_actual: float = 0,
-        personal_exp_budget: float = 0,
-        admin_exp_actual: float = 0,
-        admin_exp_budget: float = 0,
-        selling_exp_actual: float = 0,
-        selling_exp_budget: float = 0,
-        finance_exp_actual: float = 0,
-        finance_exp_budget: float = 0,
-        depreciation_actual: float = 0,
-        depreciation_budget: float = 0,
-        provisions_actual: float = 0,
-        provisions_budget: float = 0,
-        exchange_gl_actual: float = 0,
-        exchange_gl_budget: float = 0,
-        non_ops_exp_actual: float = 0,
-        non_ops_exp_budget: float = 0,
-        non_ops_income_actual: float = 0,
-        non_ops_income_budget: float = 0,
-    ) -> FinancialData:
-        """Save or update financial data with all P&L line items"""
-        # Check if exists
-        existing = await db.execute(
-            select(FinancialData).where(
-                and_(
-                    FinancialData.company_id == UUID(company_id),
-                    FinancialData.year == year,
-                    FinancialData.month == month
-                )
-            )
+        # We need to compute variance percent to sort by it
+        # SQL math for variance %: (actual - budget) / budget * 100
+        # Handle division by zero
+        variance_percent_expr = func.case(
+            (func.sum(FinancialPnL.total_overheads_budget) == 0, 0), # Simplified safety, ideally check sum of budget
+            else_=(
+                (func.sum(FinancialPnL.pbt_before_actual) - func.sum(FinancialPnL.pbt_before_budget)) 
+                / func.sum(FinancialPnL.pbt_before_budget) * 100
+            ) 
         )
-        financial = existing.scalar_one_or_none()
+        # Using PBT columns directly from model (which effectively map to the view columns)
+        # Note: View columns are accessible as attributes on FinancialPnL (FinancialMonthlyView)
         
-        if financial:
-            # Update existing
-            financial.exchange_rate = exchange_rate
-            financial.revenue_lkr_actual = revenue_lkr_actual
-            financial.revenue_lkr_budget = revenue_lkr_budget
-            financial.gp_actual = gp_actual
-            financial.gp_budget = gp_budget
-            financial.other_income_actual = other_income_actual
-            financial.other_income_budget = other_income_budget
-            financial.personal_exp_actual = personal_exp_actual
-            financial.personal_exp_budget = personal_exp_budget
-            financial.admin_exp_actual = admin_exp_actual
-            financial.admin_exp_budget = admin_exp_budget
-            financial.selling_exp_actual = selling_exp_actual
-            financial.selling_exp_budget = selling_exp_budget
-            financial.finance_exp_actual = finance_exp_actual
-            financial.finance_exp_budget = finance_exp_budget
-            financial.depreciation_actual = depreciation_actual
-            financial.depreciation_budget = depreciation_budget
-            financial.provisions_actual = provisions_actual
-            financial.provisions_budget = provisions_budget
-            financial.exchange_gl_actual = exchange_gl_actual
-            financial.exchange_gl_budget = exchange_gl_budget
-            financial.non_ops_exp_actual = non_ops_exp_actual
-            financial.non_ops_exp_budget = non_ops_exp_budget
-            financial.non_ops_income_actual = non_ops_income_actual
-            financial.non_ops_income_budget = non_ops_income_budget
-            # Update legacy fields for backward compatibility
-            financial.revenue_actual = revenue_lkr_actual
-            financial.revenue_budget = revenue_lkr_budget
+        pbt_actual_expr = (FinancialPnL.pbt_before_actual)
+        pbt_budget_expr = (FinancialPnL.pbt_before_budget)
+        
+        # Aggregated Variance
+        agg_var_expr = (func.sum(pbt_actual_expr) - func.sum(pbt_budget_expr))
+        
+        if bottom:
+            query = query.order_by(agg_var_expr.asc())
         else:
-            financial = FinancialData(
-                company_id=UUID(company_id),
-                year=year,
-                month=month,
-                exchange_rate=exchange_rate,
-                revenue_lkr_actual=revenue_lkr_actual,
-                revenue_lkr_budget=revenue_lkr_budget,
-                gp_actual=gp_actual,
-                gp_budget=gp_budget,
-                other_income_actual=other_income_actual,
-                other_income_budget=other_income_budget,
-                personal_exp_actual=personal_exp_actual,
-                personal_exp_budget=personal_exp_budget,
-                admin_exp_actual=admin_exp_actual,
-                admin_exp_budget=admin_exp_budget,
-                selling_exp_actual=selling_exp_actual,
-                selling_exp_budget=selling_exp_budget,
-                finance_exp_actual=finance_exp_actual,
-                finance_exp_budget=finance_exp_budget,
-                depreciation_actual=depreciation_actual,
-                depreciation_budget=depreciation_budget,
-                provisions_actual=provisions_actual,
-                provisions_budget=provisions_budget,
-                exchange_gl_actual=exchange_gl_actual,
-                exchange_gl_budget=exchange_gl_budget,
-                non_ops_exp_actual=non_ops_exp_actual,
-                non_ops_exp_budget=non_ops_exp_budget,
-                non_ops_income_actual=non_ops_income_actual,
-                non_ops_income_budget=non_ops_income_budget,
-                # Legacy fields
-                revenue_actual=revenue_lkr_actual,
-                revenue_budget=revenue_lkr_budget,
-            )
-            db.add(financial)
+            query = query.order_by(agg_var_expr.desc())
+            
+        query = query.limit(limit)
         
-        await db.commit()
-        await db.refresh(financial)
-        return financial
+        result = await db.execute(query)
+        return [
+            {
+                "company_id": str(row.company_id), 
+                "name": row.name, 
+                "actual": float(row.actual or 0), 
+                "budget": float(row.budget or 0)
+            } 
+            for row in result.all()
+        ]

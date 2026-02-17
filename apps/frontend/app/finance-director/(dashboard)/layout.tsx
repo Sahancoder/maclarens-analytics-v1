@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/finance-director";
-import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
+import {
+  canAccessPortal,
+  getDashboardRoute,
+  getDashboardRouteForPortal,
+  normalizeRole,
+} from "@/lib/role-routing";
 
 export default function FinanceDirectorDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -19,12 +24,13 @@ export default function FinanceDirectorDashboardLayout({ children }: { children:
     }
 
     try {
-      const user = JSON.parse(userRaw) as { role?: string };
+      const user = JSON.parse(userRaw) as { role?: string; portal?: string };
       const role = normalizeRole(user.role);
-      const target = getDashboardRoute(role);
 
-      if (target && target !== "/finance-director/dashboard") {
-        router.push(target);
+      if (!canAccessPortal(user.role, "finance-director")) {
+        const portalTarget = getDashboardRouteForPortal(user.portal);
+        const roleTarget = getDashboardRoute(role);
+        router.push(portalTarget || roleTarget || "/finance-director/login");
         return;
       }
     } catch {
@@ -60,4 +66,3 @@ export default function FinanceDirectorDashboardLayout({ children }: { children:
     </div>
   );
 }
-

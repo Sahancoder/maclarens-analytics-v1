@@ -31,6 +31,12 @@ class RateLimiter:
     
     def _get_bucket(self, key: str, max_requests: int, window_seconds: int) -> Tuple[float, float]:
         """Get or initialize a bucket"""
+        if key not in self._buckets:
+            # New client starts with a full bucket.
+            now = time.time()
+            self._buckets[key] = (float(max_requests), now)
+            return float(max_requests), now
+
         tokens, last_update = self._buckets[key]
         now = time.time()
         

@@ -1,25 +1,41 @@
 # ============================================
 # Next.js 14 Development Dockerfile
-# Fixed for Alpine + SWC compatibility
+# Hot reload via volume mounts
+# Uses Debian slim to avoid Alpine SWC issues
 # ============================================
 
-FROM node:20-alpine3.19
-
-# Install libc6-compat for Next.js SWC binary compatibility
-RUN apk add --no-cache libc6-compat
+FROM node:20-bookworm-slim
 
 WORKDIR /app
+
+# Force deterministic Linux/x64 optional dependency resolution in Docker
+ENV npm_config_platform=linux
+ENV npm_config_arch=x64
+
+# Disable Next.js telemetry
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Enable file-system polling for hot reload through Docker volume mounts
+# This is needed because inotify doesn't work across Docker host volumes on Windows
+ENV WATCHPACK_POLLING=true
+ENV CHOKIDAR_USEPOLLING=true
 
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies inside container (NOT from Windows)
-RUN npm ci
+# Install dependencies inside container (NOT from Windows host)
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm config set fund false \
+  && npm config set audit false \
+  && npm ci --include=optional
 
-# Copy source code
-COPY . .
+# Source files will be mounted as volumes for hot reload
+# Only copy config files that are needed at startup
+COPY next.config.js tsconfig.json tailwind.config.ts postcss.config.js ./
 
 EXPOSE 3000
 
-# Development server with hot reload
+# Development server with hostname 0.0.0.0 so it's accessible outside container
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

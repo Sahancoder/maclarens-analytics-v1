@@ -5,11 +5,14 @@ export async function GET(request: NextRequest) {
   const year = searchParams.get('year') || '2025';
   const month = searchParams.get('month') || '10';
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const apiUrl =
+    process.env.BACKEND_URL ||
+    process.env.INTERNAL_API_BASE_URL ||
+    'http://backend:8000';
   
   try {
     const response = await fetch(
-      `${apiUrl}/api/export/financial-summary?year=${year}&month=${month}`,
+      `${apiUrl}/export/financial-summary?year=${year}&month=${month}`,
       {
         method: 'GET',
         headers: {

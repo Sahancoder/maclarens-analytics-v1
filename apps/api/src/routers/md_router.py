@@ -13,7 +13,6 @@ Endpoints:
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from uuid import UUID
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -339,7 +338,7 @@ async def get_approved_company_ids(
     year: int, 
     month: Optional[int] = None,
     months: Optional[List[int]] = None
-) -> List[UUID]:
+) -> List[str]:
     """Get company IDs with approved reports"""
     query = select(Report.company_id).where(
         and_(
@@ -361,7 +360,7 @@ async def get_financials_for_period(
     year: int,
     months: List[int],
     scenario: Scenario,
-    company_ids: Optional[List[UUID]] = None
+    company_ids: Optional[List[str]] = None
 ) -> List[FinancialMonthly]:
     """Get financial records for a period"""
     query = select(FinancialMonthly).where(
@@ -606,7 +605,7 @@ async def get_performers(
     )
     
     # Group by company
-    company_data: Dict[UUID, Dict[str, float]] = {}
+    company_data: Dict[str, Dict[str, float]] = {}
     
     for record in actual_records:
         cid = record.company_id
@@ -744,8 +743,8 @@ async def get_cluster_contribution(
     company_cluster_map = {c.id: c.cluster_id for c in companies}
     
     # Aggregate by cluster
-    cluster_actuals: Dict[UUID, Dict[str, float]] = {}
-    cluster_budgets: Dict[UUID, Dict[str, float]] = {}
+    cluster_actuals: Dict[str, Dict[str, float]] = {}
+    cluster_budgets: Dict[str, Dict[str, float]] = {}
     
     for record in actual_records:
         cluster_id = company_cluster_map.get(record.company_id)
@@ -866,8 +865,8 @@ async def get_risk_radar(
     company_cluster_map = {c.id: c.cluster_id for c in companies}
     
     # Group records by company
-    company_actuals: Dict[UUID, Dict[str, float]] = {}
-    company_budgets: Dict[UUID, Dict[str, float]] = {}
+    company_actuals: Dict[str, Dict[str, float]] = {}
+    company_budgets: Dict[str, Dict[str, float]] = {}
     
     for r in actual_records:
         if r.company_id not in company_actuals:
@@ -1000,7 +999,7 @@ async def get_cluster_drilldown(
     
     # Get cluster
     cluster_result = await db.execute(
-        select(Cluster).where(Cluster.id == UUID(cluster_id))
+        select(Cluster).where(Cluster.id == cluster_id)
     )
     cluster = cluster_result.scalar_one_or_none()
     if not cluster:
@@ -1009,7 +1008,7 @@ async def get_cluster_drilldown(
     # Get companies in cluster
     companies_result = await db.execute(
         select(Company).where(
-            and_(Company.cluster_id == UUID(cluster_id), Company.is_active == True)
+            and_(Company.cluster_id == cluster_id, Company.is_active == True)
         ).order_by(Company.name)
     )
     companies = companies_result.scalars().all()
@@ -1027,8 +1026,8 @@ async def get_cluster_drilldown(
     )
     
     # Group by company
-    actuals_by_company: Dict[UUID, List[FinancialMonthly]] = {}
-    budgets_by_company: Dict[UUID, List[FinancialMonthly]] = {}
+    actuals_by_company: Dict[str, List[FinancialMonthly]] = {}
+    budgets_by_company: Dict[str, List[FinancialMonthly]] = {}
     
     for r in actual_records:
         if r.company_id not in actuals_by_company:
@@ -1156,22 +1155,22 @@ async def get_pbt_trend(
     cluster_name = None
     
     if company_id:
-        query = query.where(FinancialMonthly.company_id == UUID(company_id))
-        budget_query = budget_query.where(FinancialMonthly.company_id == UUID(company_id))
-        company_result = await db.execute(select(Company).where(Company.id == UUID(company_id)))
+        query = query.where(FinancialMonthly.company_id == company_id)
+        budget_query = budget_query.where(FinancialMonthly.company_id == company_id)
+        company_result = await db.execute(select(Company).where(Company.id == company_id))
         company = company_result.scalar_one_or_none()
         company_name = company.name if company else None
     elif cluster_id:
         # Get companies in cluster
         companies_result = await db.execute(
-            select(Company.id).where(Company.cluster_id == UUID(cluster_id))
+            select(Company.id).where(Company.cluster_id == cluster_id)
         )
         company_ids = [row[0] for row in companies_result.all()]
         if company_ids:
             query = query.where(FinancialMonthly.company_id.in_(company_ids))
             budget_query = budget_query.where(FinancialMonthly.company_id.in_(company_ids))
         
-        cluster_result = await db.execute(select(Cluster).where(Cluster.id == UUID(cluster_id)))
+        cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
         cluster = cluster_result.scalar_one_or_none()
         cluster_name = cluster.name if cluster else None
     
@@ -1282,8 +1281,8 @@ async def get_performance_hierarchy(
     )
     
     # Group by company
-    actuals_by_company: Dict[UUID, Dict[str, float]] = {}
-    budgets_by_company: Dict[UUID, Dict[str, float]] = {}
+    actuals_by_company: Dict[str, Dict[str, float]] = {}
+    budgets_by_company: Dict[str, Dict[str, float]] = {}
     
     for r in actual_records:
         if r.company_id not in actuals_by_company:

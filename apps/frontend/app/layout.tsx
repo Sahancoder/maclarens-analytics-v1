@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { inter, roboto, sansation } from "@/lib/fonts";
 import { NextAuthProvider } from "@/lib/auth-provider";
 import { AuthProvider } from "@/lib/auth-context";
+import { ApolloWrapper } from "@/lib/apollo-wrapper";
 
 export const metadata: Metadata = {
   title: "McLarens Analytics.io | Enterprise Financial Analytics",
@@ -21,9 +22,11 @@ export default function RootLayout({
         className={`${inter.variable} ${roboto.variable} ${sansation.variable} font-inter antialiased`}
       >
         <NextAuthProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <ApolloWrapper>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </ApolloWrapper>
         </NextAuthProvider>
       </body>
     </html>

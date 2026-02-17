@@ -9,7 +9,7 @@ from src.db.models import Base
 # Create async engine
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,  # settings.debug was True by default, flooding logs with SQL
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20

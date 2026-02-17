@@ -1,202 +1,154 @@
 """
-Database Seed Script - Creates initial data for McLarens Analytics
+Database Seed Script
+Updated for User Master / Role Master schema
 """
 import asyncio
+from datetime import date
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.session import AsyncSessionLocal, init_db
-from src.db.models import User, Cluster, Company, FinancialData, UserRole, FiscalCycle
-from src.services.auth_service import AuthService
-
+from src.db.models import (
+    UserMaster, RoleMaster, ClusterMaster, CompanyMaster, 
+    UserCompanyMap, UserCompanyRoleMap
+)
 
 async def seed_database():
-    """Seed the database with initial data"""
+    """Seed the database with initial data matching the new schema"""
     print("🌱 Seeding database...")
     
     await init_db()
     
     async with AsyncSessionLocal() as db:
         # Check if already seeded
-        from sqlalchemy import select
-        existing = await db.execute(select(User).limit(1))
+        existing = await db.execute(select(UserMaster).limit(1))
         if existing.scalar_one_or_none():
             print("⚠️  Database already seeded, skipping...")
+            # Ensure Admin exists even if seeded
+            # await ensure_admin_user(db)
             return
         
-        # ============ CREATE CLUSTERS ============
-        print("Creating clusters...")
-        clusters_data = [
-            {"name": "Liner", "code": "LNR", "fiscal_cycle": FiscalCycle.DECEMBER},
-            {"name": "Insurance", "code": "INS", "fiscal_cycle": FiscalCycle.DECEMBER},
-            {"name": "Logistics", "code": "LOG", "fiscal_cycle": FiscalCycle.MARCH},
-            {"name": "Marine", "code": "MRN", "fiscal_cycle": FiscalCycle.DECEMBER},
-            {"name": "Energy", "code": "ENG", "fiscal_cycle": FiscalCycle.DECEMBER},
-            {"name": "Leisure", "code": "LSR", "fiscal_cycle": FiscalCycle.MARCH},
+        # 1. Create Roles (IDs must match constants.py: 1=FO, 2=FD, 3=Admin, 4=MD)
+        print("Creating roles...")
+        roles = [
+            {"role_id": 1, "role_name": "Finance Officer"},
+            {"role_id": 2, "role_name": "Finance Director"},
+            {"role_id": 3, "role_name": "Admin"},
+            {"role_id": 4, "role_name": "MD"},
         ]
-        
-        clusters = {}
-        for c_data in clusters_data:
-            cluster = Cluster(**c_data)
-            db.add(cluster)
+
+        role_map = {}
+        for r_data in roles:
+            role = RoleMaster(role_id=r_data["role_id"], role_name=r_data["role_name"])
+            db.add(role)
             await db.flush()
-            clusters[c_data["code"]] = cluster
-        
-        # ============ CREATE COMPANIES ============
-        print("Creating companies...")
-        companies_data = [
-            # Liner cluster
-            {"name": "McLarens Shipping Ltd", "code": "MSL", "cluster_code": "LNR"},
-            {"name": "Lanka Container Lines", "code": "LCL", "cluster_code": "LNR"},
-            {"name": "Colombo Freight Services", "code": "CFS", "cluster_code": "LNR"},
-            # Insurance cluster
-            {"name": "McLarens Insurance Brokers", "code": "MIB", "cluster_code": "INS"},
-            {"name": "General Insurance Co", "code": "GIC", "cluster_code": "INS"},
-            # Logistics cluster
-            {"name": "McLarens Logistics", "code": "MLG", "cluster_code": "LOG"},
-            {"name": "Express Cargo Services", "code": "ECS", "cluster_code": "LOG"},
-            # Marine cluster
-            {"name": "McLarens Marine Services", "code": "MMS", "cluster_code": "MRN"},
-            {"name": "Port Operations Ltd", "code": "POL", "cluster_code": "MRN"},
-            # Energy cluster
-            {"name": "McLarens Energy Solutions", "code": "MES", "cluster_code": "ENG"},
-            {"name": "Power Generation Co", "code": "PGC", "cluster_code": "ENG"},
-            # Leisure cluster
-            {"name": "McLarens Hotels", "code": "MHT", "cluster_code": "LSR"},
-            {"name": "Resort Management Co", "code": "RMC", "cluster_code": "LSR"},
+            role_map[r_data["role_name"]] = role.role_id
+            
+        # 2. Create Clusters
+        print("Creating clusters...")
+        clusters = [
+            {"cluster_id": "C01", "cluster_name": "Shipping Infrastructure"},
+            {"cluster_id": "C02", "cluster_name": "Logistics"},
+            {"cluster_id": "C03", "cluster_name": "Maritime Services"},
         ]
         
-        companies = {}
-        for co_data in companies_data:
-            company = Company(
-                name=co_data["name"],
-                code=co_data["code"],
-                cluster_id=clusters[co_data["cluster_code"]].id
+        for c_data in clusters:
+            cluster = ClusterMaster(
+                cluster_id=c_data["cluster_id"], 
+                cluster_name=c_data["cluster_name"],
+                created_date=date.today(),
+                modified_date=date.today()
+            )
+            db.add(cluster)
+            
+        await db.flush()
+        
+        # 3. Create Companies
+        print("Creating companies...")
+        companies = [
+            {"company_id": "CC0001", "company_name": "GAC Shipping Ltd", "cluster_id": "C01"},
+            {"company_id": "CC0002", "company_name": "McLarens Logistics Ltd", "cluster_id": "C02"},
+            {"company_id": "CC0003", "company_name": "Spectra Logistics", "cluster_id": "C02"},
+        ]
+        
+        for co_data in companies:
+            company = CompanyMaster(
+                company_id=co_data["company_id"],
+                company_name=co_data["company_name"],
+                cluster_id=co_data["cluster_id"],
+                created_date=date.today(),
+                modified_date=date.today(),
+                is_active=True
             )
             db.add(company)
-            await db.flush()
-            companies[co_data["code"]] = company
+            
+        await db.flush()
         
-        # ============ CREATE USERS ============
+        # 4. Create Users
         print("Creating users...")
-        users_data = [
-            # Data Officers
+        users = [
             {
-                "email": "sahanhettiarachchi275@gmail.com",
-                "password": "1234",
-                "name": "Sahan Hettiarachchi",
-                "role": UserRole.DATA_OFFICER,
-                "company_code": "MSL"
+                "user_id": "U0001",
+                "email": "amanda@mclarens.lk", # Admin 
+                "first_name": "Amanda",
+                "last_name": "Admin",
+                "role": "Admin",
+                "company_id": "CC0001" # Admin usually has access to all, but mapping one primary for now
             },
             {
-                "email": "dataentry@mclarens.com",
-                "password": "data123",
-                "name": "Data Entry Officer",
-                "role": UserRole.DATA_OFFICER,
-                "company_code": "MIB"
-            },
-            # Company Directors
-            {
-                "email": "sahanviranga18@gmail.com",
-                "password": "5678",
-                "name": "Sahan Viranga",
-                "role": UserRole.COMPANY_DIRECTOR,
-                "company_code": "MSL",
-                "cluster_code": "LNR"
+                "user_id": "U0002",
+                "email": "sahan@mclarens.lk",
+                "first_name": "Sahan",
+                "last_name": "Hettiarachchi",
+                "role": "Finance Officer",
+                "company_id": "CC0001"
             },
             {
-                "email": "director@mclarens.com",
-                "password": "dir123",
-                "name": "Company Director",
-                "role": UserRole.COMPANY_DIRECTOR,
-                "company_code": "MIB",
-                "cluster_code": "INS"
-            },
-            # System Administrator
-            {
-                "email": "hmsvhettiarachchi@std.foc.sab.ac.lk",
-                "password": "91011",
-                "name": "System Administrator",
-                "role": UserRole.ADMIN
-            },
-            {
-                "email": "admin@mclarens.com",
-                "password": "admin123",
-                "name": "Admin User",
-                "role": UserRole.ADMIN
-            },
-            # CEO
-            {
-                "email": "oxysusl@gmail.com",
-                "password": "121314",
-                "name": "CEO User",
-                "role": UserRole.CEO
-            },
-            {
-                "email": "ceo@mclarens.com",
-                "password": "ceo123",
-                "name": "Chief Executive Officer",
-                "role": UserRole.CEO
-            },
+                "user_id": "U0003",
+                "email": "director@mclarens.lk",
+                "first_name": "Company",
+                "last_name": "Director",
+                "role": "Finance Director",
+                "company_id": "CC0001"
+            }
         ]
         
-        for u_data in users_data:
-            user = User(
-                email=u_data["email"],
-                password_hash=AuthService.hash_password(u_data["password"]),
-                name=u_data["name"],
-                role=u_data["role"],
-                company_id=companies[u_data["company_code"]].id if u_data.get("company_code") else None,
-                cluster_id=clusters[u_data["cluster_code"]].id if u_data.get("cluster_code") else None
+        for u_data in users:
+            # Create UserMaster
+            user = UserMaster(
+                user_id=u_data["user_id"],
+                user_email=u_data["email"],
+                first_name=u_data["first_name"],
+                last_name=u_data["last_name"],
+                created_date=date.today(),
+                modified_date=date.today(),
+                is_active=True
             )
             db.add(user)
-        
-        # ============ CREATE FINANCIAL DATA ============
-        print("Creating financial data...")
-        import random
-        
-        for company_code, company in companies.items():
-            for month in range(1, 13):  # Jan to Dec 2025
-                # Generate realistic financial data
-                base_revenue = random.uniform(5000, 20000)
-                base_cost = base_revenue * random.uniform(0.6, 0.85)
-                
-                revenue_actual = base_revenue * random.uniform(0.9, 1.15)
-                cost_actual = base_cost * random.uniform(0.9, 1.1)
-                pbt_actual = revenue_actual - cost_actual
-                ebitda_actual = pbt_actual * random.uniform(1.1, 1.3)
-                
-                revenue_budget = base_revenue
-                cost_budget = base_cost
-                pbt_budget = revenue_budget - cost_budget
-                ebitda_budget = pbt_budget * 1.2
-                
-                financial = FinancialData(
-                    company_id=company.id,
-                    year=2025,
-                    month=month,
-                    revenue_actual=round(revenue_actual, 2),
-                    cost_actual=round(cost_actual, 2),
-                    pbt_actual=round(pbt_actual, 2),
-                    ebitda_actual=round(ebitda_actual, 2),
-                    revenue_budget=round(revenue_budget, 2),
-                    cost_budget=round(cost_budget, 2),
-                    pbt_budget=round(pbt_budget, 2),
-                    ebitda_budget=round(ebitda_budget, 2),
-                    is_approved=month <= 10  # Approve up to October
+            await db.flush()
+            
+            # Map Company
+            user_company = UserCompanyMap(
+                user_id=user.user_id,
+                company_id=u_data["company_id"],
+                assigned_date=date.today(),
+                is_active=True
+            )
+            db.add(user_company)
+            
+            # Map Role
+            role_id = role_map.get(u_data["role"])
+            if role_id:
+                user_role = UserCompanyRoleMap(
+                    user_id=user.user_id,
+                    company_id=u_data["company_id"],
+                    role_id=role_id,
+                    is_active=True
                 )
-                db.add(financial)
+                db.add(user_role)
         
         await db.commit()
         print("✅ Database seeded successfully!")
-        
-        # Print credentials
-        print("\n📋 Test Credentials:")
-        print("=" * 50)
-        print("Data Officer:      sahanhettiarachchi275@gmail.com / 1234")
-        print("Company Director:  sahanviranga18@gmail.com / 5678")
-        print("Admin:             hmsvhettiarachchi@std.foc.sab.ac.lk / 91011")
-        print("CEO:               oxysusl@gmail.com / 121314")
-        print("=" * 50)
-
+        print("  Admin: amanda@mclarens.lk")
 
 if __name__ == "__main__":
     asyncio.run(seed_database())

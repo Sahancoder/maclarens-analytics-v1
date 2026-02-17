@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
-import { ShieldCheck, ArrowRight, ExternalLink, ArrowLeft } from "lucide-react";
+import { ArrowRight, ExternalLink, ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 interface LoginScreenProps {
   role?: string;
@@ -13,8 +14,9 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-
-  // Background images from your public folder
+  const [authError, setAuthError] = useState<string | null>(null);
+  
+  // Background images
   const backgroundImages = [
     {
       src: "/Login logos/login background 2.jpg",
@@ -61,65 +63,29 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
     return () => clearInterval(interval);
   }, [backgroundImages.length]);
 
-  // Handle Microsoft SSO Login (Temporary: Direct redirect without authentication)
+  // Handle Microsoft SSO Login
+  // Every user MUST authenticate via Microsoft Entra ID.
   const handleMicrosoftLogin = async () => {
     setIsLoading(true);
-    
-    // TODO: Replace with actual Microsoft Entra ID authentication in production
-    // When real auth is added:
-    // 1. Microsoft Entra ID login will verify user identity
-    // 2. Backend returns the user's ACTUAL role from database
-    // 3. Frontend redirects based on backend role, not URL
-    
-    // TEMPORARY: Direct redirect based on role prop (no authentication)
-    const roleRedirects: { [key: string]: string } = {
-      "finance-officer": "/finance-officer/dashboard",
-      "data-officer": "/finance-officer/dashboard",  // backward compatibility
-      "finance-director": "/finance-director/dashboard",
-      "company-director": "/finance-director/dashboard",  // backward compatibility
-      "system-admin": "/system-admin/dashboard",
-      "admin": "/system-admin/dashboard",  // backward compatibility
-      "md": "/md/dashboard",
-      "ceo": "/md/dashboard",  // backward compatibility
-    };
+    setAuthError(null);
 
-    const roleToDbRole: { [key: string]: string } = {
-      "finance-officer": "FINANCE_OFFICER",
-      "data-officer": "FINANCE_OFFICER",  // backward compatibility
-      "finance-director": "FINANCE_DIRECTOR",
-      "company-director": "FINANCE_DIRECTOR",  // backward compatibility
-      "system-admin": "SYSTEM_ADMIN",
-      "admin": "SYSTEM_ADMIN",  // backward compatibility
-      "md": "MD",
-      "ceo": "MD",  // backward compatibility
-    };
+    // The 'role' prop tells us which portal login page the user is on.
+    const portal = role || "";
 
-    // TEMPORARY: Set fake auth data in localStorage to bypass dashboard auth checks
-    if (role && roleRedirects[role]) {
-      const mockUser = {
-        id: "temp-user-id",
-        email: "temp@example.com",
-        name: "Temporary User",
-        role: roleToDbRole[role],
-      };
-      
-      localStorage.setItem("mclarens_token", "temporary-bypass-token");
-      localStorage.setItem("mclarens_user", JSON.stringify(mockUser));
+    // Store the portal in localStorage so the callback page knows
+    // which portal the user came from and can verify access.
+    if (portal) {
+      localStorage.setItem("mclarens_login_portal", portal);
     }
 
-    // Simulate loading for better UX
-    setTimeout(() => {
-      const redirectPath = role ? roleRedirects[role] : "/";
-      if (redirectPath && redirectPath !== "/") {
-        router.replace(redirectPath); // Use replace to prevent back navigation
-      } else {
-        console.error("Invalid role:", role);
-        setIsLoading(false);
-      }
-    }, 600);
+    // Always use Microsoft Entra ID for authentication.
+    signIn("azure-ad", {
+      callbackUrl: `/auth/callback?portal=${encodeURIComponent(portal)}`,
+    });
   };
 
   const error = searchParams.get("error");
+  const displayError = authError || error;
 
   // Navigate back to landing page
   const handleBackToHome = () => {
@@ -161,7 +127,7 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
               />
             </div>
 
-            {/* Blue Gradient Overlay for Text Readability */}
+            {/* Blue Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-blue-950/95 via-blue-900/60 to-blue-800/30" />
 
             {/* Caption Text */}
@@ -181,7 +147,7 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
         ))}
       </div>
 
-      {/* RIGHT SIDE: Login Form (Always Visible) */}
+      {/* RIGHT SIDE: Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50/50">
         <div className="w-full max-w-md space-y-8 p-10 animate-fade-in">
           {/* Header & Logo */}
@@ -204,7 +170,7 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
           </div>
 
           {/* Error Message */}
-          {error && (
+          {displayError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <div className="text-red-600 mt-0.5">
@@ -227,11 +193,13 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
                     Authentication Error
                   </h3>
                   <p className="mt-1 text-xs text-red-700">
-                    {error === "Configuration"
+                    {authError
+                      ? authError
+                      : displayError === "Configuration"
                       ? "There is a problem with the server configuration."
-                      : error === "AccessDenied"
+                      : displayError === "AccessDenied"
                       ? "You do not have permission to sign in."
-                      : error === "Verification"
+                      : displayError === "Verification"
                       ? "The sign-in link is no longer valid."
                       : "An error occurred during sign-in. Please try again."}
                   </p>
@@ -242,7 +210,6 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
 
           {/* Login Actions */}
           <div className="mt-8 space-y-6">
-            {/* Microsoft SSO Button */}
             {/* Microsoft SSO Button */}
             <button
               onClick={handleMicrosoftLogin}
@@ -361,11 +328,14 @@ const LoginScreen = ({ role }: LoginScreenProps = {}) => {
         @keyframes fadeIn {
           from {
             opacity: 0;
+            transform: translateY(0); // Fix initial opacity?
           }
           to {
             opacity: 1;
+            // transform? 
           }
         }
+        // ... (Keep existing styles mostly)
         @keyframes blink {
           0%, 50% {
             opacity: 1;

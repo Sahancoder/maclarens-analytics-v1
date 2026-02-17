@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Sidebar, Footer } from "@/components/finance-officer";
-import { getDashboardRoute, normalizeRole } from "@/lib/role-routing";
+import {
+  canAccessPortal,
+  getDashboardRoute,
+  getDashboardRouteForPortal,
+  normalizeRole,
+} from "@/lib/role-routing";
 
 export default function FinanceOfficerDashboardLayout({
   children,
@@ -23,12 +28,13 @@ export default function FinanceOfficerDashboardLayout({
     }
 
     try {
-      const user = JSON.parse(userRaw) as { role?: string };
+      const user = JSON.parse(userRaw) as { role?: string; portal?: string };
       const role = normalizeRole(user.role);
-      const target = getDashboardRoute(role);
 
-      if (target && target !== "/finance-officer/dashboard") {
-        router.push(target);
+      if (!canAccessPortal(user.role, "finance-officer")) {
+        const portalTarget = getDashboardRouteForPortal(user.portal);
+        const roleTarget = getDashboardRoute(role);
+        router.push(portalTarget || roleTarget || "/finance-officer/login");
         return;
       }
     } catch {

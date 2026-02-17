@@ -31,23 +31,28 @@ const nextConfig = {
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     
-    return [
-      // Proxy all /api/* requests to backend (except Next.js API routes)
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/:path*`,
-      },
-      // Proxy /dev/* endpoints (like /dev/send-test-email)
-      {
-        source: '/dev/:path*',
-        destination: `${backendUrl}/dev/:path*`,
-      },
-      // Proxy /health endpoints
-      {
-        source: '/health/:path*',
-        destination: `${backendUrl}/health/:path*`,
-      },
-    ];
+    // Use fallback to ensure filesystem routes (like /api/auth) take precedence
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [
+        // Proxy all unmatched /api/* requests to backend
+        {
+          source: '/api/:path*',
+          destination: `${backendUrl}/:path*`,
+        },
+        // Proxy /dev/* endpoints
+        {
+          source: '/dev/:path*',
+          destination: `${backendUrl}/dev/:path*`,
+        },
+        // Proxy /health endpoints
+        {
+          source: '/health/:path*',
+          destination: `${backendUrl}/health/:path*`,
+        },
+      ],
+    };
   },
 };
 

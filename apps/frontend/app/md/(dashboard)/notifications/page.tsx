@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   AlertTriangle,
@@ -12,11 +12,18 @@ import {
   Filter,
   Search,
 } from "lucide-react";
+import {
+  fetchNotifications,
+  formatTimeAgo,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type BackendNotification,
+} from "@/lib/notifications-client";
 
 type NotificationType = "all" | "alerts" | "reports" | "approvals" | "system";
 
 interface Notification {
-  id: number;
+  id: string;
   type: "alert" | "report" | "approval" | "system" | "success";
   title: string;
   message: string;
@@ -26,112 +33,58 @@ interface Notification {
   priority: "high" | "medium" | "low";
 }
 
-const notifications: Notification[] = [
-  {
-    id: 1,
-    type: "alert",
-    title: "Critical Variance Alert",
-    message: "IOE Group variance exceeds threshold at -325%. Immediate review recommended.",
-    cluster: "Bunkering",
-    time: "2 hours ago",
-    read: false,
-    priority: "high",
-  },
-  {
-    id: 2,
-    type: "approval",
-    title: "Q3 Forecast Revision",
-    message: "Q3 forecast revision submitted by Finance team pending your approval.",
-    cluster: "Group",
-    time: "5 hours ago",
-    read: false,
-    priority: "high",
-  },
-  {
-    id: 3,
-    type: "alert",
-    title: "Underperformance Warning",
-    message: "Carplan Lubricants YTD achievement at 67.3%, below 80% threshold.",
-    cluster: "Lube 02",
-    time: "1 day ago",
-    read: false,
-    priority: "medium",
-  },
-  {
-    id: 4,
-    type: "success",
-    title: "Target Exceeded",
-    message: "MLL-Automotive exceeded monthly target by 15%. Strong performance continues.",
-    cluster: "Lube 01",
-    time: "1 day ago",
-    read: true,
-    priority: "low",
-  },
-  {
-    id: 5,
-    type: "report",
-    title: "Monthly Board Report Ready",
-    message: "October 2025 consolidated board report is ready for review.",
-    cluster: "Group",
-    time: "2 days ago",
-    read: true,
-    priority: "medium",
-  },
-  {
-    id: 6,
-    type: "system",
-    title: "Scenario Model Updated",
-    message: "Best-case scenario model has been updated with latest market projections.",
-    time: "2 days ago",
-    read: true,
-    priority: "low",
-  },
-  {
-    id: 7,
-    type: "alert",
-    title: "Cash Flow Warning",
-    message: "Strategic Investment cluster showing negative cash flow for 3 consecutive months.",
-    cluster: "Strategic Investment",
-    time: "3 days ago",
-    read: true,
-    priority: "high",
-  },
-  {
-    id: 8,
-    type: "approval",
-    title: "Budget Reallocation Request",
-    message: "Request to reallocate LKR 15M from Property to Manufacturing pending approval.",
-    cluster: "Group",
-    time: "3 days ago",
-    read: true,
-    priority: "medium",
-  },
-  {
-    id: 9,
-    type: "success",
-    title: "YTD Target Achieved",
-    message: "Warehouse & Logistics cluster achieved 110.8% of YTD target.",
-    cluster: "Warehouse & Logistics",
-    time: "4 days ago",
-    read: true,
-    priority: "low",
-  },
-  {
-    id: 10,
-    type: "report",
-    title: "Risk Assessment Complete",
-    message: "Q3 risk assessment report for all clusters has been finalized.",
-    cluster: "Group",
-    time: "5 days ago",
-    read: true,
-    priority: "medium",
-  },
-];
+function mapType(type: string): Notification["type"] {
+  if (type === "report_rejected") return "alert";
+  if (type === "report_submitted") return "approval";
+  if (type === "report_approved") return "success";
+  if (type === "comment_added") return "report";
+  return "system";
+}
+
+function mapPriority(type: Notification["type"]): Notification["priority"] {
+  if (type === "alert" || type === "approval") return "high";
+  if (type === "report") return "medium";
+  return "low";
+}
+
+function mapNotification(item: BackendNotification): Notification {
+  const mappedType = mapType(item.type);
+  return {
+    id: item.id,
+    type: mappedType,
+    title: item.title || "Notification",
+    message: item.message || item.title || "Notification update",
+    cluster: undefined,
+    time: formatTimeAgo(item.created_at),
+    read: item.is_read,
+    priority: mapPriority(mappedType),
+  };
+}
 
 export default function CEONotificationsPage() {
   const [filter, setFilter] = useState<NotificationType>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [notificationList, setNotificationList] = useState(notifications);
+  const [notificationList, setNotificationList] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadNotifications = async () => {
+      try {
+        const items = await fetchNotifications(100);
+        if (!isMounted) return;
+        setNotificationList(items.map(mapNotification));
+      } catch (error) {
+        console.error("Failed to load notifications", error);
+        if (isMounted) setNotificationList([]);
+      }
+    };
+
+    loadNotifications();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredNotifications = notificationList.filter((n) => {
     const matchesFilter =
@@ -151,13 +104,23 @@ export default function CEONotificationsPage() {
 
   const unreadCount = notificationList.filter((n) => !n.read).length;
 
-  const markAsRead = (id: number) => {
+  const markAsRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+    } catch (error) {
+      console.error("Failed to mark notification as read", error);
+    }
     setNotificationList((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+    }
     setNotificationList((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 

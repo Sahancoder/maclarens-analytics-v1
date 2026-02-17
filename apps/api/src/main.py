@@ -25,6 +25,7 @@ from src.routers.fo_router import router as fo_router
 from src.routers.fd_router import router as fd_router
 from src.routers.ceo_router import router as ceo_router
 from src.routers.md_router import router as md_router
+from src.routers.notifications_router import router as notifications_router
 from src.security.rate_limit import RateLimitMiddleware
 
 
@@ -35,16 +36,16 @@ async def lifespan(app: FastAPI):
     auth_mode = settings.auth_mode.value if hasattr(settings.auth_mode, 'value') else str(settings.auth_mode)
     email_provider = settings.email_provider.value if hasattr(settings.email_provider, 'value') else str(settings.email_provider)
     
-    print("🚀 Starting McLarens Analytics API...")
-    print(f"   📌 Environment: {settings.environment}")
-    print(f"   🔐 Auth Mode: {auth_mode}")
-    print(f"   📧 Email Provider: {email_provider} (enabled: {settings.email_enabled})")
+    print("Starting McLarens Analytics API...")
+    print(f"   Environment: {settings.environment}")
+    print(f"   Auth Mode: {auth_mode}")
+    print(f"   Email Provider: {email_provider} (enabled: {settings.email_enabled})")
     
     await init_db()
-    print("✅ Database initialized")
+    print("Database initialized")
     yield
     # Shutdown
-    print("👋 Shutting down...")
+    print("Shutting down...")
     await close_db()
 
 
@@ -90,6 +91,9 @@ app.include_router(ceo_router)
 # Include MD router
 app.include_router(md_router)
 
+# Include notifications router
+app.include_router(notifications_router)
+
 
 async def get_context(request: Request):
     """Create GraphQL context with database session and authenticated user"""
@@ -104,8 +108,15 @@ async def get_context(request: Request):
             auth_mode = settings.auth_mode.value if hasattr(settings.auth_mode, "value") else str(settings.auth_mode)
 
             if token:
-                # Prefer Entra in production, but allow fallback to custom JWT
-                if auth_mode == "entra":
+                # Always prefer app JWT first (used by /auth/login/dev and /auth/microsoft-login).
+                payload = AuthService.decode_token(token)
+                if payload and payload.get("sub"):
+                    user = await AuthService.get_user_by_id(db, payload["sub"])
+                    if user:
+                        user.current_role_id = payload.get("role_id")
+                        user.current_role = payload.get("role")
+                        user.accessible_companies = payload.get("companies", [])
+                else:
                     entra_payload = await AuthService.verify_entra_token(token)
                     if entra_payload:
                         email = (
@@ -113,57 +124,18 @@ async def get_context(request: Request):
                             or entra_payload.get("email")
                             or entra_payload.get("upn")
                         )
-                        name = (
-                            entra_payload.get("name")
-                            or " ".join(filter(None, [entra_payload.get("given_name"), entra_payload.get("family_name")]))
-                        )
-                        oid = entra_payload.get("oid") or entra_payload.get("sub")
-                        role = AuthService.role_from_entra_claims(entra_payload)
+                        if email:
+                            user_context = await AuthService.verify_user_by_email(db, email)
+                            if user_context:
+                                user = user_context["user"]
+                            else:
+                                auth_error = "not_provisioned"
 
-                        if email and oid:
-                            user = await AuthService.get_or_create_user_from_entra(
-                                db=db,
-                                email=email,
-                                name=name or email,
-                                azure_oid=oid,
-                                role=role or None,
-                            )
-                            if user and user.role in {UserRole.DATA_OFFICER, UserRole.COMPANY_DIRECTOR}:
-                                if not user.company_id and not user.cluster_id:
-                                    auth_error = "not_provisioned"
-                                    user = None
-                else:
-                    payload = AuthService.decode_token(token)
-                    if payload:
-                        user = await AuthService.get_user_by_id(db, payload["sub"])
-                    else:
-                        entra_payload = await AuthService.verify_entra_token(token)
-                        if entra_payload:
-                            email = (
-                                entra_payload.get("preferred_username")
-                                or entra_payload.get("email")
-                                or entra_payload.get("upn")
-                            )
-                            name = (
-                                entra_payload.get("name")
-                                or " ".join(filter(None, [entra_payload.get("given_name"), entra_payload.get("family_name")]))
-                            )
-                            oid = entra_payload.get("oid") or entra_payload.get("sub")
-                            role = AuthService.role_from_entra_claims(entra_payload)
+                if user and auth_mode == "entra" and user.role in {UserRole.FINANCE_OFFICER, UserRole.FINANCE_DIRECTOR}:
+                    if not user.company_id and not user.cluster_id:
+                        auth_error = "not_provisioned"
+                        user = None
 
-                            if email and oid:
-                                user = await AuthService.get_or_create_user_from_entra(
-                                    db=db,
-                                    email=email,
-                                    name=name or email,
-                                    azure_oid=oid,
-                                    role=role or None,
-                                )
-                                if user and user.role in {UserRole.DATA_OFFICER, UserRole.COMPANY_DIRECTOR}:
-                                    if not user.company_id and not user.cluster_id:
-                                        auth_error = "not_provisioned"
-                                        user = None
-        
         return {
             "db": db,
             "user": user,
@@ -234,7 +206,7 @@ async def health_config():
 
 # ============ EXPORT ENDPOINTS ============
 
-@app.get("/api/export/financial-summary")
+@app.get("/export/financial-summary")
 async def export_financial_summary(
     year: int = Query(default=2025, description="Year for the report"),
     month: int = Query(default=10, description="Month for the report (1-12)")
@@ -261,7 +233,7 @@ async def export_financial_summary(
             return {"error": str(e), "status": "export_failed"}
 
 
-@app.get("/api/export/available-periods")
+@app.get("/export/available-periods")
 async def get_available_periods():
     """Get list of periods with financial data available for export."""
     async with AsyncSessionLocal() as db:

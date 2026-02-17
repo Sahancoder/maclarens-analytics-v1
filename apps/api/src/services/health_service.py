@@ -42,6 +42,12 @@ class HealthService:
     @staticmethod
     async def check_redis() -> Dict[str, Any]:
         """Check Redis connectivity"""
+        if not settings.redis_url:
+            return {
+                "status": "not_configured",
+                "message": "Redis URL is not configured"
+            }
+
         try:
             import redis.asyncio as redis
             
@@ -56,7 +62,7 @@ class HealthService:
             }
         except ImportError:
             return {
-                "status": "not_available",
+                "status": "not_configured",
                 "message": "Redis client not installed"
             }
         except Exception as e:
@@ -97,6 +103,12 @@ class HealthService:
             "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
             "environment": settings.environment,
             "auth_mode": settings.auth_mode.value if hasattr(settings.auth_mode, 'value') else str(settings.auth_mode),
+            # Keep both keys for backward compatibility.
+            "components": {
+                "database": db_health,
+                "redis": redis_health,
+                "email": email_health
+            },
             "checks": {
                 "database": db_health,
                 "redis": redis_health,

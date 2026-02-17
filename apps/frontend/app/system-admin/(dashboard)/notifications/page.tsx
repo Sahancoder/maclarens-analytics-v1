@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Check, Trash2, AlertTriangle, Info, CheckCircle, XCircle, Clock, Filter } from "lucide-react";
+import {
+  deleteNotificationById,
+  fetchNotifications,
+  formatTimeAgo,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type BackendNotification,
+} from "@/lib/notifications-client";
 
 interface Notification {
   id: string;
@@ -13,16 +21,25 @@ interface Notification {
   source: string;
 }
 
-const notificationsData: Notification[] = [
-  { id: "1", type: "success", title: "Report Approved", message: "December 2025 report for McLarens Maritime Academy has been approved by Sahan Viranga", timestamp: "2 hours ago", read: false, source: "Reports" },
-  { id: "2", type: "warning", title: "Report Rejected", message: "November 2025 report for GAC Shipping Limited was rejected. Reason: Finance expenses mismatch with GL", timestamp: "5 hours ago", read: false, source: "Reports" },
-  { id: "3", type: "info", title: "New User Created", message: "natali.craig@mclarens.lk has been added as Data Officer for GAC Shipping Limited", timestamp: "1 day ago", read: false, source: "Users" },
-  { id: "4", type: "success", title: "Backup Completed", message: "Daily database backup completed successfully. Size: 2.4GB", timestamp: "1 day ago", read: true, source: "System" },
-  { id: "5", type: "error", title: "Login Failed", message: "Multiple failed login attempts detected from IP 203.45.67.89", timestamp: "1 day ago", read: true, source: "Security" },
-  { id: "6", type: "info", title: "Cluster Created", message: "New cluster 'Renewables' has been created with 1 company assigned", timestamp: "2 days ago", read: true, source: "Clusters" },
-  { id: "7", type: "warning", title: "Report Pending", message: "7 reports are pending approval for December 2025", timestamp: "2 days ago", read: true, source: "Reports" },
-  { id: "8", type: "success", title: "User Activated", message: "john.doe@mclarens.lk account has been reactivated", timestamp: "3 days ago", read: true, source: "Users" },
-];
+function mapType(type: string): Notification["type"] {
+  if (type === "report_approved") return "success";
+  if (type === "report_rejected") return "warning";
+  if (type === "system") return "info";
+  return "info";
+}
+
+function mapNotification(item: BackendNotification): Notification {
+  const mappedType = mapType(item.type);
+  return {
+    id: item.id,
+    type: mappedType,
+    title: item.title || "Notification",
+    message: item.message || item.title || "Notification update",
+    timestamp: formatTimeAgo(item.created_at),
+    read: item.is_read,
+    source: mappedType === "info" ? "System" : "Reports",
+  };
+}
 
 const typeIcons = {
   info: Info,
@@ -39,8 +56,28 @@ const typeColors = {
 };
 
 export default function AdminNotificationsPage() {
-  const [notifications, setNotifications] = useState(notificationsData);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadNotifications = async () => {
+      try {
+        const items = await fetchNotifications(100);
+        if (!isMounted) return;
+        setNotifications(items.map(mapNotification));
+      } catch (error) {
+        console.error("Failed to load notifications", error);
+        if (isMounted) setNotifications([]);
+      }
+    };
+
+    loadNotifications();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -50,17 +87,32 @@ export default function AdminNotificationsPage() {
     return n.type === filter;
   });
 
-  const markAsRead = (id: string) => {
+  const markAsRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+    } catch (error) {
+      console.error("Failed to mark notification as read", error);
+    }
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const deleteNotification = (id: string) => {
+  const deleteNotification = async (id: string) => {
+    try {
+      await deleteNotificationById(id);
+    } catch (error) {
+      console.error("Failed to delete notification", error);
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 

@@ -1,0 +1,90 @@
+company_id,cluster_id,company_name,fin_year_start_month,is_active,created_date,modified_date
+CC0001,C01,ONE,4.0,1.0,2026-01-01,2026-02-02
+CC0002,C01,UMI,4.0,1.0,2026-01-02,2026-02-02
+CC0003,C01,MSC,1.0,1.0,2026-01-03,2026-02-02
+CC0004,C02,McLarens Maritime Academy (Pvt) Ltd,4.0,1.0,2026-01-04,2026-02-02
+CC0005,C02,M O L Logistics Lanka (Pvt) Ltd,1.0,1.0,2026-01-05,2026-02-02
+CC0006,C02,C.H. Robinson Worldwide Freight Lanka (Pvt) Ltd,4.0,1.0,2026-01-06,2026-02-02
+CC0007,C02,Swift Shipping Services (Pvt) Ltd,4.0,1.0,2026-01-07,2026-02-02
+CC0008,C02,United Maritime (Pvt) Ltd,4.0,1.0,2026-01-08,2026-02-02
+CC0009,C02,Shermans Logistics (Pvt) Ltd,4.0,1.0,2026-01-09,2026-02-02
+CC0010,C03,GAC Marine Services (Pvt) Ltd,1.0,1.0,2026-01-10,2026-02-02
+CC0011,C03,GAC Shipping Ltd,1.0,1.0,2026-01-11,2026-02-02
+CC0012,C03,GAC Tugs (Pvt) Ltd,1.0,1.0,2026-01-12,2026-02-02
+CC0013,C03,McLarens Shipping Ltd,1.0,1.0,2026-01-13,2026-02-02
+CC0014,C03,GAC Logistics Ltd,1.0,1.0,2026-01-14,2026-02-02
+CC0015,C03,McOcean Logistics Ltd,1.0,1.0,2026-01-15,2026-02-02
+CC0016,C04,Spectra Integrated Logistics (Pvt) Ltd,4.0,1.0,2026-01-16,2026-02-02
+CC0017,C04,Spectra Logistics (Pvt) Ltd,4.0,1.0,2026-01-17,2026-02-02
+CC0018,C04,McLarens Container Yard (Pvt) Ltd,,0.0,2026-01-18,2026-02-02
+CC0019,C05,Interocean Ship Management (Pvt) Ltd,4.0,1.0,2026-01-19,2026-02-02
+CC0020,C05,Amos International Lanka (Pvt) Ltd,4.0,1.0,2026-01-20,2026-02-02
+CC0021,C05,Continental Tech Services (Pvt) Ltd,4.0,1.0,2026-01-21,2026-02-02
+CC0022,C05,Interocean Services Ltd,4.0,1.0,2026-01-22,2026-02-02
+CC0023,C05,World Subsea Services (Pvt) Ltd,4.0,1.0,2026-01-23,2026-02-02
+CC0024,C05,Lubricant Specialists  (Pvt) Ltd,4.0,1.0,2026-01-24,2026-02-02
+CC0025,C05,Interocean Marine Agencies (Pvt) Ltd,4.0,1.0,2026-01-25,2026-02-02
+CC0026,C05,Walkers Subsea Services (Pvt) Ltd,4.0,1.0,2026-01-26,2026-02-02
+CC0027,C05,Interocean Logistics (Pvt) Ltd,4.0,1.0,2026-01-27,2026-02-02
+CC0028,C06,Carplan Lubricants (Pvt) Ltd,4.0,1.0,2026-01-28,2026-02-02
+CC0029,C06,Energy Core Lanka (Pvt) Ltd,,0.0,2026-01-29,2026-02-02
+CC0030,C06,Elan Lubricants (Pvt) Ltd,4.0,1.0,2026-01-30,2026-02-02
+CC0031,C06,Interocean Lubricants (Pvt) Ltd,1.0,1.0,2026-01-31,2026-02-02
+CC0032,C06,Elan Holdings (Pvt) Ltd,4.0,1.0,2026-02-01,2026-02-02
+CC0033,C06,Sea World Lanka (Pvt) Ltd,4.0,1.0,2026-02-02,2026-02-02
+CC0034,C07,Yantrataksan Technologies (Pvt) Ltd,,0.0,2026-02-03,2026-02-02
+CC0035,C07,Pidilite Lanka (Pvt) Ltd,,0.0,2026-02-04,2026-02-02
+CC0036,C07,Macbertan (Pvt) Ltd,4.0,1.0,2026-02-05,2026-02-02
+CC0037,C07,Macbertan Holdings (Pvt) Ltd,4.0,1.0,2026-02-06,2026-02-02
+CC0038,C07,Colombo Bunkering Services (Pvt) Ltd,4.0,1.0,2026-02-07,2026-02-02
+CC0039,C07,Interocean Energy (Pvt) Ltd,4.0,1.0,2026-02-08,2026-02-02
+CC0040,C07,Mc Marine (Pvt) Ltd,4.0,1.0,2026-02-09,2026-02-02
+CC0041,C07,Ocean Lanka Bunkering Services (Pvt) Ltd,4.0,1.0,2026-02-10,2026-02-02
+CC0042,C07,HM Energy Solutions (Pvt) Ltd,,0.0,2026-02-11,2026-02-02
+CC0043,C07,Mcbay (Pvt) Ltd,4.0,1.0,2026-02-12,2026-02-02
+CC0044,C08,McLarens Lubricants Ltd - Auto,1.0,1.0,2026-02-13,2026-02-02
+CC0045,C08,McKupler,1.0,1.0,2026-02-14,2026-02-02
+CC0046,C08,McLarens Lubricants Ltd - 3M,1.0,1.0,2026-02-15,2026-02-02
+CC0047,C08,McLarens Lubricants Ltd - Industrial,1.0,1.0,2026-02-16,2026-02-02
+CC0048,C08,McShaw Automotive Limited,1.0,1.0,2026-02-17,2026-02-02
+CC0049,C08,MC360 ,,0.0,2026-02-18,2026-02-02
+CC0050,C09,Galle Agency House (Pvt) Ltd,4.0,1.0,2026-02-19,2026-02-02
+CC0051,C09,Interocean Developments (Pvt) Ltd,4.0,1.0,2026-02-20,2026-02-02
+CC0052,C09,Interocean Property (Pvt) Ltd,4.0,1.0,2026-02-21,2026-02-02
+CC0053,C09,Jays Auto,4.0,1.0,2026-02-22,2026-02-02
+CC0054,C09,M G Logistics (Pvt) Ltd,4.0,1.0,2026-02-23,2026-02-02
+CC0055,C09,Mac Group International (Pvt) Ltd,4.0,1.0,2026-02-24,2026-02-02
+CC0056,C09,Macbertan Properties (Pvt) Ltd,,0.0,2026-02-25,2026-02-02
+CC0057,C09,Mclarens Automotive Ltd,4.0,1.0,2026-02-26,2026-02-02
+CC0058,C09,Mclarens Developers Ltd,4.0,1.0,2026-02-27,2026-02-02
+CC0059,C09,McOcean Property Developers (Pvt) Ltd,4.0,1.0,2026-02-28,2026-02-02
+CC0060,C09,McPeak Lanka (Pvt) Ltd,,0.0,2026-03-01,2026-02-02
+CC0061,C09,Rantek Investments (Pvt) Ltd,,0.0,2026-03-02,2026-02-02
+CC0062,C09,Shipping Agency House (Pvt) Ltd,4.0,1.0,2026-03-03,2026-02-02
+CC0063,C09,United Property Holdings (Pvt) Ltd,,0.0,2026-03-04,2026-02-02
+CC0064,C09,United Shipping Agencies  (Pvt) Ltd,4.0,1.0,2026-03-05,2026-02-02
+CC0065,C09,Velocitech (Pvt) Ltd,,0.0,2026-03-06,2026-02-02
+CC0066,C10,Topaz Hotels Ltd,4.0,1.0,2026-03-07,2026-02-02
+CC0067,C10,Emerald Lanka Hotels Ltd,,0.0,2026-03-08,2026-02-02
+CC0068,C11,Austin Holdings Australia (Pte) Ltd,,0.0,2026-03-09,2026-02-02
+CC0069,C11,Austin Holdings Ltd,,0.0,2026-03-10,2026-02-02
+CC0070,C11,Austin Marine (Pte) Ltd,,0.0,2026-03-11,2026-02-02
+CC0071,C11,Auto Force Services Ltd,,0.0,2026-03-12,2026-02-02
+CC0072,C11,Cambridge Properties (Pvt) Ltd,,0.0,2026-03-13,2026-02-02
+CC0073,C11,Contship Agencies (Pvt) Ltd,,0.0,2026-03-14,2026-02-02
+CC0074,C11,Fort Heritage Ventures (Pvt) Ltd,,0.0,2026-03-15,2026-02-02
+CC0075,C11,Interocean Automobile (Pvt) Ltd,,0.0,2026-03-16,2026-02-02
+CC0076,C11,McLarens Holdings Limited,,0.0,2026-03-17,2026-02-02
+CC0077,C11,McLarens International (Pvt) Ltd,,0.0,2026-03-18,2026-02-02
+CC0078,C11,McLarens Property (Pvt) Ltd,,0.0,2026-03-19,2026-02-02
+CC0079,C11,Y & J Investments (Pvt) Ltd,,0.0,2026-03-20,2026-02-02
+CC0080,C12,McLarens Group Management (Pvt) Ltd,4.0,1.0,2026-03-21,2026-02-02
+CC0081,C13,Cinemac Film Production (Pvt) Ltd,,0.0,2026-03-22,2026-02-02
+CC0082,C13,G M Rails (Pvt) Ltd,,0.0,2026-03-23,2026-02-02
+CC0083,C13,Interocean Investments (Pvt) Ltd,,0.0,2026-03-24,2026-02-02
+CC0084,C13,Petro Energy Lanka (Pvt) Ltd,,0.0,2026-03-25,2026-02-02
+CC0085,C13,Silk Route Foods (Pvt) Ltd,,0.0,2026-03-26,2026-02-02
+CC0086,C13,Speed Drome (Pvt) Ltd,,0.0,2026-03-27,2026-02-02
+CC0087,C13,Terra-Maritime Lanka (Pvt) Ltd,,0.0,2026-03-28,2026-02-02
+CC0088,C09,Mclarens Group Ltd,4.0,1.0,2026-03-29,2026-02-02
+CC0089,C06,Esna Distributors (Pvt) Ltd,,,2026-03-30,2026-02-02
