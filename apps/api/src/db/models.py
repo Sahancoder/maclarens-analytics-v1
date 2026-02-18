@@ -55,8 +55,8 @@ UserRoleEnum = UserRole
 
 
 class Scenario(str, enum.Enum):
-    ACTUAL = "Actual"
-    BUDGET = "Budget"
+    ACTUAL = "ACTUAL"
+    BUDGET = "BUDGET"
 
 
 class ReportStatus(str, enum.Enum):

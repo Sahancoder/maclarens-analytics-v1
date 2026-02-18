@@ -8,13 +8,16 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config.constants import StatusID
+from src.config.constants import MetricID, StatusID
 from src.db.models import (
     AuditLog,
     Cluster,
     Company,
+    FinancialFact,
+    PeriodMaster,
     Report,
     RoleMaster,
+    StatusMaster,
     User,
     UserCompanyRoleMap,
 )
@@ -1529,4 +1532,654 @@ async def validate_budget_file(
         "column_mapping": mapping,
         "missing_required": missing,
         "message": "File looks valid" if len(missing) == 0 else f"Missing required columns: {missing}",
+    }
+
+
+# ==================== BUDGET ENTRY ====================
+
+# Metric field name -> MetricID mapping
+_METRIC_FIELD_MAP: Dict[str, int] = {
+    "revenue": int(MetricID.REVENUE),
+    "gp": int(MetricID.GP),
+    "gp_margin": int(MetricID.GP_MARGIN),
+    "other_income": int(MetricID.OTHER_INCOME),
+    "personal_exp": int(MetricID.PERSONAL_EXP),
+    "admin_exp": int(MetricID.ADMIN_EXP),
+    "selling_exp": int(MetricID.SELLING_EXP),
+    "finance_exp": int(MetricID.FINANCE_EXP),
+    "depreciation": int(MetricID.DEPRECIATION),
+    "total_overhead": int(MetricID.TOTAL_OVERHEAD),
+    "provisions": int(MetricID.PROVISIONS),
+    "exchange_variance": int(MetricID.EXCHANGE_VARIANCE),
+    "pbt_before_non_ops": int(MetricID.PBT_BEFORE_NON_OPS),
+    "pbt_after_non_ops": int(MetricID.PBT_AFTER_NON_OPS),
+    "non_ops_exp": int(MetricID.NON_OPS_EXP),
+    "non_ops_income": int(MetricID.NON_OPS_INCOME),
+    "np_margin": int(MetricID.NP_MARGIN),
+    "ebit": int(MetricID.EBIT),
+    "ebitda": int(MetricID.EBITDA),
+}
+
+
+class BudgetEntryMetrics(BaseModel):
+    revenue: Optional[float] = None
+    gp: Optional[float] = None
+    gp_margin: Optional[float] = None
+    other_income: Optional[float] = None
+    personal_exp: Optional[float] = None
+    admin_exp: Optional[float] = None
+    selling_exp: Optional[float] = None
+    finance_exp: Optional[float] = None
+    depreciation: Optional[float] = None
+    total_overhead: Optional[float] = None
+    provisions: Optional[float] = None
+    exchange_variance: Optional[float] = None
+    pbt_before_non_ops: Optional[float] = None
+    pbt_after_non_ops: Optional[float] = None
+    non_ops_exp: Optional[float] = None
+    non_ops_income: Optional[float] = None
+    np_margin: Optional[float] = None
+    ebit: Optional[float] = None
+    ebitda: Optional[float] = None
+
+
+class BudgetEntryRequest(BaseModel):
+    company_id: str
+    year: int
+    month: int = Field(..., ge=1, le=12)
+    metrics: BudgetEntryMetrics
+    comment: Optional[str] = None
+
+
+class BudgetEntryResponse(BaseModel):
+    success: bool
+    company_id: str
+    period_id: int
+    status: str
+    message: str
+
+
+class BudgetDraftItem(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_name: Optional[str]
+    period_id: int
+    year: int
+    month: int
+    status: str
+    budget_comment: Optional[str]
+    submitted_by: Optional[str]
+    submitted_date: Optional[datetime]
+    metrics: Dict[str, Optional[float]]
+
+
+class BudgetDraftListResponse(BaseModel):
+    drafts: List[BudgetDraftItem]
+    total: int
+
+
+async def _upsert_budget(
+    db: AsyncSession,
+    company_id: str,
+    period_id: int,
+    metrics: BudgetEntryMetrics,
+    comment: Optional[str],
+    status_id: int,
+    current_user: User,
+) -> None:
+    """Upsert financial_fact rows + financial_workflow for budget entry."""
+    now = _utcnow()
+    metrics_dict = metrics.model_dump()
+
+    for field_name, metric_id in _METRIC_FIELD_MAP.items():
+        amount = metrics_dict.get(field_name)
+        if amount is None:
+            continue
+
+        existing = (
+            await db.execute(
+                select(FinancialFact).where(
+                    FinancialFact.company_id == company_id,
+                    FinancialFact.period_id == period_id,
+                    FinancialFact.metric_id == metric_id,
+                    FinancialFact.actual_budget == "BUDGET",
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.amount = amount
+        else:
+            db.add(
+                FinancialFact(
+                    company_id=company_id,
+                    period_id=period_id,
+                    metric_id=metric_id,
+                    actual_budget="BUDGET",
+                    amount=amount,
+                )
+            )
+
+    # Upsert financial_workflow
+    workflow = (
+        await db.execute(
+            select(Report).where(
+                Report.company_id == company_id,
+                Report.period_id == period_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if workflow:
+        workflow.status_id = status_id
+        workflow.submitted_by = current_user.user_id
+        workflow.submitted_date = now
+        workflow.budget_comment = comment
+    else:
+        db.add(
+            Report(
+                company_id=company_id,
+                period_id=period_id,
+                status_id=status_id,
+                submitted_by=current_user.user_id,
+                submitted_date=now,
+                budget_comment=comment,
+            )
+        )
+
+
+@router.post("/budget/entry", response_model=BudgetEntryResponse)
+async def submit_budget_entry(
+    request: BudgetEntryRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit budget entry — saves to financial_fact + financial_workflow with status=Submitted."""
+    company = (
+        await db.execute(select(Company).where(Company.company_id == request.company_id))
+    ).scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == request.year,
+                PeriodMaster.month == request.month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail=f"Period not found for {request.year}-{request.month}")
+
+    await _upsert_budget(
+        db, request.company_id, period.period_id,
+        request.metrics, request.comment,
+        int(StatusID.SUBMITTED), current_user,
+    )
+
+    await _audit(
+        db, current_user.user_id, "BUDGET_SUBMITTED", "budget",
+        f"{request.company_id}:{period.period_id}",
+        f"Submitted budget for {company.company_name} ({request.year}-{request.month})",
+    )
+    await db.commit()
+
+    return BudgetEntryResponse(
+        success=True, company_id=request.company_id,
+        period_id=period.period_id, status="Submitted",
+        message=f"Budget submitted for {company.company_name}",
+    )
+
+
+@router.post("/budget/draft", response_model=BudgetEntryResponse)
+async def save_budget_draft(
+    request: BudgetEntryRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save budget as draft — same as submit but status=Draft."""
+    company = (
+        await db.execute(select(Company).where(Company.company_id == request.company_id))
+    ).scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == request.year,
+                PeriodMaster.month == request.month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail=f"Period not found for {request.year}-{request.month}")
+
+    await _upsert_budget(
+        db, request.company_id, period.period_id,
+        request.metrics, request.comment,
+        int(StatusID.DRAFT), current_user,
+    )
+
+    await _audit(
+        db, current_user.user_id, "BUDGET_DRAFT_SAVED", "budget",
+        f"{request.company_id}:{period.period_id}",
+        f"Saved budget draft for {company.company_name} ({request.year}-{request.month})",
+    )
+    await db.commit()
+
+    return BudgetEntryResponse(
+        success=True, company_id=request.company_id,
+        period_id=period.period_id, status="Draft",
+        message=f"Budget draft saved for {company.company_name}",
+    )
+
+
+@router.get("/budget/drafts", response_model=BudgetDraftListResponse)
+async def list_budget_drafts(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all budget drafts — workflow rows with status=Draft that have Budget financial_fact rows."""
+    rows = (
+        await db.execute(
+            select(Report, Company.company_name, Cluster.cluster_name, PeriodMaster)
+            .join(Company, Company.company_id == Report.company_id)
+            .join(Cluster, Cluster.cluster_id == Company.cluster_id)
+            .join(PeriodMaster, PeriodMaster.period_id == Report.period_id)
+            .where(Report.status_id == int(StatusID.DRAFT))
+            .where(
+                exists(
+                    select(FinancialFact.company_id).where(
+                        FinancialFact.company_id == Report.company_id,
+                        FinancialFact.period_id == Report.period_id,
+                        FinancialFact.actual_budget == "BUDGET",
+                    )
+                )
+            )
+            .order_by(Report.submitted_date.desc())
+        )
+    ).all()
+
+    drafts: List[BudgetDraftItem] = []
+    for workflow, company_name, cluster_name, period in rows:
+        # Load budget metrics for this company+period
+        fact_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    FinancialFact.actual_budget == "BUDGET",
+                )
+            )
+        ).all()
+
+        metric_id_to_field = {v: k for k, v in _METRIC_FIELD_MAP.items()}
+        metrics_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in fact_rows:
+            field_name = metric_id_to_field.get(int(metric_id))
+            if field_name:
+                metrics_data[field_name] = float(amount) if amount is not None else None
+
+        status_row = (
+            await db.execute(select(StatusMaster.status_name).where(StatusMaster.status_id == workflow.status_id))
+        ).scalar_one_or_none()
+
+        drafts.append(
+            BudgetDraftItem(
+                company_id=workflow.company_id,
+                company_name=company_name,
+                cluster_name=cluster_name,
+                period_id=workflow.period_id,
+                year=period.year,
+                month=period.month,
+                status=status_row or "Draft",
+                budget_comment=workflow.budget_comment,
+                submitted_by=workflow.submitted_by,
+                submitted_date=workflow.submitted_date,
+                metrics=metrics_data,
+            )
+        )
+
+    return BudgetDraftListResponse(drafts=drafts, total=len(drafts))
+
+
+@router.get("/budget/entry/{company_id}/{year}/{month}")
+async def get_budget_entry(
+    company_id: str,
+    year: int,
+    month: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Load existing budget data for a company+period (for resuming drafts)."""
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == year,
+                PeriodMaster.month == month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    fact_rows = (
+        await db.execute(
+            select(FinancialFact.metric_id, FinancialFact.amount).where(
+                FinancialFact.company_id == company_id,
+                FinancialFact.period_id == period.period_id,
+                FinancialFact.actual_budget == "BUDGET",
+            )
+        )
+    ).all()
+
+    metric_id_to_field = {v: k for k, v in _METRIC_FIELD_MAP.items()}
+    metrics: Dict[str, Optional[float]] = {}
+    for metric_id, amount in fact_rows:
+        field_name = metric_id_to_field.get(int(metric_id))
+        if field_name:
+            metrics[field_name] = float(amount) if amount is not None else None
+
+    workflow = (
+        await db.execute(
+            select(Report).where(
+                Report.company_id == company_id,
+                Report.period_id == period.period_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    return {
+        "company_id": company_id,
+        "period_id": period.period_id,
+        "year": year,
+        "month": month,
+        "metrics": metrics,
+        "comment": workflow.budget_comment if workflow else None,
+        "status": workflow.status.value if workflow else None,
+    }
+
+
+# ==================== ACTUAL ENTRY ====================
+
+
+async def _upsert_actual(
+    db: AsyncSession,
+    company_id: str,
+    period_id: int,
+    metrics: BudgetEntryMetrics,
+    comment: Optional[str],
+    status_id: int,
+    current_user: User,
+) -> None:
+    """Upsert financial_fact rows (actual_budget='Actual') + financial_workflow."""
+    now = _utcnow()
+    metrics_dict = metrics.model_dump()
+
+    for field_name, metric_id in _METRIC_FIELD_MAP.items():
+        amount = metrics_dict.get(field_name)
+        if amount is None:
+            continue
+
+        existing = (
+            await db.execute(
+                select(FinancialFact).where(
+                    FinancialFact.company_id == company_id,
+                    FinancialFact.period_id == period_id,
+                    FinancialFact.metric_id == metric_id,
+                    FinancialFact.actual_budget == "ACTUAL",
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.amount = amount
+        else:
+            db.add(
+                FinancialFact(
+                    company_id=company_id,
+                    period_id=period_id,
+                    metric_id=metric_id,
+                    actual_budget="ACTUAL",
+                    amount=amount,
+                )
+            )
+
+    # Upsert financial_workflow
+    workflow = (
+        await db.execute(
+            select(Report).where(
+                Report.company_id == company_id,
+                Report.period_id == period_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if workflow:
+        workflow.status_id = status_id
+        workflow.submitted_by = current_user.user_id
+        workflow.submitted_date = now
+        workflow.actual_comment = comment
+    else:
+        db.add(
+            Report(
+                company_id=company_id,
+                period_id=period_id,
+                status_id=status_id,
+                submitted_by=current_user.user_id,
+                submitted_date=now,
+                actual_comment=comment,
+            )
+        )
+
+
+@router.post("/actual/entry", response_model=BudgetEntryResponse)
+async def submit_actual_entry(
+    request: BudgetEntryRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit actual entry — saves to financial_fact (Actual) + financial_workflow with status=Submitted."""
+    company = (
+        await db.execute(select(Company).where(Company.company_id == request.company_id))
+    ).scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == request.year,
+                PeriodMaster.month == request.month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail=f"Period not found for {request.year}-{request.month}")
+
+    await _upsert_actual(
+        db, request.company_id, period.period_id,
+        request.metrics, request.comment,
+        int(StatusID.SUBMITTED), current_user,
+    )
+
+    await _audit(
+        db, current_user.user_id, "ACTUAL_SUBMITTED", "actual",
+        f"{request.company_id}:{period.period_id}",
+        f"Submitted actuals for {company.company_name} ({request.year}-{request.month})",
+    )
+    await db.commit()
+
+    return BudgetEntryResponse(
+        success=True, company_id=request.company_id,
+        period_id=period.period_id, status="Submitted",
+        message=f"Actuals submitted for {company.company_name}",
+    )
+
+
+@router.post("/actual/draft", response_model=BudgetEntryResponse)
+async def save_actual_draft(
+    request: BudgetEntryRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save actual as draft — same as submit but status=Draft."""
+    company = (
+        await db.execute(select(Company).where(Company.company_id == request.company_id))
+    ).scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == request.year,
+                PeriodMaster.month == request.month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail=f"Period not found for {request.year}-{request.month}")
+
+    await _upsert_actual(
+        db, request.company_id, period.period_id,
+        request.metrics, request.comment,
+        int(StatusID.DRAFT), current_user,
+    )
+
+    await _audit(
+        db, current_user.user_id, "ACTUAL_DRAFT_SAVED", "actual",
+        f"{request.company_id}:{period.period_id}",
+        f"Saved actual draft for {company.company_name} ({request.year}-{request.month})",
+    )
+    await db.commit()
+
+    return BudgetEntryResponse(
+        success=True, company_id=request.company_id,
+        period_id=period.period_id, status="Draft",
+        message=f"Actual draft saved for {company.company_name}",
+    )
+
+
+@router.get("/actual/drafts", response_model=BudgetDraftListResponse)
+async def list_actual_drafts(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all actual drafts — workflow rows with status=Draft that have Actual financial_fact rows."""
+    rows = (
+        await db.execute(
+            select(Report, Company.company_name, Cluster.cluster_name, PeriodMaster)
+            .join(Company, Company.company_id == Report.company_id)
+            .join(Cluster, Cluster.cluster_id == Company.cluster_id)
+            .join(PeriodMaster, PeriodMaster.period_id == Report.period_id)
+            .where(Report.status_id == int(StatusID.DRAFT))
+            .where(
+                exists(
+                    select(FinancialFact.company_id).where(
+                        FinancialFact.company_id == Report.company_id,
+                        FinancialFact.period_id == Report.period_id,
+                        FinancialFact.actual_budget == "ACTUAL",
+                    )
+                )
+            )
+            .order_by(Report.submitted_date.desc())
+        )
+    ).all()
+
+    drafts: List[BudgetDraftItem] = []
+    for workflow, company_name, cluster_name, period in rows:
+        fact_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    FinancialFact.actual_budget == "ACTUAL",
+                )
+            )
+        ).all()
+
+        metric_id_to_field = {v: k for k, v in _METRIC_FIELD_MAP.items()}
+        metrics_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in fact_rows:
+            field_name = metric_id_to_field.get(int(metric_id))
+            if field_name:
+                metrics_data[field_name] = float(amount) if amount is not None else None
+
+        drafts.append(
+            BudgetDraftItem(
+                company_id=workflow.company_id,
+                company_name=company_name,
+                cluster_name=cluster_name,
+                period_id=workflow.period_id,
+                year=period.year,
+                month=period.month,
+                status="Draft",
+                budget_comment=workflow.actual_comment,
+                submitted_by=workflow.submitted_by,
+                submitted_date=workflow.submitted_date,
+                metrics=metrics_data,
+            )
+        )
+
+    return BudgetDraftListResponse(drafts=drafts, total=len(drafts))
+
+
+@router.get("/actual/entry/{company_id}/{year}/{month}")
+async def get_actual_entry(
+    company_id: str,
+    year: int,
+    month: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Load existing actual data for a company+period."""
+    period = (
+        await db.execute(
+            select(PeriodMaster).where(
+                PeriodMaster.year == year,
+                PeriodMaster.month == month,
+            )
+        )
+    ).scalar_one_or_none()
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    fact_rows = (
+        await db.execute(
+            select(FinancialFact.metric_id, FinancialFact.amount).where(
+                FinancialFact.company_id == company_id,
+                FinancialFact.period_id == period.period_id,
+                FinancialFact.actual_budget == "ACTUAL",
+            )
+        )
+    ).all()
+
+    metric_id_to_field = {v: k for k, v in _METRIC_FIELD_MAP.items()}
+    metrics: Dict[str, Optional[float]] = {}
+    for metric_id, amount in fact_rows:
+        field_name = metric_id_to_field.get(int(metric_id))
+        if field_name:
+            metrics[field_name] = float(amount) if amount is not None else None
+
+    workflow = (
+        await db.execute(
+            select(Report).where(
+                Report.company_id == company_id,
+                Report.period_id == period.period_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    return {
+        "company_id": company_id,
+        "period_id": period.period_id,
+        "year": year,
+        "month": month,
+        "metrics": metrics,
+        "comment": workflow.actual_comment if workflow else None,
+        "status": workflow.status.value if workflow else None,
+        "has_data": len(fact_rows) > 0,
     }

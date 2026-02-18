@@ -841,6 +841,122 @@ export const AdminAPI = {
     });
     return response.blob();
   },
+
+  async submitBudgetEntry(data: {
+    company_id: string;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment?: string;
+  }): Promise<ApiResponse<{ success: boolean; company_id: string; period_id: number; status: string; message: string }>> {
+    return apiFetch('/admin/budget/entry', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async saveBudgetDraft(data: {
+    company_id: string;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment?: string;
+  }): Promise<ApiResponse<{ success: boolean; company_id: string; period_id: number; status: string; message: string }>> {
+    return apiFetch('/admin/budget/draft', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getBudgetDrafts(): Promise<ApiResponse<{
+    drafts: Array<{
+      company_id: string;
+      company_name: string;
+      cluster_name: string | null;
+      period_id: number;
+      year: number;
+      month: number;
+      status: string;
+      budget_comment: string | null;
+      submitted_by: string | null;
+      submitted_date: string | null;
+      metrics: Record<string, number | null>;
+    }>;
+    total: number;
+  }>> {
+    return apiFetch('/admin/budget/drafts');
+  },
+
+  async getBudgetEntry(companyId: string, year: number, month: number): Promise<ApiResponse<{
+    company_id: string;
+    period_id: number;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment: string | null;
+    status: string | null;
+  }>> {
+    return apiFetch(`/admin/budget/entry/${companyId}/${year}/${month}`);
+  },
+
+  // Actual Entry
+  async submitActualEntry(data: {
+    company_id: string;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment?: string;
+  }): Promise<ApiResponse<{ success: boolean; company_id: string; period_id: number; status: string; message: string }>> {
+    return apiFetch('/admin/actual/entry', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async saveActualDraft(data: {
+    company_id: string;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment?: string;
+  }): Promise<ApiResponse<{ success: boolean; company_id: string; period_id: number; status: string; message: string }>> {
+    return apiFetch('/admin/actual/draft', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getActualDrafts(): Promise<ApiResponse<{
+    drafts: Array<{
+      company_id: string;
+      company_name: string;
+      cluster_name: string | null;
+      period_id: number;
+      year: number;
+      month: number;
+      status: string;
+      budget_comment: string | null;
+      submitted_by: string | null;
+      submitted_date: string | null;
+      metrics: Record<string, number | null>;
+    }>;
+    total: number;
+  }>> {
+    return apiFetch('/admin/actual/drafts');
+  },
+
+  async getActualEntry(companyId: string, year: number, month: number): Promise<ApiResponse<{
+    company_id: string;
+    period_id: number;
+    year: number;
+    month: number;
+    metrics: Record<string, number | null>;
+    comment: string | null;
+    status: string | null;
+    has_data: boolean;
+  }>> {
+    return apiFetch(`/admin/actual/entry/${companyId}/${year}/${month}`);
+  },
 };
 
 export const FOAPI = {

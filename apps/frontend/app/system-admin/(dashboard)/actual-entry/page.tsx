@@ -2,90 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, Calculator, AlertCircle, FileSpreadsheet } from "lucide-react";
-
-const COMPANIES_DATA = [
-  { code: "ONE", name: "ONE", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "UMI", name: "UMI", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "MSC", name: "MSC", cluster: "Liner", yearEnd: "December", isActive: true },
-  { code: "MMA", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "MOL", name: "M O L Logistics Lanka", cluster: "Shipping Services & Logistics", yearEnd: "December", isActive: true },
-  { code: "CHR", name: "C.H. Robinson Worldwide", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "SwiftShipping", name: "Swift Shipping Services", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "UnitedMaritime", name: "United Maritime", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "Shermans", name: "Shermans Logistics", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "GMSL", name: "GAC Marine Services", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GSL", name: "GAC Shipping Limited", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GACTugs", name: "GAC Tugs", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "MSL", name: "McLarens Shipping Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GLL", name: "GAC Logistics Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "SPIL", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "SPL", name: "Spectra Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "IOSM", name: "Interocean Ship Management", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "AMOS", name: "Amos International Lanka", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "CTL", name: "Continental Tech Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "WOSS", name: "World Subsea Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "MLL-Auto", name: "McLarens Lubricants - Auto", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "McKupler", name: "McKupler Inc", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "Carplan", name: "Carplan Lubricants", cluster: "Lubricant II", yearEnd: "March", isActive: true },
-  { code: "Yantrataksan", name: "Yantrataksan Technologies", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Pidilite", name: "Pidilite Lanka", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Macbertan", name: "Macbertan", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "IOE", name: "Interocean Energy", cluster: "Bunkering & Renewables", yearEnd: "March", isActive: true },
-  { code: "GAHL", name: "Galle Agency House", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MAL", name: "McLarens Automotive", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MDL", name: "McLarens Developers", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "Topas", name: "Topaz Hotels", cluster: "Hotel & Leisure", yearEnd: "March", isActive: true },
-  { code: "MGML", name: "McLarens Group Management", cluster: "Strategic Investment", yearEnd: "March", isActive: true },
-];
+import { AdminAPI, type AdminCluster, type AdminCompany } from "@/lib/api-client";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026"];
-
-// Simulated uploaded actuals data - In production, this would come from API/database
-const UPLOADED_ACTUALS: Record<string, Record<string, FormData>> = {
-  "ONE": {
-    "January-2025": {
-      revenue: "15500000", gp: "4650000", otherIncome: "125000",
-      personalExpenses: "1200000", adminExpenses: "450000", sellingExpenses: "380000",
-      financialExpenses: "220000", depreciation: "180000",
-      provisions: "-50000",
-      exchange: "35000",
-      nonOpsExpenses: "15000", nonOpsIncome: "45000",
-      comment: "January actuals - Strong revenue month due to seasonal demand",
-    },
-    "February-2025": {
-      revenue: "14200000", gp: "4120000", otherIncome: "98000",
-      personalExpenses: "1200000", adminExpenses: "420000", sellingExpenses: "350000",
-      financialExpenses: "215000", depreciation: "180000",
-      provisions: "-30000",
-      exchange: "-22000",
-      nonOpsExpenses: "12000", nonOpsIncome: "38000",
-      comment: "February actuals - Slight decrease due to fewer working days",
-    },
-  },
-  "MSC": {
-    "January-2025": {
-      revenue: "28500000", gp: "8550000", otherIncome: "245000",
-      personalExpenses: "2100000", adminExpenses: "780000", sellingExpenses: "650000",
-      financialExpenses: "420000", depreciation: "350000",
-      provisions: "-85000",
-      exchange: "65000",
-      nonOpsExpenses: "28000", nonOpsIncome: "82000",
-      comment: "Strong start to the year with increased container volumes",
-    },
-  },
-  "GAC Marine Services": {
-    "December-2024": {
-      revenue: "22000000", gp: "6600000", otherIncome: "180000",
-      personalExpenses: "1650000", adminExpenses: "620000", sellingExpenses: "510000",
-      financialExpenses: "340000", depreciation: "280000",
-      provisions: "70000",
-      exchange: "48000",
-      nonOpsExpenses: "22000", nonOpsIncome: "65000",
-      comment: "Year-end closing with provision reversal",
-    },
-  },
-};
 
 interface FormData {
   revenue: string; gp: string; otherIncome: string;
@@ -97,12 +16,34 @@ interface FormData {
   comment: string;
 }
 
+const FORM_TO_METRIC: Record<string, string> = {
+  revenue: "revenue",
+  gp: "gp",
+  otherIncome: "other_income",
+  personalExpenses: "personal_exp",
+  adminExpenses: "admin_exp",
+  sellingExpenses: "selling_exp",
+  financialExpenses: "finance_exp",
+  depreciation: "depreciation",
+  provisions: "provisions",
+  exchange: "exchange_variance",
+  nonOpsExpenses: "non_ops_exp",
+  nonOpsIncome: "non_ops_income",
+};
+
 const EMPTY_FORM: FormData = {
   revenue: "", gp: "", otherIncome: "",
   personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
   provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
   comment: "",
 };
+
+function buildYearOptions(): string[] {
+  const current = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = current - 3; y <= current + 5; y++) years.push(String(y));
+  return years;
+}
 
 function Dropdown({ label, value, options, onChange, placeholder, disabled, searchable }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void;
@@ -164,42 +105,46 @@ function Dropdown({ label, value, options, onChange, placeholder, disabled, sear
   );
 }
 
-function InputField({ label, value, onChange, isCompleted, sign, onSignChange, showSign, readOnly }: {
+function InputField({ label, value, onChange, isCompleted }: {
   label: string; value: string; onChange: (v: string) => void; isCompleted: boolean;
-  sign?: "+" | "-"; onSignChange?: (s: "+" | "-") => void; showSign?: boolean; readOnly?: boolean;
 }) {
+  const formatVal = (v: string) => {
+    if (!v) return "";
+    const parts = v.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/,/g, "");
+    if (raw === "" || /^-?\d*\.?\d*$/.test(raw)) {
+      onChange(raw);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
-      <div className="flex gap-2">
-        {showSign && (
-          <button type="button" onClick={() => !readOnly && onSignChange?.(sign === "+" ? "-" : "+")}
-            disabled={readOnly}
-            className={`h-11 w-11 rounded-lg text-lg font-bold border-2 transition-all flex items-center justify-center ${
-              sign === "+" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"
-            } ${readOnly ? "opacity-60 cursor-not-allowed" : ""}`}>
-            {sign}
-          </button>
-        )}
-        <input type="text" value={value} placeholder="0.00" readOnly={readOnly}
-          onChange={(e) => { if (e.target.value === "" || /^-?\d*\.?\d*$/.test(e.target.value)) onChange(e.target.value); }}
-          className={`flex-1 h-11 px-4 text-sm border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
-            isCompleted ? "border-emerald-300 bg-emerald-50/50" : "border-slate-300 bg-white hover:border-slate-400"
-          } ${readOnly ? "bg-slate-50 cursor-default" : ""}`}
-        />
-      </div>
+      <input type="text" value={formatVal(value)} placeholder="0.00"
+        onChange={handleChange}
+        className={`h-11 px-4 text-sm border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
+          isCompleted ? "border-emerald-300 bg-emerald-50/50" : "border-slate-300 bg-white hover:border-slate-400"
+        }`}
+      />
     </div>
   );
 }
 
 function CalcField({ label, value, isCompleted, suffix }: { label: string; value: string; isCompleted: boolean; suffix?: string }) {
+  const displayValue = value ? Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+  
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
       <div className={`h-11 px-4 flex items-center text-sm font-semibold rounded-lg border transition-all ${
         isCompleted ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border-slate-200"
       }`}>
-        {value}{suffix}
+        {displayValue}{suffix}
       </div>
     </div>
   );
@@ -219,11 +164,11 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
   );
 }
 
-function ConfirmModal({ isOpen, onClose, onConfirm, company, month, year, isUpdate }: {
-  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string; year: string; isUpdate: boolean;
+function ConfirmModal({ isOpen, onClose, onConfirm, company, month, isUpdate, submitting }: {
+  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string; isUpdate: boolean; submitting: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
-  
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -234,7 +179,6 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month, year, isUpda
             <X className="h-5 w-5" />
           </button>
         </div>
-        
         <div className="p-5 space-y-4">
           <div className={`flex items-start gap-3 p-3 rounded-lg border ${isUpdate ? "bg-amber-50/50 border-amber-100" : "bg-emerald-50/50 border-emerald-100"}`}>
             {isUpdate ? (
@@ -244,35 +188,33 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month, year, isUpda
             )}
             <p className="text-xs text-slate-800 leading-snug">
               {isUpdate ? (
-                <>You are about to <span className="font-semibold text-amber-700">update existing actuals</span> for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month} {year}</span></>
+                <>You are about to <span className="font-semibold text-amber-700">update existing actuals</span> for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month}</span></>
               ) : (
-                <>All actual fields have been completed for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month} {year}</span></>
+                <>All actual fields have been completed for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month}</span></>
               )}
             </p>
           </div>
-          
           <label className="flex items-start gap-3 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-all">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
             <span className="text-sm text-slate-600">
-              {isUpdate 
+              {isUpdate
                 ? "I confirm that the updated actual data is accurate and should replace the existing values."
                 : "I confirm that the actual data entered is accurate and ready for reporting."
               }
             </span>
           </label>
         </div>
-        
         <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-          <button onClick={() => { onClose(); setConfirmed(false); }} 
+          <button onClick={() => { onClose(); setConfirmed(false); }}
             className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
             Cancel
           </button>
-          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed}
+          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed || submitting}
             className={`h-9 px-4 text-sm font-medium text-white rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isUpdate ? "bg-amber-600 hover:bg-amber-700" : "bg-[#0b1f3a] hover:bg-[#0b1f3a]/90"
             }`}>
-            {isUpdate ? "Update Actuals" : "Submit Actuals"}
+            {submitting ? "Submitting..." : isUpdate ? "Update Actuals" : "Submit Actuals"}
           </button>
         </div>
       </div>
@@ -281,62 +223,145 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month, year, isUpda
 }
 
 export default function ActualEntryPage() {
-  const [cluster, setCluster] = useState("");
-  const [company, setCompany] = useState("");
+  const [clusters, setClusters] = useState<AdminCluster[]>([]);
+  const [companies, setCompanies] = useState<AdminCompany[]>([]);
+  const [selectedCluster, setSelectedCluster] = useState("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedCompanyName, setSelectedCompanyName] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [hasExistingData, setHasExistingData] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
 
-  const clusters = useMemo(() => Array.from(new Set(COMPANIES_DATA.filter(c => c.isActive).map(c => c.cluster))).sort(), []);
-  const companies = useMemo(() => cluster ? COMPANIES_DATA.filter(c => c.isActive && c.cluster === cluster) : [], [cluster]);
-  const companyData = useMemo(() => COMPANIES_DATA.find(c => c.name === company), [company]);
-  const financialYear = useMemo(() => {
-    if (!companyData || !year) return "";
-    const yearNum = parseInt(year);
-    return companyData.yearEnd === "December" ? `FY ${year}` : `FY ${yearNum}-${(yearNum + 1).toString().slice(-2)}`;
-  }, [companyData, year]);
+  const yearOptions = useMemo(() => buildYearOptions(), []);
+  const metricToForm: Record<string, string> = useMemo(
+    () => Object.fromEntries(Object.entries(FORM_TO_METRIC).map(([k, v]) => [v, k])),
+    []
+  );
 
-  // Check for existing uploaded actuals when company, month, and year are selected
+  // Load clusters
   useEffect(() => {
-    if (company && month && year) {
-      const periodKey = `${month}-${year}`;
-      const companyName = company;
-      
-      // Check if we have uploaded data for this company and period
-      const uploadedData = UPLOADED_ACTUALS[companyName]?.[periodKey];
-      
-      if (uploadedData) {
-        // Load existing uploaded actuals
-        setFormData(uploadedData as FormData);
+    const load = async () => {
+      const res = await AdminAPI.getClustersList();
+      if (res.data) setClusters(res.data.clusters.filter((c) => c.is_active));
+
+      // Check for resume from actual drafts
+      const resumeRaw = sessionStorage.getItem("actualDraftResume");
+      if (resumeRaw) {
+        sessionStorage.removeItem("actualDraftResume");
+        try {
+          const resume = JSON.parse(resumeRaw) as { company_id: string; year: number; month: number };
+          setYear(String(resume.year));
+          setMonth(MONTHS[resume.month - 1]);
+          setSelectedCompanyId(resume.company_id);
+        } catch (e) {
+          console.error("Failed to resume draft", e);
+        }
+      }
+    };
+    load();
+  }, []);
+
+  // Auto-select cluster when resuming
+  useEffect(() => {
+    if (!selectedCompanyId || selectedCluster || clusters.length === 0) return;
+    const findCluster = async () => {
+      const res = await AdminAPI.getCompaniesList({ page: 1, page_size: 500, is_active: true });
+      if (!res.data) return;
+      const comp = res.data.companies.find((c) => c.company_id === selectedCompanyId);
+      if (comp) {
+        const cl = clusters.find((c) => c.cluster_id === comp.cluster_id);
+        if (cl) setSelectedCluster(cl.cluster_name);
+      }
+    };
+    findCluster();
+  }, [selectedCompanyId, clusters, selectedCluster]);
+
+  // Load companies when cluster changes
+  useEffect(() => {
+    if (!selectedCluster) {
+      setCompanies([]);
+      return;
+    }
+    const cluster = clusters.find((c) => c.cluster_name === selectedCluster);
+    if (!cluster) return;
+
+    const load = async () => {
+      const res = await AdminAPI.getCompaniesList({ page: 1, page_size: 500, cluster_id: cluster.cluster_id, is_active: true });
+      if (res.data) {
+        setCompanies(res.data.companies);
+        if (selectedCompanyId && !selectedCompanyName) {
+          const comp = res.data.companies.find((c) => c.company_id === selectedCompanyId);
+          if (comp) setSelectedCompanyName(comp.company_name);
+        }
+      }
+    };
+    load();
+  }, [selectedCluster, clusters]);
+
+  // Auto-load existing actual data when company + year + month selected
+  useEffect(() => {
+    if (!selectedCompanyId || !year || !month) {
+      setFormData(EMPTY_FORM);
+      setHasExistingData(false);
+      return;
+    }
+
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    if (monthIndex <= 0) return;
+
+    const loadExisting = async () => {
+      setLoadingData(true);
+      const res = await AdminAPI.getActualEntry(selectedCompanyId, Number(year), monthIndex);
+      setLoadingData(false);
+
+      if (res.data && res.data.has_data) {
+        const newForm: Record<string, string> = {};
+        for (const [metricKey, amount] of Object.entries(res.data.metrics)) {
+          const formKey = metricToForm[metricKey];
+          if (formKey && amount !== null) {
+            newForm[formKey] = String(amount);
+          }
+        }
+        if (res.data.comment) newForm.comment = res.data.comment;
+        setFormData({ ...EMPTY_FORM, ...newForm });
         setHasExistingData(true);
       } else {
-        // No existing data - start fresh
         setFormData(EMPTY_FORM);
         setHasExistingData(false);
       }
-    } else {
-      setFormData(EMPTY_FORM);
-      setHasExistingData(false);
-    }
-  }, [company, month, year]);
+    };
+    loadExisting();
+  }, [selectedCompanyId, year, month, metricToForm]);
 
-  // Reset company when cluster changes
-  useEffect(() => {
-    setCompany("");
+  const clusterNames = useMemo(() => clusters.map((c) => c.cluster_name).sort(), [clusters]);
+  const companyNames = useMemo(() => companies.map((c) => c.company_name), [companies]);
+
+  const handleCompanyChange = (name: string) => {
+    setSelectedCompanyName(name);
+    const comp = companies.find((c) => c.company_name === name);
+    setSelectedCompanyId(comp?.company_id || "");
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleClusterChange = (v: string) => {
+    setSelectedCluster(v);
+    setSelectedCompanyId("");
+    setSelectedCompanyName("");
     setMonth("");
     setYear("");
-  }, [cluster]);
+    setError(null);
+    setSuccess(null);
+  };
 
-  // Reset month/year when company changes
-  useEffect(() => {
-    setMonth("");
-    setYear("");
-  }, [company]);
-
-  const update = useCallback((field: keyof FormData, value: string | "+" | "-") => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const update = useCallback((field: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
   const handleClear = () => {
@@ -345,17 +370,65 @@ export default function ActualEntryPage() {
     }
   };
 
-  const handleSaveDraft = () => {
-    const draftData = {
-      formData,
-      company,
-      cluster,
-      month,
-      year,
-      lastModified: Date.now()
-    };
-    localStorage.setItem("actualDraft", JSON.stringify(draftData));
-    alert("Draft saved successfully!");
+  const buildMetrics = (): Record<string, number | null> => {
+    const metrics: Record<string, number | null> = {};
+    for (const [formKey, metricKey] of Object.entries(FORM_TO_METRIC)) {
+      const val = formData[formKey as keyof FormData];
+      metrics[metricKey] = val !== "" ? parseFloat(val) : null;
+    }
+    metrics["gp_margin"] = calc.gpMarginNum;
+    metrics["total_overhead"] = calc.totalOverheadsNum;
+    metrics["pbt_before_non_ops"] = calc.pbtBeforeNum;
+    metrics["pbt_after_non_ops"] = calc.pbtAfterNum;
+    metrics["np_margin"] = calc.npMarginNum;
+    metrics["ebit"] = calc.ebitNum;
+    metrics["ebitda"] = calc.ebitdaNum;
+    return metrics;
+  };
+
+  const handleSaveDraft = async () => {
+    if (!selectedCompanyId || !year || !month) {
+      setError("Please select cluster, company, year and month before saving.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    const res = await AdminAPI.saveActualDraft({
+      company_id: selectedCompanyId,
+      year: Number(year),
+      month: monthIndex,
+      metrics: buildMetrics(),
+      comment: formData.comment || undefined,
+    });
+
+    setSubmitting(false);
+    if (res.error) { setError(res.error); return; }
+    setSuccess("Draft saved successfully!");
+  };
+
+  const handleSubmitActuals = async () => {
+    if (!selectedCompanyId || !year || !month) return;
+    setShowModal(false);
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    const res = await AdminAPI.submitActualEntry({
+      company_id: selectedCompanyId,
+      year: Number(year),
+      month: monthIndex,
+      metrics: buildMetrics(),
+      comment: formData.comment || undefined,
+    });
+
+    setSubmitting(false);
+    if (res.error) { setError(res.error); return; }
+    setSuccess(hasExistingData ? "Actuals updated successfully!" : "Actuals submitted successfully!");
+    setHasExistingData(true);
   };
 
   const calc = useMemo(() => {
@@ -363,19 +436,26 @@ export default function ActualEntryPage() {
     const revenue = n(formData.revenue), gp = n(formData.gp), otherIncome = n(formData.otherIncome);
     const personal = n(formData.personalExpenses), admin = n(formData.adminExpenses), selling = n(formData.sellingExpenses);
     const financial = n(formData.financialExpenses), depreciation = n(formData.depreciation);
-    const provisions = n(formData.provisions);
-    const exchange = n(formData.exchange);
+    const provisions = n(formData.provisions), exchangeVal = n(formData.exchange);
     const nonOpsExp = n(formData.nonOpsExpenses), nonOpsInc = n(formData.nonOpsIncome);
 
-    const gpMargin = revenue > 0 ? ((gp / revenue) * 100).toFixed(2) : "0.00";
-    const totalOverheads = personal + admin + selling + financial + depreciation;
-    const pbtBefore = (gp + otherIncome) - totalOverheads + provisions + exchange;
-    const npMargin = revenue > 0 ? ((pbtBefore / revenue) * 100).toFixed(2) : "0.00";
-    const pbtAfter = pbtBefore + nonOpsInc - nonOpsExp;
-    const ebit = pbtBefore + financial;
-    const ebitda = ebit + depreciation;
+    const gpMarginNum = revenue > 0 ? (gp / revenue) * 100 : 0;
+    const totalOverheadsNum = personal + admin + selling + financial + depreciation;
+    const pbtBeforeNum = (gp + otherIncome) - totalOverheadsNum + provisions + exchangeVal;
+    const npMarginNum = revenue > 0 ? (pbtBeforeNum / revenue) * 100 : 0;
+    const pbtAfterNum = pbtBeforeNum + nonOpsInc - nonOpsExp;
+    const ebitNum = pbtBeforeNum + financial;
+    const ebitdaNum = ebitNum + depreciation;
 
-    return { gpMargin, totalOverheads: totalOverheads.toFixed(2), pbtBefore: pbtBefore.toFixed(2), npMargin, pbtAfter: pbtAfter.toFixed(2), ebit: ebit.toFixed(2), ebitda: ebitda.toFixed(2) };
+    return {
+      gpMargin: gpMarginNum.toFixed(2), gpMarginNum,
+      totalOverheads: totalOverheadsNum.toFixed(2), totalOverheadsNum,
+      pbtBefore: pbtBeforeNum.toFixed(2), pbtBeforeNum,
+      npMargin: npMarginNum.toFixed(2), npMarginNum,
+      pbtAfter: pbtAfterNum.toFixed(2), pbtAfterNum,
+      ebit: ebitNum.toFixed(2), ebitNum,
+      ebitda: ebitdaNum.toFixed(2), ebitdaNum,
+    };
   }, [formData]);
 
   const filled = (v: string) => v !== "" && !isNaN(parseFloat(v));
@@ -405,42 +485,32 @@ export default function ActualEntryPage() {
     { label: "EBIT", done: pbtAfterOk },
     { label: "EBITDA", done: pbtAfterOk },
   ];
-  
-  const completedCount = progress.filter(p => p.done).length;
-  const pct = Math.round((completedCount / progress.length) * 100);
 
-  const isSelectionComplete = company && month && year;
+  const completedCount = progress.filter((p) => p.done).length;
+  const pct = Math.round((completedCount / progress.length) * 100);
+  const isSelectionComplete = selectedCompanyId && month && year;
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      
       {/* Selection Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Dropdown label="Cluster" value={cluster} options={clusters} onChange={setCluster} placeholder="Select Cluster" searchable />
-          <Dropdown label="Company" value={company} options={companies.map(c => c.name)} onChange={setCompany} placeholder="Select Company" disabled={!cluster} searchable />
-          <Dropdown label="Month" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!company} />
-          <Dropdown label="Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!company} />
+          <Dropdown label="Cluster" value={selectedCluster} options={clusterNames} onChange={handleClusterChange} placeholder="Select Cluster" searchable />
+          <Dropdown label="Company" value={selectedCompanyName} options={companyNames} onChange={handleCompanyChange} placeholder="Select Company" disabled={!selectedCluster} searchable />
+          <Dropdown label="Reporting Year" value={year} options={yearOptions} onChange={(v) => { setYear(v); setError(null); setSuccess(null); }} placeholder="Select Year" disabled={!selectedCompanyName} />
+          <Dropdown label="Reporting Month" value={month} options={MONTHS} onChange={(v) => { setMonth(v); setError(null); setSuccess(null); }} placeholder="Select Month" disabled={!selectedCompanyName} />
         </div>
-        {companyData && (
+        {selectedCompanyId && (
           <div className="mt-3 flex items-center gap-4">
-            <span className="text-sm text-slate-500">Company Code: <span className="font-medium text-slate-800">{companyData.code}</span></span>
-            {isSelectionComplete && (
+            <span className="text-sm text-slate-500">Company ID: <span className="font-medium text-slate-800">{selectedCompanyId}</span></span>
+            {isSelectionComplete && !loadingData && (
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                hasExistingData 
-                  ? "bg-emerald-100 text-emerald-700" 
-                  : "bg-amber-100 text-amber-700"
+                hasExistingData ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
               }`}>
                 {hasExistingData ? (
-                  <>
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Actuals Uploaded
-                  </>
+                  <><CheckCircle2 className="h-3.5 w-3.5" /> Actuals Uploaded</>
                 ) : (
-                  <>
-                    <FileSpreadsheet className="h-3.5 w-3.5" />
-                    Not Yet Uploaded
-                  </>
+                  <><FileSpreadsheet className="h-3.5 w-3.5" /> Not Yet Uploaded</>
                 )}
               </span>
             )}
@@ -448,9 +518,12 @@ export default function ActualEntryPage() {
         )}
       </div>
 
-      {/* Main Content - Full Width */}
+      {/* Messages */}
+      {error && <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {success && <div className="mx-6 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Form Area */}
         <div className="flex-1 overflow-y-auto p-6">
           {!isSelectionComplete ? (
             <div className="h-full flex items-center justify-center">
@@ -459,10 +532,12 @@ export default function ActualEntryPage() {
                   <FileSpreadsheet className="h-8 w-8 text-slate-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">Select Company and Period</h3>
-                <p className="text-sm text-slate-500">
-                  Please select a cluster, company, month, and year to view or enter actual financial data.
-                </p>
+                <p className="text-sm text-slate-500">Please select a cluster, company, year, and month to view or enter actual financial data.</p>
               </div>
+            </div>
+          ) : loadingData ? (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-sm text-slate-500">Loading existing data...</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -471,39 +546,37 @@ export default function ActualEntryPage() {
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-emerald-800">Existing Actuals Loaded</p>
-                    <p className="text-xs text-emerald-600 mt-0.5">
-                      This period has previously uploaded actuals. You can review and update the values below.
-                    </p>
+                    <p className="text-xs text-emerald-600 mt-0.5">This period has previously uploaded actuals. You can review and update the values below.</p>
                   </div>
                 </div>
               )}
 
               <Section title="Actual Revenue & Income (LKR)">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                  <InputField label="Actual Revenue" value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
-                  <InputField label="Actual Gross Profit (GP)" value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
+                  <InputField label="Actual Revenue" value={formData.revenue} onChange={(v) => update("revenue", v)} isCompleted={filled(formData.revenue)} />
+                  <InputField label="Actual Gross Profit (GP)" value={formData.gp} onChange={(v) => update("gp", v)} isCompleted={filled(formData.gp)} />
                   <CalcField label="GP Margin" value={calc.gpMargin} isCompleted={gpOk} suffix="%" />
-                  <InputField label="Other Income" value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
+                  <InputField label="Other Income" value={formData.otherIncome} onChange={(v) => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
                 </div>
               </Section>
 
               <Section title="Actual Operating Expenses (LKR)">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 pt-5">
-                  <InputField label="Personal Related" value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
-                  <InputField label="Admin & Establishment" value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
-                  <InputField label="Selling & Distribution" value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
-                  <InputField label="Financial Expenses" value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
-                  <InputField label="Depreciation" value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
+                  <InputField label="Personal Related" value={formData.personalExpenses} onChange={(v) => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
+                  <InputField label="Admin & Establishment" value={formData.adminExpenses} onChange={(v) => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
+                  <InputField label="Selling & Distribution" value={formData.sellingExpenses} onChange={(v) => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
+                  <InputField label="Financial Expenses" value={formData.financialExpenses} onChange={(v) => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
+                  <InputField label="Depreciation" value={formData.depreciation} onChange={(v) => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
                   <CalcField label="Total Overheads" value={calc.totalOverheads} isCompleted={overheadsOk} />
                 </div>
               </Section>
 
               <Section title="Actual Non-Operating Items (LKR)">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                  <InputField label="Provisions" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
-                  <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
-                  <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
-                  <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
+                  <InputField label="Provisions" value={formData.provisions} onChange={(v) => update("provisions", v)} isCompleted={filled(formData.provisions)} />
+                  <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={(v) => update("exchange", v)} isCompleted={filled(formData.exchange)} />
+                  <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={(v) => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
+                  <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={(v) => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
                 </div>
               </Section>
 
@@ -517,7 +590,7 @@ export default function ActualEntryPage() {
                 </div>
               </Section>
 
-              <Section title="Additional Comments">
+              <Section title="Actual Comment">
                 <div className="pt-5">
                   <textarea
                     value={formData.comment}
@@ -531,8 +604,8 @@ export default function ActualEntryPage() {
           )}
         </div>
 
-        {/* Progress Panel - Emerald Theme for Actuals */}
-        {isSelectionComplete && (
+        {/* Progress Panel */}
+        {isSelectionComplete && !loadingData && (
           <div className="hidden lg:flex w-60 bg-white border-l border-slate-200 flex-col">
             <div className="p-5 border-b border-slate-200">
               <div className="flex items-center justify-between mb-3">
@@ -559,7 +632,7 @@ export default function ActualEntryPage() {
       </div>
 
       {/* Mobile Progress */}
-      {isSelectionComplete && (
+      {isSelectionComplete && !loadingData && (
         <div className="lg:hidden bg-white border-t border-slate-200 px-6 py-3">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-slate-700">Actual Progress</span>
@@ -572,7 +645,7 @@ export default function ActualEntryPage() {
       )}
 
       {/* Action Bar */}
-      {isSelectionComplete && (
+      {isSelectionComplete && !loadingData && (
         <div className="bg-white border-t border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <button type="button" onClick={handleClear} className="h-10 px-4 text-sm font-medium text-slate-500 hover:text-red-600 transition-colors">
@@ -582,15 +655,14 @@ export default function ActualEntryPage() {
               <button
                 type="button"
                 onClick={handleSaveDraft}
-                className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
+                disabled={submitting}
+                className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Draft
+                {submitting ? "Saving..." : "Save Draft"}
               </button>
-              <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !company || !month || !year}
+              <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || submitting}
                 className={`h-10 px-6 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  hasExistingData 
-                    ? "bg-amber-600 hover:bg-amber-700" 
-                    : "bg-[#0b1f3a] hover:bg-[#0b1f3a]/90"
+                  hasExistingData ? "bg-amber-600 hover:bg-amber-700" : "bg-[#0b1f3a] hover:bg-[#0b1f3a]/90"
                 }`}>
                 {hasExistingData ? "Update Actuals" : "Submit Actuals"}
               </button>
@@ -599,17 +671,14 @@ export default function ActualEntryPage() {
         </div>
       )}
 
-      <ConfirmModal 
-        isOpen={showModal} 
-        onClose={() => setShowModal(false)} 
-        onConfirm={() => { 
-          setShowModal(false); 
-          alert(hasExistingData ? "Actuals updated successfully!" : "Actuals submitted successfully!"); 
-        }} 
-        company={company} 
-        month={month} 
-        year={year}
+      <ConfirmModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onConfirm={handleSubmitActuals}
+        company={selectedCompanyName}
+        month={`${month} ${year}`}
         isUpdate={hasExistingData}
+        submitting={submitting}
       />
     </div>
   );

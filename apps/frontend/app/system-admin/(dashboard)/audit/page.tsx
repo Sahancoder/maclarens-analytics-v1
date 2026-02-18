@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Filter, Download, Calendar, User, FileText, Settings, Shield, Building2, Layers, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter, Download, Calendar, User, FileText, Settings, Shield, Building2, Layers, Clock, AlertCircle, Loader2 } from "lucide-react";
+import { AdminAPI, AdminActivity } from "@/lib/api-client";
+import { format } from "date-fns";
 
 interface AuditLog {
   id: string;
@@ -14,19 +16,6 @@ interface AuditLog {
   ipAddress: string;
   status: "success" | "failed" | "warning";
 }
-
-const auditLogs: AuditLog[] = [
-  { id: "1", timestamp: "2025-12-23 14:32:15", user: "Admin User", userEmail: "hmsvhettiarachchi@std.foc.sab.ac.lk", action: "User Created", category: "user", details: "Created new user: natali.craig@mclarens.lk", ipAddress: "192.168.1.45", status: "success" },
-  { id: "2", timestamp: "2025-12-23 14:15:08", user: "Sahan Viranga", userEmail: "sahanviranga18@gmail.com", action: "Report Approved", category: "report", details: "Approved December 2025 report for McLarens Maritime Academy", ipAddress: "192.168.1.102", status: "success" },
-  { id: "3", timestamp: "2025-12-23 13:45:22", user: "Admin User", userEmail: "hmsvhettiarachchi@std.foc.sab.ac.lk", action: "Company Updated", category: "company", details: "Updated year end for GAC Shipping Limited to December", ipAddress: "192.168.1.45", status: "success" },
-  { id: "4", timestamp: "2025-12-23 12:30:00", user: "System", userEmail: "system@mclarens.lk", action: "Backup Completed", category: "system", details: "Daily database backup completed successfully", ipAddress: "10.0.0.1", status: "success" },
-  { id: "5", timestamp: "2025-12-23 11:22:45", user: "Sahan Hettiarachchi", userEmail: "sahanhettiarachchi275@gmail.com", action: "Report Submitted", category: "report", details: "Submitted December 2025 actual report", ipAddress: "192.168.1.88", status: "success" },
-  { id: "6", timestamp: "2025-12-23 10:15:33", user: "Unknown", userEmail: "unknown@test.com", action: "Login Failed", category: "auth", details: "Failed login attempt - invalid credentials", ipAddress: "203.45.67.89", status: "failed" },
-  { id: "7", timestamp: "2025-12-23 09:45:12", user: "Admin User", userEmail: "hmsvhettiarachchi@std.foc.sab.ac.lk", action: "Role Modified", category: "user", details: "Updated permissions for Cluster Head role", ipAddress: "192.168.1.45", status: "success" },
-  { id: "8", timestamp: "2025-12-22 16:30:00", user: "Admin User", userEmail: "hmsvhettiarachchi@std.foc.sab.ac.lk", action: "Cluster Created", category: "cluster", details: "Created new cluster: Renewables", ipAddress: "192.168.1.45", status: "success" },
-  { id: "9", timestamp: "2025-12-22 15:20:18", user: "Orlando Diggs", userEmail: "orlando.diggs@mclarens.lk", action: "Report Rejected", category: "report", details: "Rejected November 2025 report - Finance expenses mismatch", ipAddress: "192.168.1.156", status: "warning" },
-  { id: "10", timestamp: "2025-12-22 14:10:05", user: "System", userEmail: "system@mclarens.lk", action: "Session Expired", category: "auth", details: "User session expired: drew.cano@mclarens.lk", ipAddress: "10.0.0.1", status: "warning" },
-];
 
 const categoryIcons = {
   user: User,
@@ -47,18 +36,89 @@ const categoryColors = {
 };
 
 export default function AuditPage() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateRange, setDateRange] = useState("today");
+  const [dateRange, setDateRange] = useState("all");
 
-  const filteredLogs = auditLogs.filter((log) => {
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const fetchLogs = async () => {
+    try {
+      setLoading(true);
+      const response = await AdminAPI.getRecentActivity(100);
+      if (response.data) {
+        const mappedLogs = response.data.activities.map(mapActivityToLog);
+        setLogs(mappedLogs);
+        setError(null);
+      } else {
+        setError(response.error || "Failed to load audit logs");
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mapActivityToLog = (activity: AdminActivity): AuditLog => {
+    // Map entity_type to category
+    let category: AuditLog["category"] = "system";
+    const entity = activity.entity_type?.toLowerCase() || "";
+    if (entity.includes("user") || entity.includes("assignment")) category = "user";
+    else if (entity.includes("company")) category = "company";
+    else if (entity.includes("cluster")) category = "cluster";
+    else if (entity.includes("report") || entity.includes("budget") || entity.includes("actual")) category = "report";
+    else if (entity.includes("auth")) category = "auth";
+
+    // Determine status (default to success as most logs are successful actions)
+    let status: AuditLog["status"] = "success";
+    if (activity.action.toLowerCase().includes("fail")) status = "failed";
+    else if (activity.action.toLowerCase().includes("reject")) status = "warning";
+
+    return {
+      id: activity.id,
+      timestamp: activity.timestamp ? format(new Date(activity.timestamp), "yyyy-MM-dd HH:mm:ss") : "-",
+      user: activity.user_name || "System",
+      userEmail: activity.user_email || "system@mclarens.local",
+      action: activity.action.replace(/_/g, " "),
+      category: category,
+      details: activity.details || "-",
+      ipAddress: "-", // Not captured in backend yet
+      status: status,
+    };
+  };
+
+  const filteredLogs = logs.filter((log) => {
     const matchesSearch = log.action.toLowerCase().includes(search.toLowerCase()) ||
                          log.user.toLowerCase().includes(search.toLowerCase()) ||
                          log.details.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === "all" || log.category === categoryFilter;
     const matchesStatus = statusFilter === "all" || log.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesStatus;
+    
+    // Simple date range logic (can be expanded)
+    let matchesDate = true;
+    if (dateRange !== "all") {
+       const logDate = new Date(log.timestamp);
+       const now = new Date();
+       if (dateRange === "today") {
+         matchesDate = logDate.toDateString() === now.toDateString();
+       } else if (dateRange === "week") {
+         const weekAgo = new Date(now.setDate(now.getDate() - 7));
+         matchesDate = logDate >= weekAgo;
+       } else if (dateRange === "month") {
+         const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+         matchesDate = logDate >= monthAgo;
+       }
+    }
+    
+    return matchesSearch && matchesCategory && matchesStatus && matchesDate;
   });
 
   return (
@@ -70,8 +130,11 @@ export default function AuditPage() {
             <h1 className="text-3xl font-bold text-slate-900">Audit Logs</h1>
             <p className="text-base text-slate-500 mt-2">Track all system activities and user actions</p>
           </div>
-          <button className="flex items-center gap-2 h-11 px-5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-            <Download className="h-4 w-4" /> Export Logs
+          <button 
+            onClick={fetchLogs}
+            className="flex items-center gap-2 h-11 px-5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <Download className="h-4 w-4" /> Refresh Logs
           </button>
         </div>
 
@@ -116,16 +179,33 @@ export default function AuditPage() {
               onChange={(e) => setDateRange(e.target.value)}
               className="h-11 px-4 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-[#0b1f3a]"
             >
+              <option value="all">All Time</option>
               <option value="today">Today</option>
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
-              <option value="all">All Time</option>
             </select>
           </div>
         </div>
 
         {/* Audit Logs Table */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden min-h-[400px]">
+          {loading ? (
+             <div className="flex flex-col items-center justify-center h-64">
+               <Loader2 className="h-8 w-8 text-slate-400 animate-spin mb-2" />
+               <p className="text-slate-500">Loading audit logs...</p>
+             </div>
+          ) : error ? (
+             <div className="flex flex-col items-center justify-center h-64 text-red-500">
+               <AlertCircle className="h-8 w-8 mb-2" />
+               <p>{error}</p>
+               <button onClick={fetchLogs} className="mt-4 text-sm underline hover:text-red-700">Try Again</button>
+             </div>
+          ) : filteredLogs.length === 0 ? (
+             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+               <FileText className="h-12 w-12 mb-2 opacity-20" />
+               <p>No logs found matching your filters</p>
+             </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
@@ -140,9 +220,9 @@ export default function AuditPage() {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredLogs.map((log) => {
-                  const Icon = categoryIcons[log.category];
+                  const Icon = categoryIcons[log.category] || categoryIcons.system;
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50">
+                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm text-slate-600">
                           <Clock className="h-4 w-4 text-slate-400" />
@@ -157,14 +237,13 @@ export default function AuditPage() {
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-slate-800">{log.action}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${categoryColors[log.category]}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${categoryColors[log.category] || "bg-gray-100 text-gray-600"}`}>
                           <Icon className="h-3 w-3" />
                           {log.category.charAt(0).toUpperCase() + log.category.slice(1)}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-sm text-slate-600 max-w-xs truncate">{log.details}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">IP: {log.ipAddress}</p>
+                        <p className="text-sm text-slate-600 max-w-xs truncate" title={log.details}>{log.details}</p>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
@@ -181,13 +260,18 @@ export default function AuditPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-            <p className="text-sm text-slate-500">Showing {filteredLogs.length} of {auditLogs.length} logs</p>
-            <div className="flex gap-2">
-              <button className="h-9 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Previous</button>
-              <button className="h-9 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Next</button>
+          )}
+          
+          {/* Pagination Controls - Visual Only for now as we load all logs up to limit */}
+          {!loading && !error && filteredLogs.length > 0 && (
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+              <p className="text-sm text-slate-500">Showing {filteredLogs.length} logs</p>
+              <div className="flex gap-2">
+                <button disabled className="h-9 px-4 text-sm font-medium text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed">Previous</button>
+                <button disabled className="h-9 px-4 text-sm font-medium text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed">Next</button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

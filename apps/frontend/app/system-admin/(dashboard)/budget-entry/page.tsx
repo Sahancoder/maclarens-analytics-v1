@@ -1,45 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, Calculator } from "lucide-react";
-
-const COMPANIES_DATA = [
-  { code: "ONE", name: "ONE", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "UMI", name: "UMI", cluster: "Liner", yearEnd: "March", isActive: true },
-  { code: "MSC", name: "MSC", cluster: "Liner", yearEnd: "December", isActive: true },
-  { code: "MMA", name: "McLarens Maritime Academy", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "MOL", name: "M O L Logistics Lanka", cluster: "Shipping Services & Logistics", yearEnd: "December", isActive: true },
-  { code: "CHR", name: "C.H. Robinson Worldwide", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "SwiftShipping", name: "Swift Shipping Services", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "UnitedMaritime", name: "United Maritime", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "Shermans", name: "Shermans Logistics", cluster: "Shipping Services & Logistics", yearEnd: "March", isActive: true },
-  { code: "GMSL", name: "GAC Marine Services", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GSL", name: "GAC Shipping Limited", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GACTugs", name: "GAC Tugs", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "MSL", name: "McLarens Shipping Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "GLL", name: "GAC Logistics Ltd", cluster: "GAC Cluster", yearEnd: "December", isActive: true },
-  { code: "SPIL", name: "Spectra Integrated Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "SPL", name: "Spectra Logistics", cluster: "Warehouse & Logistics", yearEnd: "March", isActive: true },
-  { code: "IOSM", name: "Interocean Ship Management", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "AMOS", name: "Amos International Lanka", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "CTL", name: "Continental Tech Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "WOSS", name: "World Subsea Services", cluster: "Ship Supply Services", yearEnd: "March", isActive: true },
-  { code: "MLL-Auto", name: "McLarens Lubricants - Auto", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "McKupler", name: "McKupler Inc", cluster: "Lubricant I", yearEnd: "December", isActive: true },
-  { code: "Carplan", name: "Carplan Lubricants", cluster: "Lubricant II", yearEnd: "March", isActive: true },
-  { code: "Yantrataksan", name: "Yantrataksan Technologies", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Pidilite", name: "Pidilite Lanka", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "Macbertan", name: "Macbertan", cluster: "Manufacturing", yearEnd: "March", isActive: true },
-  { code: "IOE", name: "Interocean Energy", cluster: "Bunkering & Renewables", yearEnd: "March", isActive: true },
-  { code: "GAHL", name: "Galle Agency House", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MAL", name: "McLarens Automotive", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "MDL", name: "McLarens Developers", cluster: "Property", yearEnd: "March", isActive: true },
-  { code: "Topas", name: "Topaz Hotels", cluster: "Hotel & Leisure", yearEnd: "March", isActive: true },
-  { code: "MGML", name: "McLarens Group Management", cluster: "Strategic Investment", yearEnd: "March", isActive: true },
-];
+import { Check, ChevronDown, Search, ChevronUp, X, Calculator } from "lucide-react";
+import { AdminAPI, type AdminCluster, type AdminCompany } from "@/lib/api-client";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026"];
 
 interface FormData {
   revenue: string; gp: string; otherIncome: string;
@@ -51,6 +16,28 @@ interface FormData {
   comment: string;
 }
 
+// Map form fields -> backend metric keys
+const FORM_TO_METRIC: Record<string, string> = {
+  revenue: "revenue",
+  gp: "gp",
+  otherIncome: "other_income",
+  personalExpenses: "personal_exp",
+  adminExpenses: "admin_exp",
+  sellingExpenses: "selling_exp",
+  financialExpenses: "finance_exp",
+  depreciation: "depreciation",
+  provisions: "provisions",
+  exchange: "exchange_variance",
+  nonOpsExpenses: "non_ops_exp",
+  nonOpsIncome: "non_ops_income",
+};
+
+function buildYearOptions(): string[] {
+  const current = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = current - 3; y <= current + 5; y++) years.push(String(y));
+  return years;
+}
 
 function Dropdown({ label, value, options, onChange, placeholder, disabled, searchable }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void;
@@ -112,41 +99,46 @@ function Dropdown({ label, value, options, onChange, placeholder, disabled, sear
   );
 }
 
-function InputField({ label, value, onChange, isCompleted, sign, onSignChange, showSign }: {
+function InputField({ label, value, onChange, isCompleted }: {
   label: string; value: string; onChange: (v: string) => void; isCompleted: boolean;
-  sign?: "+" | "-"; onSignChange?: (s: "+" | "-") => void; showSign?: boolean;
 }) {
+  const formatVal = (v: string) => {
+    if (!v) return "";
+    const parts = v.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/,/g, "");
+    if (raw === "" || /^-?\d*\.?\d*$/.test(raw)) {
+      onChange(raw);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
-      <div className="flex gap-2">
-        {showSign && (
-          <button type="button" onClick={() => onSignChange?.(sign === "+" ? "-" : "+")}
-            className={`h-11 w-11 rounded-lg text-lg font-bold border-2 transition-all flex items-center justify-center ${
-              sign === "+" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"
-            }`}>
-            {sign}
-          </button>
-        )}
-        <input type="text" value={value} placeholder="0.00"
-          onChange={(e) => { if (e.target.value === "" || /^-?\d*\.?\d*$/.test(e.target.value)) onChange(e.target.value); }}
-          className={`flex-1 h-11 px-4 text-sm border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
-            isCompleted ? "border-blue-300 bg-blue-50/50" : "border-slate-300 bg-white hover:border-slate-400"
-          }`}
-        />
-      </div>
+      <input type="text" value={formatVal(value)} placeholder="0.00"
+        onChange={handleChange}
+        className={`h-11 px-4 text-sm border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
+          isCompleted ? "border-blue-300 bg-blue-50/50" : "border-slate-300 bg-white hover:border-slate-400"
+        }`}
+      />
     </div>
   );
 }
 
 function CalcField({ label, value, isCompleted, suffix }: { label: string; value: string; isCompleted: boolean; suffix?: string }) {
+  const displayValue = value ? Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
       <div className={`h-11 px-4 flex items-center text-sm font-semibold rounded-lg border transition-all ${
         isCompleted ? "bg-blue-50 text-blue-700 border-blue-300" : "bg-slate-100 text-slate-500 border-slate-200"
       }`}>
-        {value}{suffix}
+        {displayValue}{suffix}
       </div>
     </div>
   );
@@ -166,12 +158,11 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
   );
 }
 
-
-function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
-  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string;
+function ConfirmModal({ isOpen, onClose, onConfirm, company, month, submitting }: {
+  isOpen: boolean; onClose: () => void; onConfirm: () => void; company: string; month: string; submitting: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
-  
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -182,7 +173,6 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
             <X className="h-5 w-5" />
           </button>
         </div>
-        
         <div className="p-5 space-y-4">
           <div className="flex items-start gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
             <Calculator className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -190,7 +180,6 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
               All budget fields have been completed for <span className="font-semibold">{company}</span> - <span className="font-semibold">{month}</span>
             </p>
           </div>
-          
           <label className="flex items-start gap-3 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-all">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0b1f3a] focus:ring-[#0b1f3a]" />
@@ -199,15 +188,14 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
             </span>
           </label>
         </div>
-        
         <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-          <button onClick={() => { onClose(); setConfirmed(false); }} 
+          <button onClick={() => { onClose(); setConfirmed(false); }}
             className="h-9 px-4 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
             Cancel
           </button>
-          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed}
+          <button onClick={() => { onConfirm(); setConfirmed(false); }} disabled={!confirmed || submitting}
             className="h-9 px-4 text-sm font-medium text-white bg-[#0b1f3a] hover:bg-[#0b1f3a]/90 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            Submit Budget
+            {submitting ? "Submitting..." : "Submit Budget"}
           </button>
         </div>
       </div>
@@ -216,11 +204,18 @@ function ConfirmModal({ isOpen, onClose, onConfirm, company, month }: {
 }
 
 export default function BudgetEntryPage() {
-  const [cluster, setCluster] = useState("");
-  const [company, setCompany] = useState("");
+  const [clusters, setClusters] = useState<AdminCluster[]>([]);
+  const [companies, setCompanies] = useState<AdminCompany[]>([]);
+  const [selectedCluster, setSelectedCluster] = useState("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedCompanyName, setSelectedCompanyName] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
     revenue: "", gp: "", otherIncome: "",
     personalExpenses: "", adminExpenses: "", sellingExpenses: "", financialExpenses: "", depreciation: "",
@@ -228,34 +223,104 @@ export default function BudgetEntryPage() {
     comment: "",
   });
 
-  const clusters = useMemo(() => Array.from(new Set(COMPANIES_DATA.filter(c => c.isActive).map(c => c.cluster))).sort(), []);
-  const companies = useMemo(() => cluster ? COMPANIES_DATA.filter(c => c.isActive && c.cluster === cluster) : [], [cluster]);
-  const companyData = useMemo(() => COMPANIES_DATA.find(c => c.name === company), [company]);
-  const financialYear = useMemo(() => companyData ? (companyData.yearEnd === "December" ? "FY 2025" : "FY 2025-26") : "", [companyData]);
+  const yearOptions = useMemo(() => buildYearOptions(), []);
 
+  // Metric key -> form field mapping (reverse of FORM_TO_METRIC)
+  const metricToForm: Record<string, string> = useMemo(
+    () => Object.fromEntries(Object.entries(FORM_TO_METRIC).map(([k, v]) => [v, k])),
+    []
+  );
+
+  // Load clusters on mount + check for draft resume
   useEffect(() => {
-    // Load draft if exists
-    const draft = localStorage.getItem("budgetDraft");
-    if (draft) {
-      try {
-        const { formData: savedData, company: savedCompany, cluster: savedCluster, month: savedMonth } = JSON.parse(draft);
-        if (savedCluster) setCluster(savedCluster);
-        // We need to wait for cluster to update companies, so we might need a separate effect or just set it
-        // However, for simplicity in this artifact, let's just set the form data and company
-        // In a real app with async data, we'd need to be more careful
-        setTimeout(() => {
-             if (savedCompany) setCompany(savedCompany);
-             if (savedMonth) setMonth(savedMonth);
-             if (savedData) setFormData(savedData);
-        }, 100);
-      } catch (e) {
-        console.error("Failed to load draft", e);
+    const load = async () => {
+      const res = await AdminAPI.getClustersList();
+      if (res.data) setClusters(res.data.clusters.filter((c) => c.is_active));
+
+      // Check if resuming from Budget Drafts
+      const resumeRaw = sessionStorage.getItem("budgetDraftResume");
+      if (resumeRaw) {
+        sessionStorage.removeItem("budgetDraftResume");
+        try {
+          const resume = JSON.parse(resumeRaw) as { company_id: string; year: number; month: number };
+          const entryRes = await AdminAPI.getBudgetEntry(resume.company_id, resume.year, resume.month);
+          if (entryRes.data) {
+            setYear(String(resume.year));
+            setMonth(MONTHS[resume.month - 1]);
+
+            // Load the metric values into the form
+            const newForm: Record<string, string> = {};
+            for (const [metricKey, amount] of Object.entries(entryRes.data.metrics)) {
+              const formKey = metricToForm[metricKey];
+              if (formKey && amount !== null) {
+                newForm[formKey] = String(amount);
+              }
+            }
+            if (entryRes.data.comment) newForm.comment = entryRes.data.comment;
+            setFormData((prev) => ({ ...prev, ...newForm }));
+
+            // We need to set company+cluster — we'll do that after companies load
+            // Store company_id to pick up after cluster/companies load
+            setSelectedCompanyId(resume.company_id);
+          }
+        } catch (e) {
+          console.error("Failed to resume draft", e);
+        }
       }
-    }
+    };
+    load();
   }, []);
 
-  const update = useCallback((field: keyof FormData, value: string | "+" | "-") => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // When resuming a draft: auto-select cluster based on company_id
+  useEffect(() => {
+    if (!selectedCompanyId || selectedCluster || clusters.length === 0) return;
+    // Find the company across all clusters to identify its cluster
+    const findCluster = async () => {
+      const res = await AdminAPI.getCompaniesList({ page: 1, page_size: 500, is_active: true });
+      if (!res.data) return;
+      const comp = res.data.companies.find((c) => c.company_id === selectedCompanyId);
+      if (comp) {
+        const cl = clusters.find((c) => c.cluster_id === comp.cluster_id);
+        if (cl) setSelectedCluster(cl.cluster_name);
+      }
+    };
+    findCluster();
+  }, [selectedCompanyId, clusters, selectedCluster]);
+
+  // Load companies when cluster changes
+  useEffect(() => {
+    if (!selectedCluster) {
+      setCompanies([]);
+      return;
+    }
+    const cluster = clusters.find((c) => c.cluster_name === selectedCluster);
+    if (!cluster) return;
+
+    const load = async () => {
+      const res = await AdminAPI.getCompaniesList({ page: 1, page_size: 500, cluster_id: cluster.cluster_id, is_active: true });
+      if (res.data) {
+        setCompanies(res.data.companies);
+        // If resuming, auto-select the company name
+        if (selectedCompanyId && !selectedCompanyName) {
+          const comp = res.data.companies.find((c) => c.company_id === selectedCompanyId);
+          if (comp) setSelectedCompanyName(comp.company_name);
+        }
+      }
+    };
+    load();
+  }, [selectedCluster, clusters]);
+
+  const clusterNames = useMemo(() => clusters.map((c) => c.cluster_name).sort(), [clusters]);
+  const companyNames = useMemo(() => companies.map((c) => c.company_name), [companies]);
+
+  const handleCompanyChange = (name: string) => {
+    setSelectedCompanyName(name);
+    const comp = companies.find((c) => c.company_name === name);
+    setSelectedCompanyId(comp?.company_id || "");
+  };
+
+  const update = useCallback((field: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
   const handleClear = () => {
@@ -266,20 +331,77 @@ export default function BudgetEntryPage() {
         provisions: "", exchange: "", nonOpsExpenses: "", nonOpsIncome: "",
         comment: "",
       });
-      localStorage.removeItem("budgetDraft");
     }
   };
 
-  const handleSaveDraft = () => {
-    const draftData = {
-      formData,
-      company,
-      cluster,
-      month,
-      lastModified: Date.now()
-    };
-    localStorage.setItem("budgetDraft", JSON.stringify(draftData));
-    alert("Draft saved successfully!");
+  // Build metrics payload from form
+  const buildMetrics = (): Record<string, number | null> => {
+    const metrics: Record<string, number | null> = {};
+    for (const [formKey, metricKey] of Object.entries(FORM_TO_METRIC)) {
+      const val = formData[formKey as keyof FormData];
+      metrics[metricKey] = val !== "" ? parseFloat(val) : null;
+    }
+    // Also include calculated fields
+    metrics["gp_margin"] = calc.gpMarginNum;
+    metrics["total_overhead"] = calc.totalOverheadsNum;
+    metrics["pbt_before_non_ops"] = calc.pbtBeforeNum;
+    metrics["pbt_after_non_ops"] = calc.pbtAfterNum;
+    metrics["np_margin"] = calc.npMarginNum;
+    metrics["ebit"] = calc.ebitNum;
+    metrics["ebitda"] = calc.ebitdaNum;
+    return metrics;
+  };
+
+  const handleSaveDraft = async () => {
+    if (!selectedCompanyId || !year || !month) {
+      setError("Please select cluster, company, year and month before saving.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    const res = await AdminAPI.saveBudgetDraft({
+      company_id: selectedCompanyId,
+      year: Number(year),
+      month: monthIndex,
+      metrics: buildMetrics(),
+      comment: formData.comment || undefined,
+    });
+
+    setSubmitting(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setSuccess("Draft saved successfully!");
+  };
+
+  const handleSubmitBudget = async () => {
+    if (!selectedCompanyId || !year || !month) return;
+
+    setShowModal(false);
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const monthIndex = MONTHS.indexOf(month) + 1;
+    const res = await AdminAPI.submitBudgetEntry({
+      company_id: selectedCompanyId,
+      year: Number(year),
+      month: monthIndex,
+      metrics: buildMetrics(),
+      comment: formData.comment || undefined,
+    });
+
+    setSubmitting(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setSuccess("Budget submitted successfully!");
   };
 
   const calc = useMemo(() => {
@@ -287,20 +409,26 @@ export default function BudgetEntryPage() {
     const revenue = n(formData.revenue), gp = n(formData.gp), otherIncome = n(formData.otherIncome);
     const personal = n(formData.personalExpenses), admin = n(formData.adminExpenses), selling = n(formData.sellingExpenses);
     const financial = n(formData.financialExpenses), depreciation = n(formData.depreciation);
-
-    const provisions = n(formData.provisions);
-    const exchange = n(formData.exchange);
+    const provisions = n(formData.provisions), exchangeVal = n(formData.exchange);
     const nonOpsExp = n(formData.nonOpsExpenses), nonOpsInc = n(formData.nonOpsIncome);
 
-    const gpMargin = revenue > 0 ? ((gp / revenue) * 100).toFixed(2) : "0.00";
-    const totalOverheads = personal + admin + selling + financial + depreciation;
-    const pbtBefore = (gp + otherIncome) - totalOverheads + provisions + exchange;
-    const npMargin = revenue > 0 ? ((pbtBefore / revenue) * 100).toFixed(2) : "0.00";
-    const pbtAfter = pbtBefore + nonOpsInc - nonOpsExp;
-    const ebit = pbtBefore + financial;
-    const ebitda = ebit + depreciation;
+    const gpMarginNum = revenue > 0 ? (gp / revenue) * 100 : 0;
+    const totalOverheadsNum = personal + admin + selling + financial + depreciation;
+    const pbtBeforeNum = (gp + otherIncome) - totalOverheadsNum + provisions + exchangeVal;
+    const npMarginNum = revenue > 0 ? (pbtBeforeNum / revenue) * 100 : 0;
+    const pbtAfterNum = pbtBeforeNum + nonOpsInc - nonOpsExp;
+    const ebitNum = pbtBeforeNum + financial;
+    const ebitdaNum = ebitNum + depreciation;
 
-    return { gpMargin, totalOverheads: totalOverheads.toFixed(2), pbtBefore: pbtBefore.toFixed(2), npMargin, pbtAfter: pbtAfter.toFixed(2), ebit: ebit.toFixed(2), ebitda: ebitda.toFixed(2) };
+    return {
+      gpMargin: gpMarginNum.toFixed(2), gpMarginNum,
+      totalOverheads: totalOverheadsNum.toFixed(2), totalOverheadsNum,
+      pbtBefore: pbtBeforeNum.toFixed(2), pbtBeforeNum,
+      npMargin: npMarginNum.toFixed(2), npMarginNum,
+      pbtAfter: pbtAfterNum.toFixed(2), pbtAfterNum,
+      ebit: ebitNum.toFixed(2), ebitNum,
+      ebitda: ebitdaNum.toFixed(2), ebitdaNum,
+    };
   }, [formData]);
 
   const filled = (v: string) => v !== "" && !isNaN(parseFloat(v));
@@ -330,61 +458,64 @@ export default function BudgetEntryPage() {
     { label: "EBIT", done: pbtAfterOk },
     { label: "EBITDA", done: pbtAfterOk },
   ];
-  
-  const completedCount = progress.filter(p => p.done).length;
-  const pct = Math.round((completedCount / progress.length) * 100);
 
+  const completedCount = progress.filter((p) => p.done).length;
+  const pct = Math.round((completedCount / progress.length) * 100);
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      
-      {/* Header Banner - Budget Entry - Removed as per request */}
-      
-
       {/* Selection Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Dropdown label="Cluster" value={cluster} options={clusters} onChange={setCluster} placeholder="Select Cluster" searchable />
-          <Dropdown label="Company" value={company} options={companies.map(c => c.name)} onChange={setCompany} placeholder="Select Company" disabled={!cluster} searchable />
-          <Dropdown label="Reporting Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!company} />
-          <Dropdown label="Budget Period" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!company} />
+          <Dropdown label="Cluster" value={selectedCluster} options={clusterNames} onChange={(v) => { setSelectedCluster(v); setError(null); setSuccess(null); }} placeholder="Select Cluster" searchable />
+          <Dropdown label="Company" value={selectedCompanyName} options={companyNames} onChange={(v) => { handleCompanyChange(v); setError(null); setSuccess(null); }} placeholder="Select Company" disabled={!selectedCluster} searchable />
+          <Dropdown label="Reporting Year" value={year} options={yearOptions} onChange={(v) => { setYear(v); setError(null); setSuccess(null); }} placeholder="Select Year" disabled={!selectedCompanyName} />
+          <Dropdown label="Reporting Month" value={month} options={MONTHS} onChange={(v) => { setMonth(v); setError(null); setSuccess(null); }} placeholder="Select Month" disabled={!selectedCompanyName} />
         </div>
-        {companyData && (
-          <div className="mt-3 text-sm text-slate-500">Company Code: <span className="font-medium text-slate-800">{companyData.code}</span></div>
+        {selectedCompanyId && (
+          <div className="mt-3 text-sm text-slate-500">Company ID: <span className="font-medium text-slate-800">{selectedCompanyId}</span></div>
         )}
       </div>
 
-      {/* Main Content - Full Width */}
+      {/* Error / Success */}
+      {error && (
+        <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+      )}
+      {success && (
+        <div className="mx-6 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>
+      )}
+
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Form Area */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5">
             <Section title="Budget Revenue & Income (LKR)">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                <InputField label="Budget Revenue" value={formData.revenue} onChange={v => update("revenue", v)} isCompleted={filled(formData.revenue)} />
-                <InputField label="Budget Gross Profit (GP)" value={formData.gp} onChange={v => update("gp", v)} isCompleted={filled(formData.gp)} />
+                <InputField label="Budget Revenue" value={formData.revenue} onChange={(v) => update("revenue", v)} isCompleted={filled(formData.revenue)} />
+                <InputField label="Budget Gross Profit (GP)" value={formData.gp} onChange={(v) => update("gp", v)} isCompleted={filled(formData.gp)} />
                 <CalcField label="GP Margin" value={calc.gpMargin} isCompleted={gpOk} suffix="%" />
-                <InputField label="Other Income" value={formData.otherIncome} onChange={v => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
+                <InputField label="Other Income" value={formData.otherIncome} onChange={(v) => update("otherIncome", v)} isCompleted={filled(formData.otherIncome)} />
               </div>
             </Section>
 
             <Section title="Budget Operating Expenses (LKR)">
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 pt-5">
-                <InputField label="Personal Related" value={formData.personalExpenses} onChange={v => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
-                <InputField label="Admin & Establishment" value={formData.adminExpenses} onChange={v => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
-                <InputField label="Selling & Distribution" value={formData.sellingExpenses} onChange={v => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
-                <InputField label="Financial Expenses" value={formData.financialExpenses} onChange={v => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
-                <InputField label="Depreciation" value={formData.depreciation} onChange={v => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
+                <InputField label="Personal Related" value={formData.personalExpenses} onChange={(v) => update("personalExpenses", v)} isCompleted={filled(formData.personalExpenses)} />
+                <InputField label="Admin & Establishment" value={formData.adminExpenses} onChange={(v) => update("adminExpenses", v)} isCompleted={filled(formData.adminExpenses)} />
+                <InputField label="Selling & Distribution" value={formData.sellingExpenses} onChange={(v) => update("sellingExpenses", v)} isCompleted={filled(formData.sellingExpenses)} />
+                <InputField label="Financial Expenses" value={formData.financialExpenses} onChange={(v) => update("financialExpenses", v)} isCompleted={filled(formData.financialExpenses)} />
+                <InputField label="Depreciation" value={formData.depreciation} onChange={(v) => update("depreciation", v)} isCompleted={filled(formData.depreciation)} />
                 <CalcField label="Total Overheads" value={calc.totalOverheads} isCompleted={overheadsOk} />
               </div>
             </Section>
 
             <Section title="Budget Non-Operating Items (LKR)">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
-                <InputField label="Provisions" value={formData.provisions} onChange={v => update("provisions", v)} isCompleted={filled(formData.provisions)} />
-                <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={v => update("exchange", v)} isCompleted={filled(formData.exchange)} />
-                <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={v => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
-                <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={v => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
+                <InputField label="Provisions" value={formData.provisions} onChange={(v) => update("provisions", v)} isCompleted={filled(formData.provisions)} />
+                <InputField label="Exchange (Loss/Gain)" value={formData.exchange} onChange={(v) => update("exchange", v)} isCompleted={filled(formData.exchange)} />
+                <InputField label="Non-Operating Expenses" value={formData.nonOpsExpenses} onChange={(v) => update("nonOpsExpenses", v)} isCompleted={filled(formData.nonOpsExpenses)} />
+                <InputField label="Non-Operating Income" value={formData.nonOpsIncome} onChange={(v) => update("nonOpsIncome", v)} isCompleted={filled(formData.nonOpsIncome)} />
               </div>
             </Section>
 
@@ -398,7 +529,7 @@ export default function BudgetEntryPage() {
               </div>
             </Section>
 
-            <Section title="Additional Comments">
+            <Section title="Budget Comment">
               <div className="pt-5">
                 <textarea
                   value={formData.comment}
@@ -411,7 +542,7 @@ export default function BudgetEntryPage() {
           </div>
         </div>
 
-        {/* Progress Panel - Blue Theme for Budget */}
+        {/* Progress Panel */}
         <div className="hidden lg:flex w-60 bg-white border-l border-slate-200 flex-col">
           <div className="p-5 border-b border-slate-200">
             <div className="flex items-center justify-between mb-3">
@@ -457,11 +588,12 @@ export default function BudgetEntryPage() {
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
+              disabled={submitting || !selectedCompanyId || !year || !month}
+              className="h-10 px-5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Draft
+              {submitting ? "Saving..." : "Save Draft"}
             </button>
-            <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !company || !month}
+            <button type="button" onClick={() => setShowModal(true)} disabled={!pbtAfterOk || !selectedCompanyId || !month || !year || submitting}
               className="h-10 px-6 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Submit Budget
             </button>
@@ -469,7 +601,7 @@ export default function BudgetEntryPage() {
         </div>
       </div>
 
-      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={() => { setShowModal(false); alert("Budget submitted successfully!"); }} company={company} month={month} />
+      <ConfirmModal isOpen={showModal} onClose={() => setShowModal(false)} onConfirm={handleSubmitBudget} company={selectedCompanyName} month={`${month} ${year}`} submitting={submitting} />
     </div>
   );
 }
