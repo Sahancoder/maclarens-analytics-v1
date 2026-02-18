@@ -1,138 +1,219 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Send, X, ChevronDown, AlertCircle, Mail, MessageSquare, Edit2, Save, History } from "lucide-react";
+import { Send, AlertCircle, RefreshCw, CheckCircle2, Building2, Calendar, User, Pencil, Save, X } from "lucide-react";
+import { FDAPI } from "@/lib/api-client";
 
-const reportData = [
-  { metric: "Revenue (LKR)", monthlyActual: "12,500,000", monthlyBudget: "12,000,000", monthlyVariance: "500,000", monthlyAchievement: "104.17%", ytdActual: "145,000,000", ytdBudget: "140,000,000", ytdAchievement: "103.57%" },
-  { metric: "Gross Profit (GP)", monthlyActual: "4,375,000", monthlyBudget: "4,200,000", monthlyVariance: "175,000", monthlyAchievement: "104.17%", ytdActual: "51,000,000", ytdBudget: "49,000,000", ytdAchievement: "104.08%" },
-  { metric: "GP Margin", monthlyActual: "35.00%", monthlyBudget: "35.00%", monthlyVariance: "0.00%", monthlyAchievement: "100.00%", ytdActual: "35.17%", ytdBudget: "35.00%", ytdAchievement: "100.49%", isCalc: true },
-  { metric: "Other Income", monthlyActual: "250,000", monthlyBudget: "200,000", monthlyVariance: "50,000", monthlyAchievement: "125.00%", ytdActual: "2,500,000", ytdBudget: "2,400,000", ytdAchievement: "104.17%" },
-  { metric: "Personal Related Expenses", monthlyActual: "1,500,000", monthlyBudget: "1,600,000", monthlyVariance: "-100,000", monthlyAchievement: "93.75%", ytdActual: "17,500,000", ytdBudget: "18,000,000", ytdAchievement: "97.22%" },
-  { metric: "Admin & Establishment", monthlyActual: "800,000", monthlyBudget: "850,000", monthlyVariance: "-50,000", monthlyAchievement: "94.12%", ytdActual: "9,000,000", ytdBudget: "9,500,000", ytdAchievement: "94.74%" },
-  { metric: "Selling & Distribution", monthlyActual: "600,000", monthlyBudget: "650,000", monthlyVariance: "-50,000", monthlyAchievement: "92.31%", ytdActual: "7,000,000", ytdBudget: "7,500,000", ytdAchievement: "93.33%" },
-  { metric: "Financial Expenses", monthlyActual: "200,000", monthlyBudget: "180,000", monthlyVariance: "20,000", monthlyAchievement: "111.11%", ytdActual: "2,200,000", ytdBudget: "2,000,000", ytdAchievement: "110.00%" },
-  { metric: "Depreciation", monthlyActual: "300,000", monthlyBudget: "300,000", monthlyVariance: "0", monthlyAchievement: "100.00%", ytdActual: "3,600,000", ytdBudget: "3,600,000", ytdAchievement: "100.00%" },
-  { metric: "Total Overheads", monthlyActual: "3,400,000", monthlyBudget: "3,580,000", monthlyVariance: "-180,000", monthlyAchievement: "94.97%", ytdActual: "39,300,000", ytdBudget: "40,600,000", ytdAchievement: "96.80%", isCalc: true },
-  { metric: "Provisions", monthlyActual: "50,000", monthlyBudget: "75,000", monthlyVariance: "-25,000", monthlyAchievement: "66.67%", ytdActual: "600,000", ytdBudget: "800,000", ytdAchievement: "75.00%" },
-  { metric: "Exchange (Loss/Gain)", monthlyActual: "-30,000", monthlyBudget: "-20,000", monthlyVariance: "-10,000", monthlyAchievement: "150.00%", ytdActual: "-350,000", ytdBudget: "-240,000", ytdAchievement: "145.83%" },
-  { metric: "PBT Before Non-Ops", monthlyActual: "1,145,000", monthlyBudget: "725,000", monthlyVariance: "420,000", monthlyAchievement: "157.93%", ytdActual: "13,850,000", ytdBudget: "10,500,000", ytdAchievement: "131.90%", isCalc: true },
-  { metric: "NP Margin", monthlyActual: "9.16%", monthlyBudget: "6.04%", monthlyVariance: "3.12%", monthlyAchievement: "151.66%", ytdActual: "9.55%", ytdBudget: "7.50%", ytdAchievement: "127.33%", isCalc: true },
-  { metric: "Non-Operating Expenses", monthlyActual: "100,000", monthlyBudget: "120,000", monthlyVariance: "-20,000", monthlyAchievement: "83.33%", ytdActual: "1,100,000", ytdBudget: "1,300,000", ytdAchievement: "84.62%" },
-  { metric: "Non-Operating Income", monthlyActual: "80,000", monthlyBudget: "60,000", monthlyVariance: "20,000", monthlyAchievement: "133.33%", ytdActual: "900,000", ytdBudget: "700,000", ytdAchievement: "128.57%" },
-  { metric: "PBT After Non-Ops", monthlyActual: "1,125,000", monthlyBudget: "665,000", monthlyVariance: "460,000", monthlyAchievement: "169.17%", ytdActual: "13,650,000", ytdBudget: "9,900,000", ytdAchievement: "137.88%", isCalc: true },
-  { metric: "EBIT", monthlyActual: "1,325,000", monthlyBudget: "845,000", monthlyVariance: "480,000", monthlyAchievement: "156.80%", ytdActual: "15,850,000", ytdBudget: "11,900,000", ytdAchievement: "133.19%", isCalc: true },
-  { metric: "EBITDA", monthlyActual: "1,625,000", monthlyBudget: "1,145,000", monthlyVariance: "480,000", monthlyAchievement: "141.92%", ytdActual: "19,450,000", ytdBudget: "15,500,000", ytdAchievement: "125.48%", isCalc: true },
+const MONTHS = [
+  "", "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-const pendingReports = [
-  { id: 1, company: "McLarens Maritime Academy", month: "December 2025", submittedBy: "Sahan Hettiarachchi", submittedAt: "Dec 20, 2025" },
-  { id: 2, company: "GAC Shipping Limited", month: "December 2025", submittedBy: "Natali Craig", submittedAt: "Dec 19, 2025" },
-  { id: 3, company: "Spectra Logistics", month: "November 2025", submittedBy: "Drew Cano", submittedAt: "Dec 18, 2025" },
+const METRIC_LABELS: Record<string, string> = {
+  revenue: "Revenue (LKR)",
+  gp: "Gross Profit (GP)",
+  gp_margin: "GP Margin",
+  other_income: "Other Income",
+  personal_exp: "Personal Related Expenses",
+  admin_exp: "Admin & Establishment",
+  selling_exp: "Selling & Distribution",
+  finance_exp: "Financial Expenses",
+  depreciation: "Depreciation",
+  total_overheads: "Total Overheads",
+  provisions: "Provisions",
+  exchange_variance: "Exchange (Loss/Gain)",
+  pbt_before_non_ops: "PBT Before Non-Ops",
+  np_margin: "NP Margin",
+  non_ops_exp: "Non-Operating Expenses",
+  non_ops_income: "Non-Operating Income",
+  pbt_after_non_ops: "PBT After Non-Ops",
+  ebit: "EBIT",
+  ebitda: "EBITDA",
+};
+
+const METRIC_ORDER = [
+  "revenue", "gp", "gp_margin", "other_income",
+  "personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation",
+  "total_overheads", "provisions", "exchange_variance",
+  "pbt_before_non_ops", "np_margin",
+  "non_ops_exp", "non_ops_income",
+  "pbt_after_non_ops", "ebit", "ebitda",
 ];
 
-interface Comment {
-  id: string;
-  authorRole: 'FINANCE_OFFICER' | 'SYSTEM_ADMIN' | 'FINANCE_DIRECTOR';
-  authorName: string;
-  message: string;
-  createdAt: string;
-  type: 'SUBMISSION' | 'FD_EDIT';
-  parentCommentId?: string;
-  timestamp?: string; // ISO string for sorting if needed, or keeping simple string for demo
+const CALCULATED_METRICS = new Set([
+  "gp_margin", "total_overheads", "pbt_before_non_ops", "np_margin",
+  "pbt_after_non_ops", "ebit", "ebitda",
+]);
+
+interface SubmittedReport {
+  company_id: string;
+  company_name: string;
+  cluster_name: string;
+  period_id: number;
+  year: number;
+  month: number;
+  status: string;
+  actual_comment: string | null;
+  budget_comment: string | null;
+  submitted_by: string | null;
+  submitted_date: string | null;
+  actual_metrics: Record<string, number | null>;
+  budget_metrics: Record<string, number | null>;
+  ytd_actual_metrics: Record<string, number | null>;
+  ytd_budget_metrics: Record<string, number | null>;
+  fin_year_start_month: number | null;
 }
 
-const MOCK_COMMENTS: Comment[] = [
-  {
-    id: "c1",
-    authorRole: "FINANCE_OFFICER",
-    authorName: "Sahan Hettiarachchi",
-    message: "Revenue is slightly higher due to unexpected short courses run this month. However, repairs on the simulator caused a spike in maintenance costs.",
-    createdAt: "Dec 20, 2025 • 4:30 PM",
-    type: "SUBMISSION",
-    timestamp: "2025-12-20T16:30:00"
-  },
-  {
-    id: "c2",
-    authorRole: "SYSTEM_ADMIN",
-    authorName: "System",
-    message: "Budget data for FY2025-26 imported successfully from master budget file v4.",
-    createdAt: "Dec 20, 2025 • 4:35 PM",
-    type: "SUBMISSION",
-    timestamp: "2025-12-20T16:35:00"
-  }
-];
+function fmtNum(v: number | null | undefined): string {
+  if (v == null) return "\u2014";
+  return v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function achievement(actual: number | null | undefined, budget: number | null | undefined): string {
+  if (actual == null || budget == null || budget === 0) return "\u2014";
+  return ((actual / budget) * 100).toFixed(1) + "%";
+}
+
+function achvColor(actual: number | null | undefined, budget: number | null | undefined): string {
+  if (actual == null || budget == null || budget === 0) return "text-slate-400";
+  const pct = (actual / budget) * 100;
+  return pct >= 100 ? "text-emerald-600" : "text-amber-600";
+}
 
 export default function ReportsPage() {
   const router = useRouter();
-  const [selectedReport, setSelectedReport] = useState(pendingReports[0]);
+  const [reports, setReports] = useState<SubmittedReport[]>([]);
+  const [selectedReport, setSelectedReport] = useState<SubmittedReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Comment System State
-  const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editMessage, setEditMessage] = useState("");
+  // Editable comments state
+  const [editingComments, setEditingComments] = useState(false);
+  const [editActualComment, setEditActualComment] = useState("");
+  const [editBudgetComment, setEditBudgetComment] = useState("");
+  const [commentSaving, setCommentSaving] = useState(false);
 
-  const handleEditClick = (comment: Comment) => {
-    // If we are editing an existing edit, prepopulate that. 
-    // If editing a submission, prepopulate with its message.
-    setEditingCommentId(comment.id);
-    setEditMessage(comment.message);
+  const loadReports = async () => {
+    setLoading(true);
+    setError(null);
+    const res = await FDAPI.getSubmittedActuals();
+    setLoading(false);
+    if (res.data) {
+      setReports(res.data.reports);
+      if (res.data.reports.length > 0) {
+        setSelectedReport(res.data.reports[0]);
+      } else {
+        setSelectedReport(null);
+      }
+    } else {
+      setError(res.error || "Failed to load reports");
+    }
   };
 
-  const handleSaveEdit = (parentComment: Comment) => {
-    if (!editMessage.trim()) return;
+  useEffect(() => {
+    loadReports();
+  }, []);
 
-    // Remove existing edit if any (to replace it) or add new
-    // For this list-based approach, let's filter out old edits for this parent first
-    const cleanComments = comments.filter(c => c.parentCommentId !== parentComment.id);
+  // Reset editing state when selected report changes
+  useEffect(() => {
+    setEditingComments(false);
+  }, [selectedReport?.company_id, selectedReport?.period_id]);
 
-    const newEditComment: Comment = {
-      id: `edit-${Date.now()}`,
-      authorRole: "FINANCE_DIRECTOR",
-      authorName: "Finance Director",
-      message: editMessage,
-      createdAt: new Date().toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', hour12: true }),
-      type: "FD_EDIT",
-      parentCommentId: parentComment.id,
-      timestamp: new Date().toISOString()
-    };
-
-    setComments([...cleanComments, newEditComment]);
-    setEditingCommentId(null);
-    setEditMessage("");
+  const handleApprove = async () => {
+    if (!selectedReport) return;
+    setActionLoading(true);
+    const res = await FDAPI.approveActual(selectedReport.company_id, selectedReport.period_id);
+    setActionLoading(false);
+    if (res.data) {
+      setShowApproveConfirm(false);
+      const updated = reports.filter(
+        (r) => !(r.company_id === selectedReport.company_id && r.period_id === selectedReport.period_id)
+      );
+      setReports(updated);
+      setSelectedReport(updated.length > 0 ? updated[0] : null);
+    } else {
+      alert(res.error || "Failed to approve");
+    }
   };
 
-  const handleCancelEdit = () => {
-    setEditingCommentId(null);
-    setEditMessage("");
+  const handleReject = async () => {
+    if (!selectedReport || !rejectComment.trim()) return;
+    setActionLoading(true);
+    const res = await FDAPI.rejectActual(selectedReport.company_id, selectedReport.period_id, rejectComment);
+    setActionLoading(false);
+    if (res.data) {
+      setShowRejectModal(false);
+      setRejectComment("");
+      const updated = reports.filter(
+        (r) => !(r.company_id === selectedReport.company_id && r.period_id === selectedReport.period_id)
+      );
+      setReports(updated);
+      setSelectedReport(updated.length > 0 ? updated[0] : null);
+    } else {
+      alert(res.error || "Failed to reject");
+    }
   };
 
-  const handleSubmitToMD = () => {
-    setShowApproveConfirm(false);
-    
-    // Check if we have edits
-    const hasEdits = comments.some(c => c.type === "FD_EDIT");
-    const submissionNote = hasEdits ? " (with FD corrected comments)" : "";
-
-    // In real app: API call to submit report to MD dashboard with the comment payload
-    alert(`Report for ${selectedReport.company} - ${selectedReport.month} has been submitted to MD Dashboard${submissionNote}.`);
-    router.push("/finance-director/dashboard");
+  const startEditComments = () => {
+    if (!selectedReport) return;
+    setEditActualComment(selectedReport.actual_comment || "");
+    setEditBudgetComment(selectedReport.budget_comment || "");
+    setEditingComments(true);
   };
 
-  const handleSendBack = () => {
-    if (!rejectComment.trim()) return;
-    
-    // In real app: API call to send report back for correction
-    // This would send email notification to Finance Officer
-    alert(`Report sent back for correction. Email sent to ${selectedReport.submittedBy}: "${rejectComment}"`);
-    setShowRejectModal(false);
-    setRejectComment("");
-    router.push("/finance-director/dashboard");
+  const cancelEditComments = () => {
+    setEditingComments(false);
   };
+
+  const saveComments = async () => {
+    if (!selectedReport) return;
+    setCommentSaving(true);
+    const res = await FDAPI.updateComments(
+      selectedReport.company_id,
+      selectedReport.period_id,
+      editActualComment,
+      editBudgetComment,
+    );
+    setCommentSaving(false);
+    if (res.data) {
+      // Update local state
+      const updatedReport = {
+        ...selectedReport,
+        actual_comment: editActualComment || null,
+        budget_comment: editBudgetComment || null,
+      };
+      setSelectedReport(updatedReport);
+      setReports((prev) =>
+        prev.map((r) =>
+          r.company_id === selectedReport.company_id && r.period_id === selectedReport.period_id
+            ? updatedReport
+            : r
+        )
+      );
+      setEditingComments(false);
+    } else {
+      alert(res.error || "Failed to save comments");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col bg-slate-50">
+        <div className="bg-white border-b border-slate-200 px-6 py-5">
+          <h1 className="text-xl font-semibold text-slate-900">Review Reports</h1>
+        </div>
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin h-8 w-8 border-4 border-[#0b1f3a] border-t-transparent rounded-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
@@ -140,284 +221,305 @@ export default function ReportsPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Review Report</h1>
-            <p className="text-sm text-slate-500 mt-1">Review reports from Finance Officer and submit to MD</p>
+            <h1 className="text-xl font-semibold text-slate-900">Review Reports</h1>
+            <p className="text-sm text-slate-500 mt-1">Review submitted actuals from Finance Officers</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 h-10 px-4 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
-              <Download className="h-4 w-4" /> Export Report
-            </button>
-          </div>
+          <button
+            onClick={loadReports}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-[#0b1f3a] hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Pending Reports List */}
-        <div className="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col h-64 md:h-auto border-b md:border-b-0">
-          <div className="p-4 border-b border-slate-200">
-            <h3 className="text-sm font-semibold text-slate-800">Pending Approval</h3>
-            <p className="text-xs text-slate-500 mt-1">{pendingReports.length} reports waiting</p>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {pendingReports.map((report) => (
-              <button
-                key={report.id}
-                onClick={() => setSelectedReport(report)}
-                className={`w-full p-4 text-left border-b border-slate-100 transition-colors ${
-                  selectedReport.id === report.id ? "bg-[#0b1f3a]/5 border-l-2 border-l-[#0b1f3a]" : "hover:bg-slate-50"
-                }`}
-              >
-                <p className="text-sm font-medium text-slate-900">{report.company}</p>
-                <p className="text-xs text-slate-500 mt-1">{report.month}</p>
-                <p className="text-xs text-slate-400 mt-1">By {report.submittedBy}</p>
-              </button>
-            ))}
+      {error && (
+        <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {reports.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 mb-4">
+              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">All Clear</h3>
+            <p className="text-sm text-slate-600">No pending reports to review.</p>
           </div>
         </div>
-
-        {/* Report Details */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          {/* Report Info */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">{selectedReport.company}</h2>
-                <p className="text-sm text-slate-500 mt-1">{selectedReport.month} - Financial Year 2025-26</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-slate-500">Submitted by</p>
-                <p className="text-sm font-medium text-slate-900">{selectedReport.submittedBy}</p>
-                <p className="text-xs text-slate-400 mt-1">{selectedReport.submittedAt}</p>
-              </div>
+      ) : (
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+          {/* Pending Reports List */}
+          <div className="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col h-64 md:h-auto border-b md:border-b-0">
+            <div className="p-4 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-800">Pending Approval</h3>
+              <p className="text-xs text-slate-500 mt-1">{reports.length} reports waiting</p>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {reports.map((report) => (
+                <button
+                  key={`${report.company_id}-${report.period_id}`}
+                  onClick={() => setSelectedReport(report)}
+                  className={`w-full p-4 text-left border-b border-slate-100 transition-colors ${
+                    selectedReport?.company_id === report.company_id && selectedReport?.period_id === report.period_id
+                      ? "bg-[#0b1f3a]/5 border-l-2 border-l-[#0b1f3a]"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-slate-900">{report.company_name}</p>
+                  <p className="text-xs text-slate-500 mt-1">{MONTHS[report.month]} {report.year}</p>
+                  {report.submitted_by && (
+                    <p className="text-xs text-slate-400 mt-1">By {report.submitted_by}</p>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Actual vs Budget Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase w-64">Metric</th>
-                    
-                    {/* Monthly Headers */}
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase border-l border-slate-100">Monthly Actual</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Monthly Budget</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Monthly Achv %</th>
-                    
-                    {/* YTD Headers */}
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase border-l border-slate-200 bg-slate-50/50">YTD Actual</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase bg-slate-50/50">YTD Budget</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase bg-slate-50/50">YTD Achv %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {reportData.map((row, i) => {
-                    const isMonthlyPositive = parseFloat(row.monthlyAchievement.replace("%", "")) >= 100;
-                    const isYtdPositive = parseFloat(row.ytdAchievement.replace("%", "")) >= 100;
-                    
-                    return (
-                      <tr key={i} className={row.isCalc ? "bg-slate-50" : "hover:bg-slate-50"}>
-                        <td className={`px-5 py-3 text-sm ${row.isCalc ? "font-semibold text-slate-800" : "text-slate-700"} whitespace-nowrap`}>
-                          {row.metric}
-                        </td>
-                        
-                        {/* Monthly Column Group */}
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono border-l border-slate-100">{row.monthlyActual}</td>
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono">{row.monthlyBudget}</td>
-                        <td className={`px-5 py-3 text-sm text-right font-mono font-medium ${isMonthlyPositive ? "text-emerald-600" : "text-amber-600"}`}>
-                          {row.monthlyAchievement}
-                        </td>
-
-                        {/* YTD Column Group */}
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono border-l border-slate-200 bg-slate-50/50">{row.ytdActual}</td>
-                        <td className="px-5 py-3 text-sm text-slate-700 text-right font-mono bg-slate-50/50">{row.ytdBudget}</td>
-                        <td className={`px-5 py-3 text-sm text-right font-mono font-medium bg-slate-50/50 ${isYtdPositive ? "text-emerald-600" : "text-amber-600"}`}>
-                          {row.ytdAchievement}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Comments & Review Section */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-5">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-8 w-8 rounded-full bg-[#0b1f3a]/10 flex items-center justify-center">
-                <MessageSquare className="h-4 w-4 text-[#0b1f3a]" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">Comments & Analysis</h3>
-                <p className="text-sm text-slate-500">Review and verify comments from Finance Officer</p>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {comments.filter(c => c.type === "SUBMISSION").map((comment) => {
-                const fdEdit = comments.find(c => c.type === "FD_EDIT" && c.parentCommentId === comment.id);
-                const isEditing = editingCommentId === comment.id;
-
-                return (
-                  <div key={comment.id} className="relative pl-4 border-l-2 border-slate-200">
-                    {/* Author Header */}
-                    <div className="flex items-center justify-between mb-2">
-                       <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-900">{comment.authorName}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                            comment.authorRole === 'SYSTEM_ADMIN' 
-                             ? 'bg-slate-100 text-slate-600 border-slate-200' 
-                             : 'bg-blue-50 text-blue-700 border-blue-100'
-                          }`}>
-                            {comment.authorRole === 'SYSTEM_ADMIN' ? 'SYSTEM' : 'FINANCE OFFICER'}
-                          </span>
-                       </div>
-                       <span className="text-xs text-slate-400">{comment.createdAt}</span>
-                    </div>
-
-                    {/* Original Message (Read Only) */}
-                    <div className={`text-sm text-slate-700 leading-relaxed p-3 rounded-lg ${fdEdit ? 'bg-slate-50 opacity-70 italic border border-slate-100' : ''}`}>
-                      {comment.message}
-                      {fdEdit && (
-                         <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-600">
-                            <History className="h-3 w-3" />
-                            <span>Corrected below by Finance Director</span>
-                         </div>
+          {/* Report Details */}
+          {selectedReport && (
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">
+              {/* Report Info */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">{selectedReport.company_name}</h2>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500 mt-1">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3.5 w-3.5" />
+                        {selectedReport.cluster_name}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {MONTHS[selectedReport.month]} {selectedReport.year}
+                      </span>
+                      {selectedReport.fin_year_start_month && (
+                        <span className="text-xs text-slate-400">
+                          FY starts {MONTHS[selectedReport.fin_year_start_month]}
+                        </span>
                       )}
                     </div>
-
-                    {/* Edit Button (Only visible if not currently editing and no existing edit - or allows re-edit) */}
-                    {!isEditing && !fdEdit && (
-                      <button 
-                         onClick={() => handleEditClick(comment)}
-                         className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#0b1f3a] hover:text-blue-700 transition-colors"
-                      >
-                         <Edit2 className="h-3 w-3" />
-                         Edit / Correct Comment
-                      </button>
+                  </div>
+                  <div className="text-right">
+                    {selectedReport.submitted_by && (
+                      <>
+                        <p className="text-sm text-slate-500">Submitted by</p>
+                        <p className="text-sm font-medium text-slate-900 flex items-center gap-1 justify-end">
+                          <User className="h-3.5 w-3.5" />
+                          {selectedReport.submitted_by}
+                        </p>
+                      </>
                     )}
-
-                    {/* FD Edit View */}
-                    {fdEdit && !isEditing && (
-                       <div className="mt-3 pl-4 relative">
-                          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-purple-200"></div>
-                          <div className="flex items-center justify-between mb-1.5">
-                             <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-slate-900">{fdEdit.authorName}</span>
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
-                                   FINANCE DIRECTOR
-                                </span>
-                             </div>
-                             <span className="text-xs text-slate-400">{fdEdit.createdAt}</span>
-                          </div>
-                          <div className="text-sm text-slate-800 bg-purple-50 border border-purple-100 p-3 rounded-lg shadow-sm">
-                             {fdEdit.message}
-                          </div>
-                          <button 
-                             onClick={() => {
-                               setEditingCommentId(comment.id); // We edit "against" the parent
-                               setEditMessage(fdEdit.message);  // But load the current edit content
-                             }}
-                             className="mt-2 flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900 transition-colors"
-                          >
-                             <Edit2 className="h-3 w-3" />
-                             Modify Correction
-                          </button>
-                       </div>
-                    )}
-
-                    {/* Edit Form (Active) */}
-                    {isEditing && (
-                      <div className="mt-3 bg-white border border-blue-200 rounded-lg p-3 shadow-md ring-1 ring-blue-500/20 animate-in fade-in slide-in-from-top-2 duration-200">
-                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
-                               <Edit2 className="h-3 w-3" />
-                               Editing Comment
-                            </span>
-                         </div>
-                         <textarea
-                            value={editMessage}
-                            onChange={(e) => setEditMessage(e.target.value)}
-                            className="w-full text-sm p-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-h-[80px]"
-                            placeholder="Enter corrected version..."
-                            autoFocus
-                         />
-                         <div className="flex justify-end gap-2 mt-3">
-                            <button 
-                               onClick={handleCancelEdit}
-                               className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded"
-                            >
-                               Cancel
-                            </button>
-                            <button 
-                               onClick={() => handleSaveEdit(comment)}
-                               className="px-3 py-1.5 text-xs font-medium text-white bg-[#0b1f3a] hover:bg-blue-800 rounded flex items-center gap-1.5"
-                            >
-                               <Save className="h-3 w-3" />
-                               Save Correction
-                            </button>
-                         </div>
-                      </div>
+                    {selectedReport.submitted_date && (
+                      <p className="text-xs text-slate-400 mt-1">
+                        {new Date(selectedReport.submitted_date).toLocaleString()}
+                      </p>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3">
-            <button
-              onClick={() => setShowRejectModal(true)}
-              className="flex items-center gap-2 h-11 px-6 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
-            >
-              <Mail className="h-4 w-4" /> Send Back for Correction
-            </button>
-            <button
-              onClick={() => setShowApproveConfirm(true)}
-              className="flex items-center gap-2 h-11 px-6 text-sm font-medium text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 transition-colors"
-            >
-              <Send className="h-4 w-4" /> Submit to MD
-            </button>
-          </div>
+                {/* Comments Section */}
+                <div className="mt-4">
+                  {!editingComments ? (
+                    <div className="space-y-3">
+                      {selectedReport.actual_comment && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                          <span className="font-semibold">Actual Comment:</span> {selectedReport.actual_comment}
+                        </div>
+                      )}
+                      {selectedReport.budget_comment && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                          <span className="font-semibold">Budget Comment:</span> {selectedReport.budget_comment}
+                        </div>
+                      )}
+                      <button
+                        onClick={startEditComments}
+                        className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-[#0b1f3a] transition-colors"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {selectedReport.actual_comment || selectedReport.budget_comment ? "Edit Comments" : "Add Comments"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Actual Comment</label>
+                        <textarea
+                          value={editActualComment}
+                          onChange={(e) => setEditActualComment(e.target.value)}
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="Enter actual comment..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Budget Comment</label>
+                        <textarea
+                          value={editBudgetComment}
+                          onChange={(e) => setEditBudgetComment(e.target.value)}
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                          placeholder="Enter budget comment..."
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={cancelEditComments}
+                          disabled={commentSaving}
+                          className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" /> Cancel
+                        </button>
+                        <button
+                          onClick={saveComments}
+                          disabled={commentSaving}
+                          className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+                        >
+                          {commentSaving ? (
+                            <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Save className="h-3 w-3" />
+                          )}
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Monthly + YTD Financial Data Table */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase w-52" rowSpan={2}>
+                          Metric
+                        </th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-slate-600 uppercase border-l border-slate-200" colSpan={3}>
+                          Monthly
+                        </th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-[#0b1f3a] uppercase border-l-2 border-[#0b1f3a]/20 bg-[#0b1f3a]/5" colSpan={3}>
+                          Year-to-Date (YTD)
+                        </th>
+                      </tr>
+                      <tr className="bg-slate-50">
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase border-l border-slate-200">Actual</th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase">Budget</th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase">Achv %</th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-[#0b1f3a] uppercase border-l-2 border-[#0b1f3a]/20 bg-[#0b1f3a]/5">Actual</th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-[#0b1f3a] uppercase bg-[#0b1f3a]/5">Budget</th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold text-[#0b1f3a] uppercase bg-[#0b1f3a]/5">Achv %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {METRIC_ORDER.map((key) => {
+                        const actual = selectedReport.actual_metrics[key];
+                        const budget = selectedReport.budget_metrics[key];
+                        const ytdActual = selectedReport.ytd_actual_metrics?.[key];
+                        const ytdBudget = selectedReport.ytd_budget_metrics?.[key];
+                        const isCalc = CALCULATED_METRICS.has(key);
+                        return (
+                          <tr key={key} className={isCalc ? "bg-slate-50/70" : "hover:bg-slate-50/50"}>
+                            <td className={`px-4 py-2.5 text-sm ${isCalc ? "font-semibold text-slate-800" : "text-slate-700"} whitespace-nowrap`}>
+                              {METRIC_LABELS[key] || key}
+                            </td>
+                            {/* Monthly Actual */}
+                            <td className="px-4 py-2.5 text-sm text-slate-700 text-right font-mono border-l border-slate-100">
+                              {fmtNum(actual)}
+                            </td>
+                            {/* Monthly Budget */}
+                            <td className="px-4 py-2.5 text-sm text-slate-700 text-right font-mono">
+                              {fmtNum(budget)}
+                            </td>
+                            {/* Monthly Achievement */}
+                            <td className={`px-4 py-2.5 text-sm text-right font-mono font-medium ${achvColor(actual, budget)}`}>
+                              {achievement(actual, budget)}
+                            </td>
+                            {/* YTD Actual */}
+                            <td className="px-4 py-2.5 text-sm text-slate-700 text-right font-mono border-l-2 border-[#0b1f3a]/10 bg-[#0b1f3a]/[0.02]">
+                              {fmtNum(ytdActual)}
+                            </td>
+                            {/* YTD Budget */}
+                            <td className="px-4 py-2.5 text-sm text-slate-700 text-right font-mono bg-[#0b1f3a]/[0.02]">
+                              {fmtNum(ytdBudget)}
+                            </td>
+                            {/* YTD Achievement */}
+                            <td className={`px-4 py-2.5 text-sm text-right font-mono font-medium bg-[#0b1f3a]/[0.02] ${achvColor(ytdActual, ytdBudget)}`}>
+                              {achievement(ytdActual, ytdBudget)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowRejectModal(true)}
+                  className="flex items-center gap-2 h-11 px-6 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                >
+                  <AlertCircle className="h-4 w-4" /> Send Back for Correction
+                </button>
+                <button
+                  onClick={() => setShowApproveConfirm(true)}
+                  className="flex items-center gap-2 h-11 px-6 text-sm font-medium text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 transition-colors"
+                >
+                  <Send className="h-4 w-4" /> Approve
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Approve Confirmation Modal */}
-      {showApproveConfirm && (
+      {showApproveConfirm && selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
                 <Send className="h-5 w-5 text-emerald-600" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">Submit to MD Dashboard</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Approve Report</h3>
             </div>
             <p className="text-sm text-slate-600 mb-6">
-              You are about to submit the report for <span className="font-semibold">{selectedReport.company}</span> - {selectedReport.month} to the MD Dashboard. This action cannot be undone.
+              Approve the actual report for <span className="font-semibold">{selectedReport.company_name}</span> — {MONTHS[selectedReport.month]} {selectedReport.year}?
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowApproveConfirm(false)}
-                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+                disabled={actionLoading}
+                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSubmitToMD}
-                className="h-10 px-5 text-sm font-medium text-white bg-emerald-500 rounded-lg hover:bg-emerald-600"
+                onClick={handleApprove}
+                disabled={actionLoading}
+                className="h-10 px-5 text-sm font-medium text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-2"
               >
-                Yes, Submit to MD
+                {actionLoading ? (
+                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Yes, Approve
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Reject Modal with Comment */}
-      {showRejectModal && (
+      {/* Reject Modal */}
+      {showRejectModal && selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
@@ -426,13 +528,13 @@ export default function ReportsPage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Send Back for Correction</h3>
-                <p className="text-sm text-slate-500">Please provide details of what needs to be corrected</p>
+                <p className="text-sm text-slate-500">Provide details of what needs to be corrected</p>
               </div>
             </div>
 
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm text-amber-800">
-                This comment will be sent to <span className="font-semibold">{selectedReport.submittedBy}</span> via email and will appear in their notifications.
+                This will notify <span className="font-semibold">{selectedReport.submitted_by || "the Finance Officer"}</span>.
               </p>
             </div>
 
@@ -443,28 +545,31 @@ export default function ReportsPage() {
               <textarea
                 value={rejectComment}
                 onChange={(e) => setRejectComment(e.target.value)}
-                placeholder="Please describe what needs to be corrected in the report..."
+                placeholder="Describe what needs to be corrected..."
                 rows={4}
                 className="w-full px-4 py-3 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
-              <p className="text-xs text-slate-400 mt-2">
-                This message will be visible in the Comments section for both parties.
-              </p>
             </div>
 
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setShowRejectModal(false); setRejectComment(""); }}
-                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+                disabled={actionLoading}
+                className="h-10 px-4 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSendBack}
-                disabled={!rejectComment.trim()}
-                className="h-10 px-5 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleReject}
+                disabled={!rejectComment.trim() || actionLoading}
+                className="h-10 px-5 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Send Back & Email Finance Officer
+                {actionLoading ? (
+                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                Send Back
               </button>
             </div>
           </div>

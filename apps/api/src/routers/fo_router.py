@@ -1171,7 +1171,7 @@ async def get_budget_from_fact(
         and_(
             FinancialFact.company_id == company_id,
             FinancialFact.period_id == period.period_id,
-            FinancialFact.actual_budget == "budget",
+            FinancialFact.actual_budget == Scenario.BUDGET.value,
         )
     )
     fact_result = await db.execute(fact_stmt)
@@ -1204,7 +1204,7 @@ async def save_actual_data(
     """
     Save actual data to financial_fact table and update financial_workflow.
 
-    For each metric field, upserts into financial_fact with actual_budget='actual'.
+    For each metric field, upserts into financial_fact with actual_budget='ACTUAL'.
     Updates financial_workflow:
       - status_id = 2 (Submitted) if is_submit=True, else 1 (Draft)
       - submitted_by = current user email
@@ -1264,7 +1264,7 @@ async def save_actual_data(
                 FinancialFact.company_id == data.company_id,
                 FinancialFact.period_id == period.period_id,
                 FinancialFact.metric_id == int(metric_id),
-                FinancialFact.actual_budget == "actual",
+                FinancialFact.actual_budget == Scenario.ACTUAL.value,
             )
         )
         existing_result = await db.execute(existing_stmt)
@@ -1277,7 +1277,7 @@ async def save_actual_data(
                 company_id=data.company_id,
                 period_id=period.period_id,
                 metric_id=int(metric_id),
-                actual_budget="actual",
+                actual_budget=Scenario.ACTUAL.value,
                 amount=amount,
             )
             db.add(new_fact)
@@ -1768,3 +1768,235 @@ async def submit_actual_entry(
         submitted_date=submitted_at,
         saved_metrics=saved_metrics,
     )
+
+
+# ============================================================
+# FO ACTUAL DRAFTS & REJECTED REPORTS
+# ============================================================
+
+_METRIC_ID_TO_FIELD: Dict[int, str] = {
+    int(MetricID.REVENUE): "revenue",
+    int(MetricID.GP): "gp",
+    int(MetricID.GP_MARGIN): "gp_margin",
+    int(MetricID.OTHER_INCOME): "other_income",
+    int(MetricID.PERSONAL_EXP): "personal_exp",
+    int(MetricID.ADMIN_EXP): "admin_exp",
+    int(MetricID.SELLING_EXP): "selling_exp",
+    int(MetricID.FINANCE_EXP): "finance_exp",
+    int(MetricID.DEPRECIATION): "depreciation",
+    int(MetricID.TOTAL_OVERHEAD): "total_overhead",
+    int(MetricID.PROVISIONS): "provisions",
+    int(MetricID.EXCHANGE_VARIANCE): "exchange_variance",
+    int(MetricID.PBT_BEFORE_NON_OPS): "pbt_before_non_ops",
+    int(MetricID.PBT_AFTER_NON_OPS): "pbt_after_non_ops",
+    int(MetricID.NON_OPS_EXP): "non_ops_exp",
+    int(MetricID.NON_OPS_INCOME): "non_ops_income",
+    int(MetricID.NP_MARGIN): "np_margin",
+    int(MetricID.EBIT): "ebit",
+    int(MetricID.EBITDA): "ebitda",
+}
+
+
+class FODraftItem(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_name: str
+    period_id: int
+    year: int
+    month: int
+    status: str
+    actual_comment: Optional[str] = None
+    submitted_by: Optional[str] = None
+    submitted_date: Optional[datetime] = None
+    metrics: Dict[str, Optional[float]] = {}
+
+
+class FODraftListResponse(BaseModel):
+    drafts: List[FODraftItem]
+    total: int
+
+
+class FORejectedItem(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_name: str
+    period_id: int
+    year: int
+    month: int
+    status: str
+    actual_comment: Optional[str] = None
+    submitted_by: Optional[str] = None
+    submitted_date: Optional[datetime] = None
+    rejected_by: Optional[str] = None
+    rejected_date: Optional[datetime] = None
+    reject_reason: Optional[str] = None
+    metrics: Dict[str, Optional[float]] = {}
+
+
+class FORejectedListResponse(BaseModel):
+    reports: List[FORejectedItem]
+    total: int
+
+
+async def _get_fo_user_company_ids(db: AsyncSession, user_id: str) -> List[str]:
+    """Get company_ids accessible to this FO user via user_company_role_map."""
+    stmt = (
+        select(UserCompanyRoleMap.company_id)
+        .where(
+            and_(
+                UserCompanyRoleMap.user_id == user_id,
+                UserCompanyRoleMap.is_active == True,
+            )
+        )
+        .distinct()
+    )
+    result = await db.execute(stmt)
+    return [row[0] for row in result.all()]
+
+
+@router.get("/actual-drafts", response_model=FODraftListResponse)
+async def get_fo_actual_drafts(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get actual drafts for the logged-in FO's companies. status_id=1 (Draft) with ACTUAL financial_fact rows."""
+    user_companies = await _get_fo_user_company_ids(db, user.user_id)
+    if not user_companies:
+        return FODraftListResponse(drafts=[], total=0)
+
+    from sqlalchemy import exists as sa_exists
+
+    rows = (
+        await db.execute(
+            select(
+                FinancialWorkflow,
+                CompanyMaster.company_name,
+                ClusterMaster.cluster_name,
+                PeriodMaster,
+            )
+            .join(CompanyMaster, CompanyMaster.company_id == FinancialWorkflow.company_id)
+            .join(ClusterMaster, ClusterMaster.cluster_id == CompanyMaster.cluster_id)
+            .join(PeriodMaster, PeriodMaster.period_id == FinancialWorkflow.period_id)
+            .where(
+                and_(
+                    FinancialWorkflow.company_id.in_(user_companies),
+                    FinancialWorkflow.status_id == int(StatusID.DRAFT),
+                    sa_exists(
+                        select(FinancialFact.company_id).where(
+                            FinancialFact.company_id == FinancialWorkflow.company_id,
+                            FinancialFact.period_id == FinancialWorkflow.period_id,
+                            func.upper(FinancialFact.actual_budget) == "ACTUAL",
+                        )
+                    ),
+                )
+            )
+            .order_by(FinancialWorkflow.submitted_date.desc())
+        )
+    ).all()
+
+    drafts: List[FODraftItem] = []
+    for workflow, company_name, cluster_name, period in rows:
+        fact_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    func.upper(FinancialFact.actual_budget) == "ACTUAL",
+                )
+            )
+        ).all()
+
+        metrics_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in fact_rows:
+            field_name = _METRIC_ID_TO_FIELD.get(int(metric_id))
+            if field_name:
+                metrics_data[field_name] = float(amount) if amount is not None else None
+
+        drafts.append(
+            FODraftItem(
+                company_id=workflow.company_id,
+                company_name=company_name,
+                cluster_name=cluster_name,
+                period_id=workflow.period_id,
+                year=period.year,
+                month=period.month,
+                status="Draft",
+                actual_comment=workflow.actual_comment,
+                submitted_by=workflow.submitted_by,
+                submitted_date=workflow.submitted_date,
+                metrics=metrics_data,
+            )
+        )
+
+    return FODraftListResponse(drafts=drafts, total=len(drafts))
+
+
+@router.get("/rejected-actuals", response_model=FORejectedListResponse)
+async def get_fo_rejected_actuals(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get rejected actual reports for the logged-in FO's companies. status_id=4 (Rejected)."""
+    user_companies = await _get_fo_user_company_ids(db, user.user_id)
+    if not user_companies:
+        return FORejectedListResponse(reports=[], total=0)
+
+    rows = (
+        await db.execute(
+            select(
+                FinancialWorkflow,
+                CompanyMaster.company_name,
+                ClusterMaster.cluster_name,
+                PeriodMaster,
+            )
+            .join(CompanyMaster, CompanyMaster.company_id == FinancialWorkflow.company_id)
+            .join(ClusterMaster, ClusterMaster.cluster_id == CompanyMaster.cluster_id)
+            .join(PeriodMaster, PeriodMaster.period_id == FinancialWorkflow.period_id)
+            .where(
+                and_(
+                    FinancialWorkflow.company_id.in_(user_companies),
+                    FinancialWorkflow.status_id == int(StatusID.REJECTED),
+                )
+            )
+            .order_by(FinancialWorkflow.rejected_date.desc())
+        )
+    ).all()
+
+    reports: List[FORejectedItem] = []
+    for workflow, company_name, cluster_name, period in rows:
+        fact_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    func.upper(FinancialFact.actual_budget) == "ACTUAL",
+                )
+            )
+        ).all()
+
+        metrics_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in fact_rows:
+            field_name = _METRIC_ID_TO_FIELD.get(int(metric_id))
+            if field_name:
+                metrics_data[field_name] = float(amount) if amount is not None else None
+
+        reports.append(
+            FORejectedItem(
+                company_id=workflow.company_id,
+                company_name=company_name,
+                cluster_name=cluster_name,
+                period_id=workflow.period_id,
+                year=period.year,
+                month=period.month,
+                status="Rejected",
+                actual_comment=workflow.actual_comment,
+                submitted_by=workflow.submitted_by,
+                submitted_date=workflow.submitted_date,
+                rejected_by=workflow.rejected_by,
+                rejected_date=workflow.rejected_date,
+                reject_reason=workflow.reject_reason,
+                metrics=metrics_data,
+            )
+        )
+
+    return FORejectedListResponse(reports=reports, total=len(reports))

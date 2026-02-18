@@ -12,7 +12,7 @@ Endpoints:
 - GET  /fd/dashboard            - Summary statistics for FD
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -21,8 +21,11 @@ from sqlalchemy import select, and_, func
 
 from src.db.models import (
     User, UserRole, Company, Report, ReportStatus, ReportComment,
-    FinancialMonthly, Scenario, ReportStatusHistory, Notification, NotificationType
+    FinancialMonthly, Scenario, ReportStatusHistory, Notification, NotificationType,
+    FinancialWorkflow, FinancialFact, CompanyMaster, ClusterMaster, PeriodMaster,
+    UserCompanyRoleMap, UserMaster,
 )
+from src.config.constants import MetricID, StatusID, RoleID
 from src.security.middleware import (
     get_db, get_current_active_user, require_fd
 )
@@ -289,8 +292,13 @@ async def get_pending_reports(
                 submitter_name = submitter.name
                 submitter_email = submitter.email
         
-        # Calculate days pending
-        days_pending = (now - report.submitted_at).days if report.submitted_at else 0
+        # Calculate days pending (handle offset-naive vs offset-aware datetimes)
+        days_pending = 0
+        if report.submitted_at:
+            submitted = report.submitted_at
+            if submitted.tzinfo is not None:
+                submitted = submitted.replace(tzinfo=None)
+            days_pending = (now - submitted).days
         
         pending_reports.append(PendingReportSummary(
             id=str(report.id),
@@ -383,7 +391,10 @@ async def get_all_reports(
         
         days_pending = 0
         if report.status == ReportStatus.SUBMITTED and report.submitted_at:
-            days_pending = (now - report.submitted_at).days
+            submitted = report.submitted_at
+            if submitted.tzinfo is not None:
+                submitted = submitted.replace(tzinfo=None)
+            days_pending = (now - submitted).days
         
         report_list.append(PendingReportSummary(
             id=str(report.id),
@@ -851,4 +862,619 @@ async def get_fd_dashboard(
         total_companies=total_companies,
         companies_submitted=companies_submitted,
         companies_pending=max(0, companies_pending)
+    )
+
+
+# ============================================================
+# FD ACTUAL REVIEW: Submitted Actuals from financial_workflow
+# ============================================================
+
+_METRIC_ID_TO_FIELD: Dict[int, str] = {
+    int(MetricID.REVENUE): "revenue",
+    int(MetricID.GP): "gp",
+    int(MetricID.GP_MARGIN): "gp_margin",
+    int(MetricID.OTHER_INCOME): "other_income",
+    int(MetricID.PERSONAL_EXP): "personal_exp",
+    int(MetricID.ADMIN_EXP): "admin_exp",
+    int(MetricID.SELLING_EXP): "selling_exp",
+    int(MetricID.FINANCE_EXP): "finance_exp",
+    int(MetricID.DEPRECIATION): "depreciation",
+    int(MetricID.TOTAL_OVERHEAD): "total_overhead",
+    int(MetricID.PROVISIONS): "provisions",
+    int(MetricID.EXCHANGE_VARIANCE): "exchange_variance",
+    int(MetricID.PBT_BEFORE_NON_OPS): "pbt_before_non_ops",
+    int(MetricID.PBT_AFTER_NON_OPS): "pbt_after_non_ops",
+    int(MetricID.NON_OPS_EXP): "non_ops_exp",
+    int(MetricID.NON_OPS_INCOME): "non_ops_income",
+    int(MetricID.NP_MARGIN): "np_margin",
+    int(MetricID.EBIT): "ebit",
+    int(MetricID.EBITDA): "ebitda",
+}
+
+
+class SubmittedActualItem(BaseModel):
+    company_id: str
+    company_name: str
+    cluster_name: str
+    period_id: int
+    year: int
+    month: int
+    status: str
+    actual_comment: Optional[str] = None
+    budget_comment: Optional[str] = None
+    submitted_by: Optional[str] = None
+    submitted_date: Optional[datetime] = None
+    actual_metrics: Dict[str, Optional[float]] = {}
+    budget_metrics: Dict[str, Optional[float]] = {}
+    ytd_actual_metrics: Dict[str, Optional[float]] = {}
+    ytd_budget_metrics: Dict[str, Optional[float]] = {}
+    fin_year_start_month: Optional[int] = None
+
+
+class SubmittedActualsListResponse(BaseModel):
+    reports: List[SubmittedActualItem]
+    total: int
+
+
+class FDApproveActualRequest(BaseModel):
+    comment: Optional[str] = None
+
+
+class FDRejectActualRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+
+class FDUpdateCommentsRequest(BaseModel):
+    actual_comment: Optional[str] = None
+    budget_comment: Optional[str] = None
+
+
+class CompanyRankResponse(BaseModel):
+    company_id: str
+    company_name: str
+    rank: int
+    total_companies: int
+    pbt_before_actual: Optional[float] = None
+    year: int
+    month: int
+
+
+async def _get_fd_company_ids(db: AsyncSession, user_id: str) -> List[str]:
+    """Get company_ids accessible to this FD user via user_company_role_map."""
+    stmt = (
+        select(UserCompanyRoleMap.company_id)
+        .where(
+            and_(
+                UserCompanyRoleMap.user_id == user_id,
+                UserCompanyRoleMap.is_active == True,
+            )
+        )
+        .distinct()
+    )
+    result = await db.execute(stmt)
+    return [row[0] for row in result.all()]
+
+
+async def _get_ytd_period_ids(
+    db: AsyncSession,
+    fin_year_start_month: int,
+    report_year: int,
+    report_month: int,
+) -> List[int]:
+    """
+    Get period_ids from the company's fiscal year start to the report period.
+
+    If report_month >= fin_year_start_month -> FY started this year
+    Else -> FY started previous year
+    """
+    if fin_year_start_month is None:
+        fin_year_start_month = 1
+
+    if report_month >= fin_year_start_month:
+        fy_start_year = report_year
+    else:
+        fy_start_year = report_year - 1
+
+    if fy_start_year == report_year:
+        condition = and_(
+            PeriodMaster.year == report_year,
+            PeriodMaster.month >= fin_year_start_month,
+            PeriodMaster.month <= report_month,
+        )
+    else:
+        condition = (
+            (
+                (PeriodMaster.year == fy_start_year)
+                & (PeriodMaster.month >= fin_year_start_month)
+            )
+            | (
+                (PeriodMaster.year == report_year)
+                & (PeriodMaster.month <= report_month)
+            )
+        )
+
+    result = await db.execute(
+        select(PeriodMaster.period_id).where(condition)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def _get_ytd_metrics(
+    db: AsyncSession,
+    company_id: str,
+    period_ids: List[int],
+    scenario: str,
+) -> Dict[str, Optional[float]]:
+    """
+    Sum FinancialFact.amount for all given period_ids, grouped by metric_id.
+    Then recompute derived/percentage metrics from the raw sums.
+    """
+    if not period_ids:
+        return {}
+
+    rows = (
+        await db.execute(
+            select(
+                FinancialFact.metric_id,
+                func.sum(FinancialFact.amount).label("total"),
+            )
+            .where(
+                FinancialFact.company_id == company_id,
+                FinancialFact.period_id.in_(period_ids),
+                func.upper(FinancialFact.actual_budget) == scenario.upper(),
+            )
+            .group_by(FinancialFact.metric_id)
+        )
+    ).all()
+
+    raw: Dict[str, Optional[float]] = {}
+    for metric_id, total in rows:
+        field_name = _METRIC_ID_TO_FIELD.get(int(metric_id))
+        if field_name:
+            raw[field_name] = float(total) if total is not None else None
+
+    # Recompute derived metrics from summed raw values
+    revenue = raw.get("revenue") or 0
+    gp = raw.get("gp") or 0
+    other_income = raw.get("other_income") or 0
+    personal_exp = raw.get("personal_exp") or 0
+    admin_exp = raw.get("admin_exp") or 0
+    selling_exp = raw.get("selling_exp") or 0
+    finance_exp = raw.get("finance_exp") or 0
+    depreciation = raw.get("depreciation") or 0
+    provisions = raw.get("provisions") or 0
+    exchange_variance = raw.get("exchange_variance") or 0
+    non_ops_exp = raw.get("non_ops_exp") or 0
+    non_ops_income = raw.get("non_ops_income") or 0
+
+    total_overhead = personal_exp + admin_exp + selling_exp + finance_exp + depreciation
+    pbt_before = gp + other_income - total_overhead + provisions + exchange_variance
+    pbt_after = pbt_before - non_ops_exp + non_ops_income
+    gp_margin = (gp / revenue * 100) if revenue != 0 else 0
+    np_margin = (pbt_before / revenue * 100) if revenue != 0 else 0
+    ebit = pbt_before + finance_exp
+    ebitda = ebit + depreciation
+
+    raw["total_overhead"] = total_overhead
+    raw["pbt_before_non_ops"] = pbt_before
+    raw["pbt_after_non_ops"] = pbt_after
+    raw["gp_margin"] = gp_margin
+    raw["np_margin"] = np_margin
+    raw["ebit"] = ebit
+    raw["ebitda"] = ebitda
+
+    return raw
+
+
+@router.get("/submitted-actuals", response_model=SubmittedActualsListResponse)
+async def get_submitted_actuals(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all actual submissions with status_id=Submitted for companies
+    accessible to the current FD user.
+    """
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if not fd_companies:
+        return SubmittedActualsListResponse(reports=[], total=0)
+
+    rows = (
+        await db.execute(
+            select(
+                FinancialWorkflow,
+                CompanyMaster.company_name,
+                ClusterMaster.cluster_name,
+                PeriodMaster,
+                CompanyMaster.fin_year_start_month,
+            )
+            .join(CompanyMaster, CompanyMaster.company_id == FinancialWorkflow.company_id)
+            .join(ClusterMaster, ClusterMaster.cluster_id == CompanyMaster.cluster_id)
+            .join(PeriodMaster, PeriodMaster.period_id == FinancialWorkflow.period_id)
+            .where(
+                and_(
+                    FinancialWorkflow.company_id.in_(fd_companies),
+                    FinancialWorkflow.status_id == int(StatusID.SUBMITTED),
+                )
+            )
+            .order_by(FinancialWorkflow.submitted_date.desc())
+        )
+    ).all()
+
+    reports: List[SubmittedActualItem] = []
+    for workflow, company_name, cluster_name, period, fin_year_start_month in rows:
+        # Get actual metrics
+        actual_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    func.upper(FinancialFact.actual_budget) == "ACTUAL",
+                )
+            )
+        ).all()
+
+        actual_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in actual_rows:
+            field_name = _METRIC_ID_TO_FIELD.get(int(metric_id))
+            if field_name:
+                actual_data[field_name] = float(amount) if amount is not None else None
+
+        # Get budget metrics for comparison
+        budget_rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == workflow.company_id,
+                    FinancialFact.period_id == workflow.period_id,
+                    func.upper(FinancialFact.actual_budget) == "BUDGET",
+                )
+            )
+        ).all()
+
+        budget_data: Dict[str, Optional[float]] = {}
+        for metric_id, amount in budget_rows:
+            field_name = _METRIC_ID_TO_FIELD.get(int(metric_id))
+            if field_name:
+                budget_data[field_name] = float(amount) if amount is not None else None
+
+        # YTD calculation using company's fiscal year start
+        ytd_period_ids = await _get_ytd_period_ids(
+            db,
+            fin_year_start_month=fin_year_start_month,
+            report_year=period.year,
+            report_month=period.month,
+        )
+        ytd_actual_data = await _get_ytd_metrics(
+            db, workflow.company_id, ytd_period_ids, "ACTUAL"
+        )
+        ytd_budget_data = await _get_ytd_metrics(
+            db, workflow.company_id, ytd_period_ids, "BUDGET"
+        )
+
+        reports.append(
+            SubmittedActualItem(
+                company_id=workflow.company_id,
+                company_name=company_name,
+                cluster_name=cluster_name,
+                period_id=workflow.period_id,
+                year=period.year,
+                month=period.month,
+                status="Submitted",
+                actual_comment=workflow.actual_comment,
+                budget_comment=workflow.budget_comment,
+                submitted_by=workflow.submitted_by,
+                submitted_date=workflow.submitted_date,
+                actual_metrics=actual_data,
+                budget_metrics=budget_data,
+                ytd_actual_metrics=ytd_actual_data,
+                ytd_budget_metrics=ytd_budget_data,
+                fin_year_start_month=fin_year_start_month,
+            )
+        )
+
+    return SubmittedActualsListResponse(reports=reports, total=len(reports))
+
+
+@router.post("/approve-actual/{company_id}/{period_id}")
+async def approve_actual(
+    company_id: str,
+    period_id: int,
+    request: Optional[FDApproveActualRequest] = None,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Approve a submitted actual report.
+    Sets status_id=Approved, approved_by=current user email, approved_date=now.
+    """
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if company_id not in fd_companies:
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    workflow = (
+        await db.execute(
+            select(FinancialWorkflow).where(
+                and_(
+                    FinancialWorkflow.company_id == company_id,
+                    FinancialWorkflow.period_id == period_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if workflow.status_id != int(StatusID.SUBMITTED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot approve: current status is not Submitted (status_id={workflow.status_id})",
+        )
+
+    now = datetime.utcnow()
+    workflow.status_id = int(StatusID.APPROVED)
+    workflow.approved_by = user.user_email
+    workflow.approved_date = now
+
+    # Notify the FO who submitted
+    if workflow.submitted_by:
+        # Find the user by email to create notification
+        fo_user = (
+            await db.execute(
+                select(UserMaster).where(UserMaster.user_email == workflow.submitted_by)
+            )
+        ).scalar_one_or_none()
+
+        if fo_user:
+            # Get company name for notification
+            company = (
+                await db.execute(
+                    select(CompanyMaster.company_name).where(
+                        CompanyMaster.company_id == company_id
+                    )
+                )
+            ).scalar_one_or_none()
+            period = (
+                await db.execute(
+                    select(PeriodMaster).where(PeriodMaster.period_id == period_id)
+                )
+            ).scalar_one_or_none()
+
+            company_name = company or company_id
+            period_label = f"{period.month}/{period.year}" if period else str(period_id)
+
+            notification = Notification(
+                user_id=fo_user.user_id,
+                type=NotificationType.REPORT_APPROVED,
+                title="Actual Report Approved",
+                message=f"Your actual report for {company_name} ({period_label}) has been approved by Finance Director.",
+                link="/finance-officer/dashboard",
+                is_read=False,
+                created_at=now,
+            )
+            db.add(notification)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Actual report approved (submitted to MD)",
+        "company_id": company_id,
+        "period_id": period_id,
+        "new_status": "Approved",
+    }
+
+
+@router.post("/reject-actual/{company_id}/{period_id}")
+async def reject_actual(
+    company_id: str,
+    period_id: int,
+    request: FDRejectActualRequest,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reject a submitted actual report and send it back to FO for correction.
+    Sets status_id=Rejected, rejected_by, rejected_date, reject_reason.
+    Creates a notification for the FO.
+    """
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if company_id not in fd_companies:
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    workflow = (
+        await db.execute(
+            select(FinancialWorkflow).where(
+                and_(
+                    FinancialWorkflow.company_id == company_id,
+                    FinancialWorkflow.period_id == period_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if workflow.status_id != int(StatusID.SUBMITTED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reject: current status is not Submitted (status_id={workflow.status_id})",
+        )
+
+    now = datetime.utcnow()
+    workflow.status_id = int(StatusID.REJECTED)
+    workflow.rejected_by = user.user_email
+    workflow.rejected_date = now
+    workflow.reject_reason = request.reason
+
+    # Notify the FO who submitted
+    if workflow.submitted_by:
+        fo_user = (
+            await db.execute(
+                select(UserMaster).where(UserMaster.user_email == workflow.submitted_by)
+            )
+        ).scalar_one_or_none()
+
+        if fo_user:
+            company = (
+                await db.execute(
+                    select(CompanyMaster.company_name).where(
+                        CompanyMaster.company_id == company_id
+                    )
+                )
+            ).scalar_one_or_none()
+            period = (
+                await db.execute(
+                    select(PeriodMaster).where(PeriodMaster.period_id == period_id)
+                )
+            ).scalar_one_or_none()
+
+            company_name = company or company_id
+            period_label = f"{period.month}/{period.year}" if period else str(period_id)
+
+            notification = Notification(
+                user_id=fo_user.user_id,
+                type=NotificationType.REPORT_REJECTED,
+                title="Actual Report Rejected",
+                message=f"Your actual report for {company_name} ({period_label}) has been sent back for correction. Reason: {request.reason}",
+                link="/finance-officer/rejected-reports",
+                is_read=False,
+                created_at=now,
+            )
+            db.add(notification)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Actual report rejected and sent back for correction",
+        "company_id": company_id,
+        "period_id": period_id,
+        "new_status": "Rejected",
+        "rejection_reason": request.reason,
+    }
+
+
+@router.put("/update-comments/{company_id}/{period_id}")
+async def update_comments(
+    company_id: str,
+    period_id: int,
+    request: FDUpdateCommentsRequest,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update actual_comment and/or budget_comment on a financial workflow."""
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if company_id not in fd_companies:
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    workflow = (
+        await db.execute(
+            select(FinancialWorkflow).where(
+                and_(
+                    FinancialWorkflow.company_id == company_id,
+                    FinancialWorkflow.period_id == period_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if request.actual_comment is not None:
+        workflow.actual_comment = request.actual_comment
+    if request.budget_comment is not None:
+        workflow.budget_comment = request.budget_comment
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Comments updated",
+        "company_id": company_id,
+        "period_id": period_id,
+    }
+
+
+@router.get("/company-rank", response_model=CompanyRankResponse)
+async def get_company_rank(
+    company_id: str,
+    year: int,
+    month: int,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Rank the requested company among all FD-accessible companies
+    based on monthly PBT Before actual data. Higher PBT = better rank.
+    """
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if not fd_companies:
+        raise HTTPException(status_code=404, detail="No accessible companies")
+
+    if company_id not in fd_companies:
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    # Get period_id
+    period_result = await db.execute(
+        select(PeriodMaster.period_id).where(
+            and_(PeriodMaster.year == year, PeriodMaster.month == month)
+        )
+    )
+    period_id = period_result.scalar_one_or_none()
+    if not period_id:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    # Get PBT Before Actual for all accessible companies
+    pbt_rows = (
+        await db.execute(
+            select(
+                FinancialFact.company_id,
+                FinancialFact.amount,
+            ).where(
+                FinancialFact.company_id.in_(fd_companies),
+                FinancialFact.period_id == period_id,
+                FinancialFact.metric_id == int(MetricID.PBT_BEFORE_NON_OPS),
+                func.upper(FinancialFact.actual_budget) == "ACTUAL",
+            )
+        )
+    ).all()
+
+    company_pbts = []
+    companies_with_data = set()
+    for cid, amount in pbt_rows:
+        company_pbts.append((cid, float(amount) if amount is not None else 0.0))
+        companies_with_data.add(cid)
+
+    for cid in fd_companies:
+        if cid not in companies_with_data:
+            company_pbts.append((cid, 0.0))
+
+    company_pbts.sort(key=lambda x: x[1], reverse=True)
+
+    rank = 1
+    target_pbt = None
+    for i, (cid, pbt) in enumerate(company_pbts):
+        if cid == company_id:
+            rank = i + 1
+            target_pbt = pbt
+            break
+
+    company_name_result = await db.execute(
+        select(CompanyMaster.company_name).where(
+            CompanyMaster.company_id == company_id
+        )
+    )
+    company_name = company_name_result.scalar_one_or_none() or company_id
+
+    return CompanyRankResponse(
+        company_id=company_id,
+        company_name=company_name,
+        rank=rank,
+        total_companies=len(company_pbts),
+        pbt_before_actual=target_pbt,
+        year=year,
+        month=month,
     )

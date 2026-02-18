@@ -1981,7 +1981,7 @@ async def submit_actual_entry(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit actual entry — saves to financial_fact (Actual) + financial_workflow with status=Submitted."""
+    """Submit actual entry — saves to financial_fact (Actual) + financial_workflow with status=Approved (admin bypass)."""
     company = (
         await db.execute(select(Company).where(Company.company_id == request.company_id))
     ).scalar_one_or_none()
@@ -2002,20 +2002,20 @@ async def submit_actual_entry(
     await _upsert_actual(
         db, request.company_id, period.period_id,
         request.metrics, request.comment,
-        int(StatusID.SUBMITTED), current_user,
+        int(StatusID.APPROVED), current_user,
     )
 
     await _audit(
-        db, current_user.user_id, "ACTUAL_SUBMITTED", "actual",
+        db, current_user.user_id, "ACTUAL_APPROVED", "actual",
         f"{request.company_id}:{period.period_id}",
-        f"Submitted actuals for {company.company_name} ({request.year}-{request.month})",
+        f"Approved actuals for {company.company_name} ({request.year}-{request.month})",
     )
     await db.commit()
 
     return BudgetEntryResponse(
         success=True, company_id=request.company_id,
-        period_id=period.period_id, status="Submitted",
-        message=f"Actuals submitted for {company.company_name}",
+        period_id=period.period_id, status="Approved",
+        message=f"Actuals approved for {company.company_name}",
     )
 
 

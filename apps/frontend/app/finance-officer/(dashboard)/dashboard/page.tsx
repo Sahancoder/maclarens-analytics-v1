@@ -5,7 +5,13 @@ import { Check, ChevronDown, Search, ChevronUp, X, CheckCircle2, AlertTriangle }
 import { FOAPI } from "@/lib/api-client";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026"];
+
+function buildYearOptions(): string[] {
+  const current = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = current - 3; y <= current + 5; y++) years.push(String(y));
+  return years;
+}
 
 // Metric ID constants (matching backend metric_master)
 const METRIC = {
@@ -102,6 +108,20 @@ function Dropdown({ label, value, options, onChange, placeholder, disabled, sear
 function EntryRow({ label, budget = "0.00", value, onChange, isCompleted }: {
   label: string; budget?: string; value: string; onChange: (v: string) => void; isCompleted: boolean;
 }) {
+  const formatVal = (v: string) => {
+    if (!v) return "";
+    const parts = v.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/,/g, "");
+    if (raw === "" || /^-?\d*\.?\d*$/.test(raw)) {
+      onChange(raw);
+    }
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 items-center py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors rounded-lg px-2">
       <div className="col-span-12 sm:col-span-4 flex items-center">
@@ -117,8 +137,8 @@ function EntryRow({ label, budget = "0.00", value, onChange, isCompleted }: {
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <span className="text-slate-400 sm:text-sm">LKR</span>
         </div>
-        <input type="text" value={value} placeholder="0.00"
-          onChange={(e) => { if (e.target.value === "" || /^-?\d*\.?\d*$/.test(e.target.value)) onChange(e.target.value); }}
+        <input type="text" value={formatVal(value)} placeholder="0.00"
+          onChange={handleChange}
           className={`w-full h-10 pl-10 pr-3 text-sm font-medium border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 focus:border-[#0b1f3a] ${
             isCompleted ? "border-emerald-300 bg-emerald-50/50 text-emerald-900" : "border-slate-300 bg-white hover:border-slate-400 text-slate-900"
           }`}
@@ -145,13 +165,15 @@ function GridHeader() {
 }
 
 function CalcField({ label, value, isCompleted, suffix }: { label: string; value: string; isCompleted: boolean; suffix?: string }) {
+  const displayValue = value ? Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
       <div className={`h-11 px-4 flex items-center text-sm font-semibold rounded-lg border transition-all ${
         isCompleted ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border-slate-200"
       }`}>
-        {value}{suffix}
+        {displayValue}{suffix}
       </div>
     </div>
   );
@@ -597,6 +619,7 @@ export default function ActualEntryPage() {
   // Dropdown options derived from backend data
   const clusterOptions = useMemo(() => clustersList.map(c => c.cluster_name), [clustersList]);
   const companyOptions = useMemo(() => companiesList.map(c => c.company_name), [companiesList]);
+  const yearOptions = useMemo(() => buildYearOptions(), []);
 
 
   return (
@@ -634,7 +657,7 @@ export default function ActualEntryPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <Dropdown label="Cluster" value={clusterName} options={clusterOptions} onChange={setClusterName} placeholder="Select Cluster" searchable />
           <Dropdown label="Company" value={companyName} options={companyOptions} onChange={setCompanyName} placeholder="Select Company" disabled={!clusterName} searchable />
-          <Dropdown label="Reporting Year" value={year} options={YEARS} onChange={setYear} placeholder="Select Year" disabled={!companyName} />
+          <Dropdown label="Reporting Year" value={year} options={yearOptions} onChange={setYear} placeholder="Select Year" disabled={!companyName} />
           <Dropdown label="Reporting Month" value={month} options={MONTHS} onChange={setMonth} placeholder="Select Month" disabled={!companyName} />
         </div>
         {selectedCompany && (

@@ -18,7 +18,9 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { TrendingUp, TrendingDown, Download, Building2, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Download, Building2, ChevronDown, Trophy } from "lucide-react";
+import { FDAPI } from "@/lib/api-client";
+import { useMyCompanies } from "@/hooks/use-api";
 
 // Finance Director's assigned company (Default/Fallback)
 const DEFAULT_COMPANY = {
@@ -139,44 +141,39 @@ export default function AnalyticsPage() {
   const [month, setMonth] = useState("December");
   const [pbtViewMode, setPbtViewMode] = useState("monthly");
 
-  // Company Selector State
+  // Company Selector State (real API)
+  const companiesState = useMyCompanies();
+  const realCompanies = companiesState.data || [];
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Company Rank State
+  const [rankData, setRankData] = useState<{
+    rank: number;
+    total_companies: number;
+    pbt_before_actual: number | null;
+  } | null>(null);
+  const [rankLoading, setRankLoading] = useState(false);
+
   // Table comparison state
   const [tableMonth, setTableMonth] = useState("Dec");
   const [tableYear, setTableYear] = useState("2025");
 
-  // Initial Load: Fetch Companies
+  // Map real companies to local format
   useEffect(() => {
-    // Mock API Call: GET /api/finance-director/companies
-    const fetchCompanies = async () => {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const mockCompanies = [
-        { id: "mclarens-maritime", name: "McLarens Maritime Academy" },
-        { id: "mclarens-logistics", name: "McLarens Logistics" },
-        // { id: "inter-ocean", name: "Inter Ocean Services" }, 
-      ];
+    if (!realCompanies.length) return;
+    const mapped = realCompanies.map((c: any) => ({
+      id: c.id || c.company_id,
+      name: c.name || c.company_name,
+    }));
+    setCompanies(mapped);
 
-      setCompanies(mockCompanies);
-
-      // Persistence Logic
-      const savedId = localStorage.getItem("fd_selected_company");
-      const validSavedId = mockCompanies.find(c => c.id === savedId)?.id;
-      
-      if (validSavedId) {
-        setSelectedCompanyId(validSavedId);
-      } else if (mockCompanies.length > 0) {
-        setSelectedCompanyId(mockCompanies[0].id);
-      }
-    };
-
-    fetchCompanies();
-  }, []);
+    const savedId = localStorage.getItem("fd_selected_company");
+    const validSavedId = mapped.find((c: Company) => c.id === savedId)?.id;
+    setSelectedCompanyId(validSavedId || (mapped.length > 0 ? mapped[0].id : null));
+  }, [realCompanies]);
 
   // Fetch Analytics when Company Changes
   useEffect(() => {
@@ -232,6 +229,32 @@ export default function AnalyticsPage() {
     };
 
     fetchAnalytics();
+  }, [selectedCompanyId]);
+
+  // Fetch company rank when company changes
+  useEffect(() => {
+    if (!selectedCompanyId) return;
+
+    const fetchRank = async () => {
+      setRankLoading(true);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+
+      const res = await FDAPI.getCompanyRank(selectedCompanyId, currentYear, currentMonth);
+      if (res.data) {
+        setRankData({
+          rank: res.data.rank,
+          total_companies: res.data.total_companies,
+          pbt_before_actual: res.data.pbt_before_actual,
+        });
+      } else {
+        setRankData(null);
+      }
+      setRankLoading(false);
+    };
+
+    fetchRank();
   }, [selectedCompanyId]);
 
   // Use fetched data or fallbacks (initially)
@@ -302,6 +325,41 @@ export default function AnalyticsPage() {
             </button>
           </div>
         </div>
+
+        {/* Company Rank Card */}
+        {selectedCompanyId && (
+          <div className="mb-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-6">
+              <div className="h-14 w-14 rounded-xl bg-[#0b1f3a]/10 flex items-center justify-center shrink-0">
+                {rankLoading ? (
+                  <div className="h-5 w-5 border-2 border-[#0b1f3a] border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Trophy className="h-6 w-6 text-[#0b1f3a]" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Company Rank</h3>
+                {rankData ? (
+                  <>
+                    <p className="text-2xl font-bold text-slate-900 mt-0.5">
+                      #{rankData.rank} <span className="text-base font-medium text-slate-400">of {rankData.total_companies}</span>
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Based on monthly PBT Before (Actual)
+                      {rankData.pbt_before_actual != null && (
+                        <span className="ml-2 text-slate-600 font-medium">
+                          PBT: LKR {rankData.pbt_before_actual.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        </span>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-lg text-slate-400 mt-1">{rankLoading ? "Loading..." : "No rank data"}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Monthly Performance Section */}
         <div className="mb-6">

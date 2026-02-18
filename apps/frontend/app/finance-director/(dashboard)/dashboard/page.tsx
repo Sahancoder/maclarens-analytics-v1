@@ -189,14 +189,6 @@ export default function FinanceDirectorDashboard() {
           </div>
 
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col items-center justify-center text-center min-h-[180px]">
-              <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Company Rank</h3>
-              <p className="text-4xl font-bold text-slate-900 mt-2 mb-1">#{stats?.companies_submitted || 0}</p>
-              <p className="text-xs text-slate-400 font-medium whitespace-nowrap mt-1">
-                Based on submission and approval status
-              </p>
-            </div>
-
             {selectedReport && (
               <div className="bg-white rounded-xl border border-slate-200 p-5">
                 <h3 className="text-sm font-semibold text-slate-800 mb-4">

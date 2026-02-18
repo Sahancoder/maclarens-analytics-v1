@@ -1070,6 +1070,47 @@ export const FOAPI = {
       body: JSON.stringify(data),
     });
   },
+
+  async getActualDrafts(): Promise<ApiResponse<{
+    drafts: {
+      company_id: string;
+      company_name: string;
+      cluster_name: string;
+      period_id: number;
+      year: number;
+      month: number;
+      status: string;
+      actual_comment: string | null;
+      submitted_by: string | null;
+      submitted_date: string | null;
+      metrics: Record<string, number | null>;
+    }[];
+    total: number;
+  }>> {
+    return apiFetch('/fo/actual-drafts');
+  },
+
+  async getRejectedActuals(): Promise<ApiResponse<{
+    reports: {
+      company_id: string;
+      company_name: string;
+      cluster_name: string;
+      period_id: number;
+      year: number;
+      month: number;
+      status: string;
+      actual_comment: string | null;
+      submitted_by: string | null;
+      submitted_date: string | null;
+      rejected_by: string | null;
+      rejected_date: string | null;
+      reject_reason: string | null;
+      metrics: Record<string, number | null>;
+    }[];
+    total: number;
+  }>> {
+    return apiFetch('/fo/rejected-actuals');
+  },
 };
 
 export const FDAPI = {
@@ -1124,6 +1165,63 @@ export const FDAPI = {
     companies_pending: number;
   }>> {
     return apiFetch('/fd/dashboard');
+  },
+
+  async getSubmittedActuals(): Promise<ApiResponse<{
+    reports: {
+      company_id: string;
+      company_name: string;
+      cluster_name: string;
+      period_id: number;
+      year: number;
+      month: number;
+      status: string;
+      actual_comment: string | null;
+      budget_comment: string | null;
+      submitted_by: string | null;
+      submitted_date: string | null;
+      actual_metrics: Record<string, number | null>;
+      budget_metrics: Record<string, number | null>;
+      ytd_actual_metrics: Record<string, number | null>;
+      ytd_budget_metrics: Record<string, number | null>;
+      fin_year_start_month: number | null;
+    }[];
+    total: number;
+  }>> {
+    return apiFetch('/fd/submitted-actuals');
+  },
+
+  async approveActual(companyId: string, periodId: number, comment?: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return apiFetch(`/fd/approve-actual/${companyId}/${periodId}`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+  },
+
+  async rejectActual(companyId: string, periodId: number, reason: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return apiFetch(`/fd/reject-actual/${companyId}/${periodId}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async updateComments(companyId: string, periodId: number, actualComment?: string, budgetComment?: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return apiFetch(`/fd/update-comments/${companyId}/${periodId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ actual_comment: actualComment, budget_comment: budgetComment }),
+    });
+  },
+
+  async getCompanyRank(companyId: string, year: number, month: number): Promise<ApiResponse<{
+    company_id: string;
+    company_name: string;
+    rank: number;
+    total_companies: number;
+    pbt_before_actual: number | null;
+    year: number;
+    month: number;
+  }>> {
+    return apiFetch(`/fd/company-rank?company_id=${companyId}&year=${year}&month=${month}`);
   },
 };
 

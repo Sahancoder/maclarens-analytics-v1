@@ -8,7 +8,7 @@ import Link from "next/link";
 
 const navItems = [
   { href: "/finance-officer/dashboard", label: "Actual Entry", icon: FileText },
-  { href: "/finance-officer/rejected-reports", label: "Rejected Reports", icon: XCircle, badge: 3 },
+  { href: "/finance-officer/rejected-reports", label: "Rejected Reports", icon: XCircle },
   { href: "/finance-officer/notifications", label: "Notifications", icon: Bell },
   { href: "/finance-officer/drafts", label: "Drafts", icon: FolderOpen },
 ];
@@ -17,7 +17,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; name?: string } | null>(null);
 
   useEffect(() => {
     const auth =
@@ -38,13 +38,19 @@ export function Header() {
     router.push("/");
   };
 
-  const getInitials = (email: string) => {
-    const name = email.split("@")[0];
+  const getInitials = (user: { email: string; name?: string }) => {
+    if (user.name) {
+      const parts = user.name.split(" ");
+      if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      return user.name.substring(0, 2).toUpperCase();
+    }
+    const name = user.email.split("@")[0];
     return name.substring(0, 2).toUpperCase();
   };
 
-  const getDisplayName = (email: string) => {
-    const name = email.split("@")[0];
+  const getDisplayName = (user: { email: string; name?: string }) => {
+    if (user.name) return user.name;
+    const name = user.email.split("@")[0];
     return name
       .split(/[._-]/)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -77,13 +83,13 @@ export function Header() {
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end">
                 <span className="text-sm font-semibold">
-                  {getDisplayName(user.email)}
+                  {getDisplayName(user)}
                 </span>
                 <span className="text-xs text-white/70">Finance Officer</span>
               </div>
               <div className="relative">
                 <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-slate-100 flex items-center justify-center text-[#0b1f3a] font-bold text-sm">
-                  {getInitials(user.email)}
+                  {getInitials(user)}
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-emerald-500 rounded-full border-2 border-[#0b1f3a]" />
               </div>
@@ -119,15 +125,6 @@ export function Header() {
                 >
                   <Icon className="h-5 w-5" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && item.badge > 0 && (
-                    <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold rounded-full ${
-                      isActive 
-                        ? "bg-[#0b1f3a] text-white" 
-                        : "bg-red-500 text-white"
-                    }`}>
-                      {item.badge}
-                    </span>
-                  )}
                 </Link>
               );
             })}
