@@ -97,13 +97,13 @@ const emptyGroupData = {
 
 // ============ HELPER FUNCTIONS ============
 
-const formatNumber = (num: number) => num?.toLocaleString() ?? '0';
-const formatCurrency = (num: number) => `LKR ${(Math.abs(num || 0) / 1000).toFixed(1)}${(num || 0) < 0 ? "M" : "M"}`;
+const formatNumber = (num: number) => num?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00';
+const formatCurrency = (num: number) => `LKR ${(Math.abs(num || 0) / 1000).toFixed(2)}`;
 const formatShort = (num: number | undefined | null) => {
-  if (num === undefined || num === null) return '0';
-  if (Math.abs(num) >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (Math.abs(num) >= 1000) return `${(num / 1000).toFixed(0)}K`;
-  return num.toString();
+  if (num === undefined || num === null) return '0.00';
+  if (Math.abs(num) >= 1000000) return `${(num / 1000000).toFixed(2)}`;
+  if (Math.abs(num) >= 1000) return `${(num / 1000).toFixed(2)}K`;
+  return num.toFixed(2);
 };
 
 const getRiskColor = (risk: string) => {
@@ -435,7 +435,7 @@ export default function MDDashboard() {
       budget: Number(overview.pbt.budget || 0),
       ytdPBT: Number(overview.pbt.actual || 0),
       priorYearPBT: Number((overview.pbt as any).prior_year ?? overview.pbt.budget ?? 0),
-      healthScore: Number(completion.toFixed(1)),
+      healthScore: Number(completion.toFixed(2)),
       cashPositive: overview.companies_reporting,
       cashNegative: Math.max(overview.companies_total - overview.companies_reporting, 0),
       totalCompanies: overview.companies_total,
@@ -461,13 +461,13 @@ export default function MDDashboard() {
   const formatFinancial = (val: number) => { // Replaces formatCurrency
     const converted = convertValue(val);
     if (currency === "USD") {
-      return `$${(Math.abs(converted) / 1000).toFixed(2)}M`;
+      return `$${(Math.abs(converted) / 1000).toFixed(2)}`;
     }
-    return `LKR ${(Math.abs(converted) / 1000).toFixed(1)}${converted < 0 ? "M" : "M"}`;
+    return `LKR ${(Math.abs(converted) / 1000).toFixed(2)}`;
   };
 
   const formatRawNumber = (val: number) => { // Replaces formatNumber for lists
-    return convertValue(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    return convertValue(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
   
   // Available months/years for dropdown
@@ -767,7 +767,7 @@ export default function MDDashboard() {
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
               <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
                 <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +{((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(1)}%
+                +{((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(2)}%
               </span>
               <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
@@ -787,7 +787,7 @@ export default function MDDashboard() {
                 return (<>
                   <span className={`flex items-center text-[10px] sm:text-xs font-medium ${isPos ? 'text-emerald-600' : 'text-red-600'}`}>
                     {isPos ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-                    {isPos ? '+' : ''}{gpChange.toFixed(1)}%
+                    {isPos ? '+' : ''}{gpChange.toFixed(2)}%
                   </span>
                   <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
                 </>);
@@ -805,7 +805,7 @@ export default function MDDashboard() {
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
               <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
                 <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +{(groupData.gpMargin - groupData.priorYearGpMargin).toFixed(1)}%
+                +{(groupData.gpMargin - groupData.priorYearGpMargin).toFixed(2)}%
               </span>
               <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
@@ -821,7 +821,7 @@ export default function MDDashboard() {
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
               <span className="flex items-center text-[10px] sm:text-xs font-medium text-red-600">
                 <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +{((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(1)}%
+                +{((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(2)}%
               </span>
               <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
             </div>
@@ -841,7 +841,7 @@ export default function MDDashboard() {
                 return (<>
                   <span className={`flex items-center text-[10px] sm:text-xs font-medium ${isPos ? 'text-emerald-600' : 'text-red-600'}`}>
                     {isPos ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-                    {isPos ? '+' : ''}{pbtChange.toFixed(1)}%
+                    {isPos ? '+' : ''}{pbtChange.toFixed(2)}%
                   </span>
                   <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
                 </>);
@@ -894,7 +894,7 @@ export default function MDDashboard() {
                         <td className="px-5 py-3 font-medium text-slate-800">{company.name}</td>
                         <td className="px-5 py-3 text-right">
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
-                            {company.achievement.toFixed(1)}%
+                            {company.achievement.toFixed(2)}%
                           </span>
                         </td>
                       </tr>
@@ -930,7 +930,7 @@ export default function MDDashboard() {
                             company.achievement >= 70 ? "bg-amber-100 text-amber-800" : 
                             "bg-red-100 text-red-700"
                           }`}>
-                            {company.achievement.toFixed(1)}%
+                            {company.achievement.toFixed(2)}%
                           </span>
                         </td>
                       </tr>
@@ -964,7 +964,7 @@ export default function MDDashboard() {
                         </div>
                         <span className="text-xs font-medium text-slate-700 truncate">{company.name}</span>
                       </div>
-                      <span className="text-xs font-bold text-emerald-600 ml-2">{company.achievement.toFixed(0)}%</span>
+                      <span className="text-xs font-bold text-emerald-600 ml-2">{company.achievement.toFixed(2)}%</span>
                     </div>
                   ))}
                   {ytdSegments.janDec.top.length === 0 && <div className="p-4 text-center text-xs text-slate-400 italic">No data</div>}
@@ -989,7 +989,7 @@ export default function MDDashboard() {
                         </div>
                         <span className="text-xs font-medium text-slate-700 truncate">{company.name}</span>
                       </div>
-                      <span className="text-xs font-bold text-red-600 ml-2">{company.achievement.toFixed(0)}%</span>
+                      <span className="text-xs font-bold text-red-600 ml-2">{company.achievement.toFixed(2)}%</span>
                     </div>
                   ))}
                   {ytdSegments.janDec.bottom.length === 0 && <div className="p-4 text-center text-xs text-slate-400 italic">No data</div>}
@@ -1014,7 +1014,7 @@ export default function MDDashboard() {
                         </div>
                         <span className="text-xs font-medium text-slate-700 truncate">{company.name}</span>
                       </div>
-                      <span className="text-xs font-bold text-blue-600 ml-2">{company.achievement.toFixed(0)}%</span>
+                      <span className="text-xs font-bold text-blue-600 ml-2">{company.achievement.toFixed(2)}%</span>
                     </div>
                   ))}
                   {ytdSegments.aprMar.top.length === 0 && <div className="p-4 text-center text-xs text-slate-400 italic">No data</div>}
@@ -1039,7 +1039,7 @@ export default function MDDashboard() {
                         </div>
                         <span className="text-xs font-medium text-slate-700 truncate">{company.name}</span>
                       </div>
-                      <span className="text-xs font-bold text-orange-600 ml-2">{company.achievement.toFixed(0)}%</span>
+                      <span className="text-xs font-bold text-orange-600 ml-2">{company.achievement.toFixed(2)}%</span>
                     </div>
                   ))}
                    {ytdSegments.aprMar.bottom.length === 0 && <div className="p-4 text-center text-xs text-slate-400 italic">No data</div>}
@@ -1090,7 +1090,7 @@ export default function MDDashboard() {
                     />
                     <Tooltip 
                       formatter={(value: number, name: string, props: any) => [
-                        `${value.toFixed(1)}% (${currency} ${formatRawNumber(props.payload.pbt)})`,
+                        `${value.toFixed(2)}% (${currency} ${formatRawNumber(props.payload.pbt)})`,
                         "Contribution"
                       ]}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: '12px' }}
