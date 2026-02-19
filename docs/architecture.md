@@ -1,88 +1,53 @@
-# MacLarens Analytics Architecture
+# 🏗️ System Architecture
 
 ## Overview
 
-MacLarens Analytics is a comprehensive analytics platform built with a modern microservices architecture, featuring role-based access control and multi-tenant support.
+McLarens Analytics is a modern, full-stack financial reporting platform designed to streamline the specific data collection and approval workflows of the McLarens Group. It replaces legacy Excel-based processes with a secure, web-based application.
 
-## System Architecture
+## 🧩 Technology Stack
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Azure Front Door                             │
-│                    (Global Load Balancer + WAF)                      │
-└─────────────────────────────┬───────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-    ┌─────────▼─────────┐         ┌──────────▼──────────┐
-    │    Frontend       │         │       API           │
-    │   (Next.js)       │────────▶│   (FastAPI)         │
-    │ Container App     │ GraphQL │  Container App      │
-    └───────────────────┘         └──────────┬──────────┘
-                                             │
-                    ┌────────────────────────┼────────────────────────┐
-                    │                        │                        │
-          ┌─────────▼─────────┐   ┌─────────▼─────────┐   ┌──────────▼──────────┐
-          │    PostgreSQL     │   │      Redis        │   │   Azure Entra ID    │
-          │  Flexible Server  │   │   (Cache/Queue)   │   │   (Authentication)  │
-          └───────────────────┘   └───────────────────┘   └─────────────────────┘
-```
+### Frontend (Client)
 
-## Components
-
-### Frontend (Next.js)
-
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
 - **Styling**: Tailwind CSS
-- **State Management**: Apollo Client
-- **Authentication**: MSAL React (Azure AD)
+- **State Management**: React Query (Server State), Zustand (Client State)
+- **API Client**: Custom typed fetch wrapper (`api-client.ts`)
 
-### Backend API (FastAPI)
+### Backend (Server)
 
-- **Framework**: FastAPI
-- **GraphQL**: Strawberry GraphQL
-- **Database**: SQLAlchemy + asyncpg
-- **Authentication**: Azure Entra ID tokens
+- **Framework**: FastAPI (Python 3.11)
+- **Database ORM**: SQLAlchemy (Async)
+- **Schema Validation**: Pydantic v2
+- **API Style**: REST + GraphQL (Strawberry)
+- **Task Queue**: Background tasks (FastAPI `BackgroundTasks`)
 
-### Data Layer
+### Infrastructure
 
-- **Primary Database**: Azure PostgreSQL Flexible Server
-- **Caching**: Azure Cache for Redis
-- **Migrations**: Alembic
+- **Containerization**: Docker & Docker Compose
+- **Cloud Provider**: Microsoft Azure
+- **Compute**: Azure Container Apps (ACA)
+- **Database**: Azure Database for PostgreSQL (Flexible Server)
+- **Cache**: Redis (Azure Cache for Redis)
+- **Email**: Azure Communication Services (ACS) / Microsoft Graph
 
-## Security
+## 🔄 Data Flow
 
-### Authentication Flow
+1.  **User Interaction**: Users interact with the Next.js frontend.
+2.  **API Requests**: Frontend calls endpoints via `/api/*` (proxied to Backend).
+3.  **Authentication Layer**:
+    - **Dev Mode**: Custom JWT auth.
+    - **Production**: Microsoft Entra ID (Azure AD) OIDC flow.
+4.  **Service Layer**: FastAPI routers delegate business logic to specialized Services (`ReportService`, `AuthService`, `NotificationService`).
+5.  **Data Access**: Services interact with PostgreSQL via SQLAlchemy models.
+6.  **Notifications**: System events trigger Email/In-App notifications via background tasks.
 
-1. User clicks "Sign in with Microsoft"
-2. MSAL redirects to Azure AD login
-3. User authenticates and grants consent
-4. Azure AD returns access token
-5. Frontend sends token with GraphQL requests
-6. API validates token and extracts user claims
+## 🔐 Security Architecture
 
-### Role-Based Access Control (RBAC)
-
-| Role | Access Level |
-|------|--------------|
-| Data Officer | Own company data, create/submit reports |
-| Director | Cluster-level data, approve reports |
-| CEO | All data, executive dashboards |
-| Admin | System administration |
-
-## Data Flow
-
-### Report Submission Workflow
-
-```
-Data Officer → Submit → Director Review → CEO Approval → Approved
-                   ↓              ↓
-                Rejected      Rejected
-```
-
-## Scalability
-
-- Horizontal scaling via Container Apps
-- Database read replicas for analytics queries
-- Redis caching for frequently accessed data
-- CDN for static assets
+- **Hybrid Authentication**: Supports both local JWT (dev) and Azure AD (prod).
+- **RBAC**: Role-Based Access Control enforced at the API route level.
+  - **Finance Officer (FO)**: Data entry, Draft management.
+  - **Finance Director (FD)**: Review, Approval/Rejection.
+  - **MD**: Read-only high-level dashboards.
+  - **Admin**: System configuration and user management.
+- **Data Isolation**: Row-Level Security logic ensures users only see companies assigned to them.

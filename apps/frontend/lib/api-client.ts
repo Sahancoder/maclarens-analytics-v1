@@ -368,6 +368,7 @@ export interface PerformerEntry {
   achievement_pct: number;
   variance: number;
   formatted_pbt: string;
+  fiscal_cycle?: string; // "Jan-Dec" or "Apr-Mar"
 }
 
 export interface PerformersResponse {
@@ -484,6 +485,10 @@ export interface HierarchyCompany {
   achievement_pct: number;
   gp_margin: number;
   report_status: string | null;
+  ytd_pbt_actual: number;
+  ytd_pbt_budget: number;
+  ytd_achievement_pct: number;
+  fiscal_year_start_month: number;
 }
 
 export interface HierarchyCluster {
@@ -495,6 +500,9 @@ export interface HierarchyCluster {
   achievement_pct: number;
   company_count: number;
   companies: HierarchyCompany[];
+  ytd_pbt_actual: number;
+  ytd_pbt_budget: number;
+  ytd_achievement_pct: number;
 }
 
 export interface PerformanceHierarchyResponse {
@@ -505,12 +513,150 @@ export interface PerformanceHierarchyResponse {
   group_pbt_actual: number;
   group_pbt_budget: number;
   group_achievement_pct: number;
+  group_ytd_pbt_actual: number;
+  group_ytd_pbt_budget: number;
+  group_ytd_achievement_pct: number;
   clusters: HierarchyCluster[];
+}
+
+// Company detail (full P&L) for MD popup
+export interface CompanyDetailFinancials {
+  revenue_lkr: number;
+  gp: number;
+  gp_margin: number;
+  other_income: number;
+  personal_exp: number;
+  admin_exp: number;
+  selling_exp: number;
+  finance_exp: number;
+  depreciation: number;
+  total_overhead: number;
+  provisions: number;
+  exchange_gl: number;
+  pbt_before_non_ops: number;
+  pbt_after_non_ops: number;
+  non_ops_exp: number;
+  non_ops_income: number;
+  np_margin: number;
+  ebit: number;
+  ebitda: number;
+}
+
+export interface CompanyDetailComment {
+  id: string;
+  type: string;
+  author: string;
+  message: string;
+  timestamp: string | null;
+}
+
+export interface CompanyDetailResponse {
+  company_id: string;
+  company_name: string;
+  company_code: string;
+  cluster_name: string;
+  fiscal_year_start_month: number;
+  period: string;
+  year: number;
+  month: number;
+  monthly: CompanyDetailFinancials;
+  ytd: CompanyDetailFinancials;
+  ytd_label: string;
+  ytd_months: number;
+  monthly_budget_pbt: number;
+  ytd_budget_pbt: number;
+  monthly_achievement_pct: number;
+  ytd_achievement_pct: number;
+  fd_comments: CompanyDetailComment[];
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  report_status: string | null;
+}
+
+// StrategicMetric with prior year
+export interface StrategicMetricExtended {
+  name: string;
+  actual: number;
+  budget: number | null;
+  variance: number | null;
+  variance_pct: number | null;
+  achievement_pct: number | null;
+  is_favorable: boolean;
+  formatted_actual: string;
+  formatted_budget: string | null;
+  prior_year: number | null;
+  prior_year_variance_pct: number | null;
 }
 
 // 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 // Base Fetch Wrapper
 // 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+
+// Company Analytics Types (FD Company Analytics Tab)
+export interface MonthlyKPI {
+  gp_margin: number | null;
+  gp_margin_yoy: number | null;
+  gp: number | null;
+  gp_yoy: number | null;
+  pbt_before: number | null;
+  pbt_before_yoy: number | null;
+  pbt_achievement: number | null;
+  revenue: number | null;
+}
+export interface YearlyKPI {
+  ytd_gp_margin: number | null;
+  ytd_gp_margin_yoy: number | null;
+  ytd_gp: number | null;
+  ytd_gp_yoy: number | null;
+  ytd_pbt_before: number | null;
+  ytd_pbt_before_yoy: number | null;
+  ytd_pbt_achievement: number | null;
+  ytd_revenue: number | null;
+}
+export interface PBTComparisonItem {
+  label: string;
+  pbt_before: number;
+  pbt_after: number;
+}
+export interface PBTTrendItem {
+  label: string;
+  month: number;
+  year: number;
+  pbt_before: number;
+}
+export interface ProfitabilityItem {
+  label: string;
+  gp_margin: number;
+  np_margin: number;
+}
+export interface ExpenseItem {
+  name: string;
+  value: number;
+  percentage: number;
+  color: string;
+}
+export interface PerformanceCard {
+  actual_pbt: number | null;
+  budget_pbt: number | null;
+  achievement: number | null;
+}
+export interface CompanyAnalyticsData {
+  company_id: string;
+  company_name: string;
+  fin_year_start_month: number;
+  selected_year: number;
+  selected_month: number;
+  monthly_kpi: MonthlyKPI;
+  yearly_kpi: YearlyKPI;
+  pbt_comparison_monthly: PBTComparisonItem[];
+  pbt_comparison_yearly: PBTComparisonItem[];
+  pbt_trend: PBTTrendItem[];
+  profitability: ProfitabilityItem[];
+  expense_breakdown: ExpenseItem[];
+  performance_monthly: PerformanceCard;
+  performance_yearly: PerformanceCard;
+  available_fy_labels: string[];
+}
 
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -1111,9 +1257,23 @@ export const FOAPI = {
   }>> {
     return apiFetch('/fo/rejected-actuals');
   },
+
+  async deleteDraft(reportId: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return apiFetch(`/fo/reports/${reportId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const FDAPI = {
+  /**
+   * Get companies assigned to this Financial Director.
+   * Each FD only sees their own mapped companies.
+   */
+  async getMyCompanies(): Promise<ApiResponse<Company[]>> {
+    return apiFetch<Company[]>('/fd/companies');
+  },
+
   async getPendingReports(): Promise<ApiResponse<{ reports: PendingReport[]; total: number }>> {
     return apiFetch('/fd/pending');
   },
@@ -1223,6 +1383,14 @@ export const FDAPI = {
   }>> {
     return apiFetch(`/fd/company-rank?company_id=${companyId}&year=${year}&month=${month}`);
   },
+
+  /**
+   * Fetch full company analytics payload for the Company Analytics dashboard.
+   * Returns real-time calculated KPIs, charts, and breakdowns.
+   */
+  async getCompanyAnalytics(companyId: string, year: number, month: number): Promise<ApiResponse<CompanyAnalyticsData>> {
+    return apiFetch(`/fd/company-analytics?company_id=${companyId}&year=${year}&month=${month}`);
+  },
 };
 
 // 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
@@ -1321,6 +1489,15 @@ export const MDAPI = {
     if (year) params.append('year', year.toString());
     if (month) params.append('month', month.toString());
     return apiFetch<PerformanceHierarchyResponse>(`/md/performance-hierarchy?${params}`);
+  },
+
+  async getCompanyDetail(companyId: string, year: number, month: number): Promise<ApiResponse<CompanyDetailResponse>> {
+    const params = new URLSearchParams({
+      company_id: companyId,
+      year: year.toString(),
+      month: month.toString(),
+    });
+    return apiFetch<CompanyDetailResponse>(`/md/company-detail?${params}`);
   },
 };
 

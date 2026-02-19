@@ -41,6 +41,7 @@ import {
   useRiskRadar,
   useClusterDrilldown,
   usePerformanceHierarchy,
+  usePBTTrend,
 } from "@/hooks/use-api";
 
 // ============ DATA STRUCTURES ============
@@ -72,146 +73,27 @@ interface Cluster {
   companies: Company[];
 }
 
-// ============ MOCK DATA ============
+// ============ DEFAULT EMPTY DATA ============
 
-const groupDataMonth = {
-  totalPBT: 596500,
-  budget: 650000,
-  ytdPBT: 5965000,
-  priorYearPBT: 550000,
-  healthScore: 78,
-  cashPositive: 38,
-  cashNegative: 8,
-  totalCompanies: 46,
-  gp: 1850000, 
-  gpMargin: 34.2,
-  priorYearGp: 1650000, 
-  priorYearGpMargin: 32.8,
-  pbtAchievement: 91.8,
-  revenue: 5200000, 
-  revenuePriorYear: 4800000,
-  overhead: 1253500,
-  overheadPriorYear: 1100000,
+const emptyGroupData = {
+  totalPBT: 0,
+  budget: 0,
+  ytdPBT: 0,
+  priorYearPBT: 0,
+  healthScore: 0,
+  cashPositive: 0,
+  cashNegative: 0,
+  totalCompanies: 0,
+  gp: 0,
+  gpMargin: 0,
+  priorYearGp: 0,
+  priorYearGpMargin: 0,
+  pbtAchievement: 0,
+  revenue: 0,
+  revenuePriorYear: 0,
+  overhead: 0,
+  overheadPriorYear: 0,
 };
-
-const groupDataYTD = {
-  totalPBT: 6250000, // YTD is cumulative
-  budget: 6000000,
-  ytdPBT: 6250000,
-  priorYearPBT: 5800000,
-  healthScore: 82,
-  cashPositive: 40,
-  cashNegative: 6,
-  totalCompanies: 46,
-  gp: 22500000, 
-  gpMargin: 35.5,
-  priorYearGp: 20000000,
-  priorYearGpMargin: 33.1,
-  pbtAchievement: 104.2,
-  revenue: 65000000, 
-  revenuePriorYear: 58000000,
-  overhead: 14500000,
-  overheadPriorYear: 13000000,
-};
-
-const fallbackClusters: Cluster[] = [
-  {
-    id: "liner", name: "Liner", pbt: 125800, budget: 120000, ytdPBT: 1258000,
-    contribution: 21.1, variance: 5800, variancePercent: 4.8, risk: "low", trend: "up", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c1", name: "Liner Shipping", pbt: 85000, budget: 80000, variance: 5000, variancePercent: 6.25, risk: "low", trend: "up" },
-      { id: "c2", name: "Liner Logistics", pbt: 40800, budget: 40000, variance: 800, variancePercent: 2, risk: "low", trend: "stable" },
-    ]
-  },
-  {
-    id: "lube01", name: "Lube 01", pbt: 114600, budget: 102000, ytdPBT: 1146000,
-    contribution: 19.2, variance: 12600, variancePercent: 12.4, risk: "low", trend: "up", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c3", name: "MLL-Automotive", pbt: 48500, budget: 42000, variance: 6500, variancePercent: 15.5, risk: "low", trend: "up" },
-      { id: "c4", name: "MLL-Industrial", pbt: 25600, budget: 22000, variance: 3600, variancePercent: 16.4, risk: "low", trend: "up" },
-      { id: "c5", name: "Mckupler", pbt: 18500, budget: 16000, variance: 2500, variancePercent: 15.6, risk: "low", trend: "stable" },
-      { id: "c6", name: "3M Distribution", pbt: 12800, budget: 14000, variance: -1200, variancePercent: -8.6, risk: "medium", trend: "down" },
-      { id: "c7", name: "Mcshaw Automotive", pbt: 9200, budget: 8500, variance: 700, variancePercent: 8.2, risk: "low", trend: "stable" },
-    ]
-  },
-  {
-    id: "gac", name: "GAC Group", pbt: 109700, budget: 110000, ytdPBT: 1097000,
-    contribution: 18.4, variance: -300, variancePercent: -0.3, risk: "low", trend: "stable", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c8", name: "GSL", pbt: 42500, budget: 40000, variance: 2500, variancePercent: 6.25, risk: "low", trend: "up" },
-      { id: "c9", name: "MSL", pbt: 31200, budget: 28000, variance: 3200, variancePercent: 11.4, risk: "low", trend: "up" },
-      { id: "c10", name: "GAC Tug", pbt: 28900, budget: 25000, variance: 3900, variancePercent: 15.6, risk: "low", trend: "up" },
-      { id: "c11", name: "GLL", pbt: 15600, budget: 16000, variance: -400, variancePercent: -2.5, risk: "low", trend: "stable" },
-      { id: "c12", name: "GMSL", pbt: -8500, budget: 5000, variance: -13500, variancePercent: -270, risk: "critical", trend: "down" },
-    ]
-  },
-  {
-    id: "shipping", name: "Shipping Services", pbt: 97000, budget: 89000, ytdPBT: 970000,
-    contribution: 16.3, variance: 8000, variancePercent: 9.0, risk: "low", trend: "up", fiscalCycle: "Apr-Mar",
-    companies: [
-      { id: "c13", name: "MSS Shipping", pbt: 65000, budget: 60000, variance: 5000, variancePercent: 8.3, risk: "low", trend: "up" },
-      { id: "c14", name: "MMA Training", pbt: 32000, budget: 29000, variance: 3000, variancePercent: 10.3, risk: "low", trend: "up" },
-    ]
-  },
-  {
-    id: "shipsupply", name: "Ship Supply", pbt: 73100, budget: 75000, ytdPBT: 731000,
-    contribution: 12.3, variance: -1900, variancePercent: -2.5, risk: "low", trend: "stable", fiscalCycle: "Apr-Mar",
-    companies: [
-      { id: "c15", name: "Ship Chandlers", pbt: 45000, budget: 46000, variance: -1000, variancePercent: -2.2, risk: "low", trend: "stable" },
-      { id: "c16", name: "Marine Supplies", pbt: 28100, budget: 29000, variance: -900, variancePercent: -3.1, risk: "low", trend: "stable" },
-    ]
-  },
-  {
-    id: "property", name: "Property", pbt: 47800, budget: 46000, ytdPBT: 478000,
-    contribution: 8.0, variance: 1800, variancePercent: 3.9, risk: "low", trend: "stable", fiscalCycle: "Apr-Mar",
-    companies: [
-      { id: "c17", name: "MLL Properties", pbt: 47800, budget: 46000, variance: 1800, variancePercent: 3.9, risk: "low", trend: "stable" },
-    ]
-  },
-  {
-    id: "warehouse", name: "Warehouse & Logistics", pbt: 44300, budget: 40000, ytdPBT: 443000,
-    contribution: 7.4, variance: 4300, variancePercent: 10.8, risk: "low", trend: "up", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c18", name: "MLL Warehousing", pbt: 44300, budget: 40000, variance: 4300, variancePercent: 10.8, risk: "low", trend: "up" },
-    ]
-  },
-  {
-    id: "manufacturing", name: "Manufacturing", pbt: 40800, budget: 37500, ytdPBT: 408000,
-    contribution: 6.8, variance: 3300, variancePercent: 8.8, risk: "low", trend: "up", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c19", name: "Industrial Mfg", pbt: 40800, budget: 37500, variance: 3300, variancePercent: 8.8, risk: "low", trend: "up" },
-    ]
-  },
-  {
-    id: "hotel", name: "Hotel & Leisure", pbt: 8500, budget: 10000, ytdPBT: 85000,
-    contribution: 1.4, variance: -1500, variancePercent: -15, risk: "medium", trend: "down", fiscalCycle: "Apr-Mar",
-    companies: [
-      { id: "c20", name: "Topaz Hotels", pbt: 8500, budget: 10000, variance: -1500, variancePercent: -15, risk: "medium", trend: "down" },
-    ]
-  },
-  {
-    id: "strategic", name: "Strategic Investment", pbt: -5200, budget: -3000, ytdPBT: -52000,
-    contribution: -0.9, variance: -2200, variancePercent: -73.3, risk: "medium", trend: "down", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c21", name: "MGML", pbt: -5200, budget: -3000, variance: -2200, variancePercent: -73.3, risk: "medium", trend: "down" },
-    ]
-  },
-  {
-    id: "lube02", name: "Lube 02", pbt: -15000, budget: 14500, ytdPBT: -150000,
-    contribution: -2.5, variance: -29500, variancePercent: -203.4, risk: "high", trend: "down", fiscalCycle: "Jan-Dec",
-    companies: [
-      { id: "c22", name: "Interocean Lubricants", pbt: -10000, budget: 10000, variance: -20000, variancePercent: -200, risk: "critical", trend: "down" },
-      { id: "c23", name: "Carplan Lubricants", pbt: -5000, budget: 4500, variance: -9500, variancePercent: -211, risk: "high", trend: "down" },
-    ]
-  },
-  {
-    id: "bunkering", name: "Bunkering", pbt: -45000, budget: 20000, ytdPBT: -450000,
-    contribution: -7.5, variance: -65000, variancePercent: -325, risk: "critical", trend: "down", fiscalCycle: "Apr-Mar",
-    companies: [
-      { id: "c24", name: "IOE Group", pbt: -45000, budget: 20000, variance: -65000, variancePercent: -325, risk: "critical", trend: "down" },
-    ]
-  },
-];
 
 // ============ HELPER FUNCTIONS ============
 
@@ -355,15 +237,8 @@ function CompanyPbtTrendScroller({
           </p>
         </div>
 
-        {/* Optional: keep your range chips if you want UI only (not wired here) */}
-        <div className="flex bg-white border border-slate-200 rounded-lg p-0.5">
-          <button className="px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50 rounded">
-            6M
-          </button>
-          <button className="px-2 py-1 text-[10px] font-medium text-[#0b1f3a] bg-slate-100 rounded shadow-sm">
-            12M
-          </button>
-        </div>
+        {/* Continuous timeline - scroll to view history */}
+        <span className="text-[10px] text-slate-400 font-medium">Scroll to view history</span>
       </div>
 
       {/* Horizontal scroller */}
@@ -485,7 +360,7 @@ export default function MDDashboard() {
 
   const clusters = useMemo(() => {
     const contributionClusters = contributionState.data?.clusters || [];
-    if (contributionClusters.length === 0) return fallbackClusters;
+    if (contributionClusters.length === 0) return [] as Cluster[];
 
     return contributionClusters.map((c) => {
       const pbt = Number(c.pbt || 0);
@@ -535,12 +410,7 @@ export default function MDDashboard() {
 
   const chartData = useMemo(() => {
     if (!contributionState.data?.clusters?.length) {
-      return fallbackClusters.map((c) => ({
-        name: c.name,
-        value: c.contribution,
-        pbt: c.pbt,
-        risk: c.risk,
-      }));
+      return [];
     }
     return contributionState.data.clusters.map((c) => ({
       name: c.cluster_name,
@@ -550,10 +420,12 @@ export default function MDDashboard() {
     }));
   }, [contributionState.data, riskByCluster]);
 
+  const isLoading = overviewState.loading || contributionState.loading || performersState.loading;
+
   const groupData = useMemo(() => {
     const overview = overviewState.data;
     if (!overview) {
-      return overviewMode === "month" ? groupDataMonth : groupDataYTD;
+      return emptyGroupData;
     }
     const completion = overview.companies_total
       ? (overview.companies_reporting / overview.companies_total) * 100
@@ -562,20 +434,20 @@ export default function MDDashboard() {
       totalPBT: Number(overview.pbt.actual || 0),
       budget: Number(overview.pbt.budget || 0),
       ytdPBT: Number(overview.pbt.actual || 0),
-      priorYearPBT: Number(overview.pbt.budget || 0),
+      priorYearPBT: Number((overview.pbt as any).prior_year ?? overview.pbt.budget ?? 0),
       healthScore: Number(completion.toFixed(1)),
       cashPositive: overview.companies_reporting,
       cashNegative: Math.max(overview.companies_total - overview.companies_reporting, 0),
       totalCompanies: overview.companies_total,
       gp: Number(overview.gp.actual || 0),
       gpMargin: Number(overview.gp_margin.actual || 0),
-      priorYearGp: Number(overview.gp.budget || 0),
-      priorYearGpMargin: Number(overview.gp_margin.budget || 0),
+      priorYearGp: Number((overview.gp as any).prior_year ?? overview.gp.budget ?? 0),
+      priorYearGpMargin: Number((overview.gp_margin as any).prior_year ?? overview.gp_margin.budget ?? 0),
       pbtAchievement: Number(overview.pbt_achievement.actual || 0),
       revenue: Number(overview.revenue.actual || 0),
-      revenuePriorYear: Number(overview.revenue.budget || 0),
+      revenuePriorYear: Number((overview.revenue as any).prior_year ?? overview.revenue.budget ?? 0),
       overhead: Number(overview.total_overhead.actual || 0),
-      overheadPriorYear: Number(overview.total_overhead.budget || 0),
+      overheadPriorYear: Number((overview.total_overhead as any).prior_year ?? overview.total_overhead.budget ?? 0),
     };
   }, [overviewState.data, overviewMode]);
 
@@ -614,7 +486,8 @@ export default function MDDashboard() {
     { value: 12, label: "December" },
   ];
   
-  const availableYears = [2024, 2025, 2026];
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - i);
   
   // Get selected month name
   const selectedMonthName = availableMonths.find(m => m.value === selectedMonth)?.label || "October";
@@ -708,23 +581,49 @@ export default function MDDashboard() {
 
   // Compute YTD Segmented Performers (Jan-Dec vs Apr-Mar)
   const ytdSegments = useMemo(() => {
-    // Flatten and include fiscal cycle
+    // Use hierarchy data to get companies with fiscal_year_start_month
+    const hierClusters = hierarchyState.data?.clusters || [];
+    if (hierClusters.length > 0) {
+      const allCompanies = hierClusters.flatMap(c => c.companies.map(co => ({
+        id: String(co.id),
+        name: co.name,
+        pbt: co.ytd_pbt_actual,
+        budget: co.ytd_pbt_budget,
+        fiscalCycle: co.fiscal_year_start_month === 4 ? "Apr-Mar" : "Jan-Dec",
+        achievement: co.ytd_budget_pbt !== 0 
+          ? (co.ytd_pbt_actual / Math.abs(co.ytd_pbt_budget)) * 100 
+          : co.ytd_achievement_pct
+      })));
+      
+      const janDec = allCompanies.filter(c => c.fiscalCycle === "Jan-Dec");
+      const aprMar = allCompanies.filter(c => c.fiscalCycle === "Apr-Mar");
+
+      const getRanked = (list: typeof allCompanies) => {
+        const sorted = [...list].sort((a, b) => b.achievement - a.achievement);
+        return {
+          top: sorted.slice(0, 5),
+          bottom: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement)
+        };
+      };
+
+      return { janDec: getRanked(janDec), aprMar: getRanked(aprMar) };
+    }
+
+    // Fallback: use clusters with derived fiscal cycle
     const allCompanies = clusters.flatMap(c => c.companies.map(co => ({
         ...co, 
         fiscalCycle: c.fiscalCycle || "Jan-Dec",
         achievement: (co.pbt / (co.budget === 0 ? 1 : co.budget)) * 100
     })));
     
-    // Split by cycle
     const janDec = allCompanies.filter(c => c.fiscalCycle === "Jan-Dec");
     const aprMar = allCompanies.filter(c => c.fiscalCycle === "Apr-Mar");
 
-    // Helper to get top/bottom 5
     const getRanked = (list: typeof allCompanies) => {
         const sorted = [...list].sort((a, b) => b.achievement - a.achievement);
         return {
             top: sorted.slice(0, 5),
-            bottom: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement) // Ascending (lowest first)
+            bottom: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement)
         };
     };
 
@@ -732,7 +631,7 @@ export default function MDDashboard() {
         janDec: getRanked(janDec),
         aprMar: getRanked(aprMar)
     };
-  }, [clusters]);
+  }, [clusters, hierarchyState.data]);
 
   return (
     <div className="min-h-full bg-slate-50 overflow-x-hidden">
@@ -836,6 +735,26 @@ export default function MDDashboard() {
           </div>
         </div>
 
+        {/* Loading / Empty State */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#0b1f3a] mx-auto mb-4" />
+              <p className="text-sm text-slate-500">Loading financial data...</p>
+            </div>
+          </div>
+        )}
+
+        {!isLoading && groupData.totalPBT === 0 && groupData.budget === 0 && groupData.revenue === 0 && clusters.length === 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 p-10 text-center mb-6">
+            <Building2 className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-slate-700 mb-1">No Financial Data Available</h3>
+            <p className="text-sm text-slate-500">
+              No financial records found for the selected period. Try selecting a different month or year with uploaded data.
+            </p>
+          </div>
+        )}
+
         {/* ============ GROUP KPIs (Level 1) ============ */}
         <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
           {/* Tile 1: Revenue */}
@@ -862,11 +781,17 @@ export default function MDDashboard() {
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.gp)}</p>
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
-              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +12.1%
-              </span>
-              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+              {groupData.priorYearGp ? (() => {
+                const gpChange = ((groupData.gp - groupData.priorYearGp) / Math.abs(groupData.priorYearGp) * 100);
+                const isPos = gpChange >= 0;
+                return (<>
+                  <span className={`flex items-center text-[10px] sm:text-xs font-medium ${isPos ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {isPos ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+                    {isPos ? '+' : ''}{gpChange.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+                </>);
+              })() : (<span className="text-[10px] sm:text-xs text-slate-400">No prior year data</span>)}
             </div>
           </div>
 
@@ -910,11 +835,17 @@ export default function MDDashboard() {
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.totalPBT)}</p>
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
-              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +8.4%
-              </span>
-              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+              {groupData.priorYearPBT ? (() => {
+                const pbtChange = ((groupData.totalPBT - groupData.priorYearPBT) / Math.abs(groupData.priorYearPBT) * 100);
+                const isPos = pbtChange >= 0;
+                return (<>
+                  <span className={`flex items-center text-[10px] sm:text-xs font-medium ${isPos ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {isPos ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+                    {isPos ? '+' : ''}{pbtChange.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+                </>);
+              })() : (<span className="text-[10px] sm:text-xs text-slate-400">No prior year data</span>)}
             </div>
           </div>
 
@@ -1284,37 +1215,16 @@ export default function MDDashboard() {
 
           {/* Company PBT Trend Chart (Visible when Company Selected) */}
           {selectedCompany && (
+            <CompanyPbtTrendScroller
+              selectedCompany={{ id: selectedCompany.id, name: selectedCompany.name, pbt: selectedCompany.pbt, budget: selectedCompany.budget }}
+            />
+          )}
+          {/* Placeholder for chart - kept for structure */}
+          {false && selectedCompany && (
             <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-800">
-                    {selectedCompany.name} <span className="text-slate-400 font-normal">| PBT Trend</span>
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Continuous Monthly Timeline (Anchor: {availableMonths.find(m => m.value === drilldownMonth)?.label} {drilldownYear})
-                  </p>
-                </div>
-                {/* Range Controls */}
-                <div className="flex bg-white border border-slate-200 rounded-lg p-0.5">
-                  <button className="px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50 rounded">6M</button>
-                  <button className="px-2 py-1 text-[10px] font-medium text-[#0b1f3a] bg-slate-100 rounded shadow-sm">12M</button>
-                </div>
-              </div>
-              
               <div className="h-48 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={[
-                    // Dynamic Mock Data for 12 months ending at drilldownMonth/Year
-                    ...Array.from({ length: 12 }).map((_, i) => {
-                      const d = new Date(drilldownYear, drilldownMonth - 1 - (11 - i), 1);
-                      return {
-                        month: d.toLocaleString('default', { month: 'short' }),
-                        year: d.getFullYear(),
-                        value: selectedCompany.pbt * (0.8 + Math.random() * 0.4), // Random variation
-                        budget: selectedCompany.budget * (0.9 + Math.random() * 0.2)
-                      };
-                    })
-                  ]}>
+                  <LineChart data={[]}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis 
                       dataKey="month" 

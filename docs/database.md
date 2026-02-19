@@ -1,139 +1,43 @@
-# Database Schema
+# 🗄️ Database Schema
 
 ## Overview
 
-MacLarens Analytics uses PostgreSQL as the primary database, with a normalized schema designed for multi-tenant data isolation and efficient querying.
+The application uses **PostgreSQL** as its primary data store, managed via **SQLAlchemy** (Async functionality). The schema is designed to handle hierarchical financial data, distinct user roles, and rigorous workflow states.
 
-## Entity Relationship Diagram
+## 📝 Key Enums
 
-```
-┌─────────────┐       ┌─────────────┐       ┌─────────────┐
-│   Clusters  │──────<│  Companies  │──────<│    Users    │
-└─────────────┘       └─────────────┘       └──────┬──────┘
-                             │                     │
-                             │                     │
-                             ▼                     ▼
-                      ┌─────────────┐       ┌──────────────┐
-                      │   Reports   │──────<│  Approvals   │
-                      └─────────────┘       └──────────────┘
-                             │
-                             ▼
-                      ┌─────────────┐
-                      │ Audit Logs  │
-                      └─────────────┘
-```
+| Enum                 | Values                                                   | Description                                                |
+| :------------------- | :------------------------------------------------------- | :--------------------------------------------------------- |
+| **UserRole**         | `Finance Officer`, `Finance Director`, `Admin`, `MD`     | Defines user permissions and dashboard access.             |
+| **ReportStatus**     | `Draft`, `Submitted`, `Approved`, `Rejected`             | The lifecycle of a monthly financial report.               |
+| **FiscalCycle**      | `DECEMBER` (Jan-Dec), `MARCH` (Apr-Mar)                  | Supports different financial year definitions per company. |
+| **Scenario**         | `ACTUAL`, `BUDGET`                                       | distinguishes between realized values and planned targets. |
+| **NotificationType** | `report_submitted`, `report_approved`, `report_rejected` | Categorizes system alerts.                                 |
 
-## Tables
+## 📦 Core Entities
 
-### clusters
+### 1. Master Data
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| name | VARCHAR(255) | Cluster name |
-| code | VARCHAR(50) | Unique code |
-| description | TEXT | Description |
-| region | VARCHAR(100) | Geographic region |
-| is_active | BOOLEAN | Active status |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last update time |
+- **User**: System users linked to Entra ID (in prod). Stores Role, Name, Email.
+- **Company**: Legal entities. Linked to a `Cluster` and has a specific `FiscalCycle`.
+- **Cluster**: Grouping of companies (e.g., "Maritime", "Logistics").
 
-### companies
+### 2. Financial Data
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| name | VARCHAR(255) | Company name |
-| code | VARCHAR(50) | Unique code |
-| cluster_id | UUID | FK to clusters |
-| address | TEXT | Address |
-| contact_email | VARCHAR(255) | Contact email |
-| contact_phone | VARCHAR(50) | Contact phone |
-| is_active | BOOLEAN | Active status |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last update time |
+- **Report**: Represents a submission bundle for a specific `Company`, `Month`, and `Year`.
+  - Tracks `status`, `submitted_by`, `approved_by`.
+  - Contains `actual_comment` and `budget_comment`.
+- **FinancialData**: The granular line items (Revenue, GP, Expenses, EBIT, etc.).
+  - Linked to a `Report` or keyed by Company/Period.
+  - Stores raw values for both `ACTUAL` and `BUDGET` scenarios.
 
-### users
+### 3. System
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| email | VARCHAR(255) | Email (unique) |
-| name | VARCHAR(255) | Full name |
-| role | VARCHAR(50) | User role |
-| company_id | UUID | FK to companies |
-| cluster_id | UUID | FK to clusters |
-| azure_oid | VARCHAR(255) | Azure AD Object ID |
-| is_active | BOOLEAN | Active status |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last update time |
-| last_login | TIMESTAMP | Last login time |
+- **Notification**: In-app alerts for users.
+- **AuditLog**: Records sensitive actions (User creation, Report approval).
 
-### reports
+## 🛠️ Design Patterns
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| title | VARCHAR(255) | Report title |
-| status | VARCHAR(50) | Workflow status |
-| data | JSONB | Report data |
-| author_id | UUID | FK to users |
-| company_id | UUID | FK to companies |
-| rejection_reason | TEXT | Rejection reason |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last update time |
-| submitted_at | TIMESTAMP | Submission time |
-
-### report_approvals
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| report_id | UUID | FK to reports |
-| approver_id | UUID | FK to users |
-| status | VARCHAR(50) | Approval status |
-| comments | TEXT | Approver comments |
-| approved_at | TIMESTAMP | Approval time |
-| created_at | TIMESTAMP | Creation time |
-
-### audit_logs
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| user_id | UUID | FK to users |
-| action | VARCHAR(100) | Action performed |
-| resource_type | VARCHAR(100) | Resource type |
-| resource_id | UUID | Resource ID |
-| details | JSONB | Additional details |
-| ip_address | VARCHAR(50) | Client IP |
-| user_agent | VARCHAR(500) | User agent |
-| timestamp | TIMESTAMP | Event time |
-
-## Indexes
-
-```sql
--- Performance indexes
-CREATE INDEX idx_reports_status ON reports(status);
-CREATE INDEX idx_reports_company ON reports(company_id);
-CREATE INDEX idx_reports_author ON reports(author_id);
-CREATE INDEX idx_users_company ON users(company_id);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
-```
-
-## Migrations
-
-Use Alembic for database migrations:
-
-```bash
-# Create migration
-alembic revision --autogenerate -m "description"
-
-# Run migrations
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
+- **Soft Delete**: Critical tables support soft deletion (`is_active` flags) rather than physical removal.
+- **Audit Trails**: All status changes in reports are logged to `ReportHistory`.
+- **Hybrid Properties**: Advanced SQLAlchemy features are used for calculated fields (e.g., formatting dates, computing margins).

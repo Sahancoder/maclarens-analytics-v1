@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Edit, RefreshCw, Calendar, Building2 } from "lucide-react";
+import { FileText, Edit, RefreshCw, Calendar, Building2, Trash2 } from "lucide-react";
 import { FOAPI } from "@/lib/api-client";
 
 const MONTHS = [
@@ -45,6 +45,28 @@ export default function DraftsPage() {
   useEffect(() => {
     loadDrafts();
   }, []);
+
+  const handleDelete = async (draft: DraftItem) => {
+    if (!confirm("Are you sure you want to delete this draft? This action cannot be undone.")) {
+      return;
+    }
+    
+    // Construct report ID as expected by backend (company_id_period_id)
+    const reportId = `${draft.company_id}_${draft.period_id}`;
+    
+    try {
+      const res = await FOAPI.deleteDraft(reportId);
+      if (res.status === 200 || res.data?.success) {
+        // Refresh drafts list
+        loadDrafts();
+      } else {
+        alert(res.error || "Failed to delete draft");
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("An error occurred while deleting the draft");
+    }
+  };
 
   const handleResume = (draft: DraftItem) => {
     sessionStorage.setItem(
@@ -151,6 +173,13 @@ export default function DraftsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDelete(draft)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                    title="Delete Draft"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => handleResume(draft)}
                     className="flex items-center gap-2 px-4 py-2 bg-[#0b1f3a] text-white rounded-lg text-sm font-medium hover:bg-[#0b1f3a]/90 transition-colors"

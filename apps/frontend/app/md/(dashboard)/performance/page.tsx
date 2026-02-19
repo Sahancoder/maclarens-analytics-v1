@@ -30,71 +30,46 @@ import {
   Legend,
   ReferenceArea,
 } from "recharts";
+import {
+  usePerformanceHierarchy,
+  useCompanyDetail,
+} from "@/hooks/use-api";
+import { MDAPI } from "@/lib/api-client";
 
-// ============ DATA ============
+// ============ DATA MODELS ============
 
-// ============ DATA MODELS & MOCKS ============
-
-interface FinanceDetails {
-  revenueUsd: number;
-  revenueLkr: number;
-  gpLkr: number;
-  gpMargin: number;
-  otherIncome: number;
-  personnelExpenses: number;
-  adminExpenses: number;
-  sellingExpenses: number;
-  financeExpenses: number;
-  depreciation: number;
-  totalOverheads: number;
-  provisions: number;
-  exchangeGain: number; // or loss (negative)
-  pbtBeforeNonOps: number;
-  npMargin: number; // Net Profit Margin
-  nonOpsExpenses: number;
-  nonOpsIncome: number;
-  pbtAfterNonOps: number;
-  ebit: number;
-  ebitda: number;
-}
-
-interface Company extends FinanceDetails {
+// Company/Cluster from API hierarchy
+interface HCompany {
   id: string;
   name: string;
-  clusterId: string;
-  fiscalYearStartMonth: 1 | 4; // 1 = Jan, 4 = Apr
-  
-  // High-level Metrics for Table
-  monthActualPbt: number;
-  monthBudgetPbt: number;
-  monthAchievement: number;
-  yearActualPbt: number; // YTD based on fiscal year
-  yearBudgetPbt: number; // YTD based on fiscal year
-  yearAchievement: number;
-
-  uploadedBy: string;
-  uploadedAt: string;
-  lastUpdated: string;
-  
-  // YTD Data Container (Mirrors root FinanceDetails)
-  ytd: FinanceDetails;
+  code: string;
+  pbt_actual: number;
+  pbt_budget: number;
+  achievement_pct: number;
+  gp_margin: number;
+  report_status: string | null;
+  ytd_pbt_actual: number;
+  ytd_pbt_budget: number;
+  ytd_achievement_pct: number;
+  fiscal_year_start_month: number;
 }
 
-interface Cluster {
+interface HCluster {
   id: string;
   name: string;
-  companies: Company[];
-  
-  // Aggregated Metrics
-  monthActualPbt: number;
-  monthBudgetPbt: number;
-  monthAchievement: number;
-  yearActualPbt: number;
-  yearBudgetPbt: number;
-  yearAchievement: number;
+  code: string;
+  pbt_actual: number;
+  pbt_budget: number;
+  achievement_pct: number;
+  company_count: number;
+  companies: HCompany[];
+  ytd_pbt_actual: number;
+  ytd_pbt_budget: number;
+  ytd_achievement_pct: number;
 }
 
-// Helpers
+// ============ HELPERS ============
+
 const formatCurrencyLKR = (val: number, compact = false) => {
   if (compact) {
     if (Math.abs(val) >= 1000000) return `LKR ${(val / 1000000).toFixed(1)}M`;
@@ -102,203 +77,18 @@ const formatCurrencyLKR = (val: number, compact = false) => {
   }
   return `LKR ${val.toLocaleString()}`;
 };
-const formatLKR000 = (val: number) => val.toLocaleString(); // Just comma separated
-const formatUSD = (val: number) => `USD ${val.toLocaleString()}`;
+const formatLKR000 = (val: number) => val.toLocaleString();
 const formatPercent = (val: number) => `${val.toFixed(1)}%`;
-
-// Date Helpers
-function generateMonthSeries(fromYear = 2020) {
-  const start = new Date(fromYear, 0, 1);
-  const now = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const months: Date[] = [];
-  const cursor = new Date(start);
-
-  while (cursor <= end) {
-    months.push(new Date(cursor));
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-
-  return months;
-}
-
-function monthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthLabel(d: Date) {
-  return d.toLocaleString("default", { month: "short" });
-}
-
-function fullLabel(d: Date) {
-  return `${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
-}
-
-const generateCompanyData = (id: string, name: string, clusterId: string, fiscalStart: 1 | 4): Company => {
-  // Base PBT ~10m - 50m
-  const basePbt = Math.floor(Math.random() * 40000000) + 10000000;
-  
-  // Granular details
-  const revenueLkr = basePbt * 4;
-  const gpLkr = revenueLkr * 0.4;
-  const totalOverheads = gpLkr * 0.5;
-  
-  const personnelExpenses = totalOverheads * 0.4;
-  const adminExpenses = totalOverheads * 0.3;
-  const sellingExpenses = totalOverheads * 0.2;
-  const financeExpenses = totalOverheads * 0.05;
-  const depreciation = totalOverheads * 0.05;
-
-  const pbtBeforeNonOps = gpLkr - totalOverheads;
-  
-  return {
-    id, name, clusterId, fiscalYearStartMonth: fiscalStart,
-    
-    // Finance Details (Mocked for single month view)
-    revenueUsd: revenueLkr / 300,
-    revenueLkr,
-    gpLkr,
-    gpMargin: (gpLkr / revenueLkr) * 100,
-    otherIncome: Math.floor(Math.random() * 500000),
-    personnelExpenses,
-    adminExpenses,
-    sellingExpenses,
-    financeExpenses,
-    depreciation,
-    totalOverheads,
-    provisions: -50000,
-    exchangeGain: 120000,
-    pbtBeforeNonOps,
-    npMargin: (pbtBeforeNonOps / revenueLkr) * 100,
-    nonOpsExpenses: 0,
-    nonOpsIncome: 0,
-    pbtAfterNonOps: pbtBeforeNonOps, // Assuming simplified for mock
-    ebit: pbtBeforeNonOps + financeExpenses,
-    ebitda: pbtBeforeNonOps + financeExpenses + depreciation,
-
-    // Table Metrics
-    monthActualPbt: pbtBeforeNonOps / 12,
-    monthBudgetPbt: (pbtBeforeNonOps / 12) * 0.9, // 110% achievement
-    monthAchievement: 111.1,
-    
-    // Different YTD scaling based on fiscal start
-    // If Jan start (1), and we act like it's Oct -> 10 months.
-    // If Apr start (4), and we act like it's Oct -> 7 months.
-    yearActualPbt: pbtBeforeNonOps * (fiscalStart === 1 ? 0.8 : 0.6), 
-    yearBudgetPbt: (pbtBeforeNonOps * (fiscalStart === 1 ? 0.8 : 0.6)) * 0.95,
-    yearAchievement: 105.2,
-
-    uploadedBy: "Finance Officer",
-    uploadedAt: "2025-10-15 14:30",
-    lastUpdated: "v1.0",
-    
-    // Mock YTD Data (Multiplying monthly by duration for simulation)
-    ytd: {
-      revenueUsd: (revenueLkr / 300) * (fiscalStart === 1 ? 10 : 7),
-      revenueLkr: revenueLkr * (fiscalStart === 1 ? 10 : 7),
-      gpLkr: gpLkr * (fiscalStart === 1 ? 10 : 7),
-      gpMargin: (gpLkr / revenueLkr) * 100, // Margin typically stays similar or weighted avg
-      otherIncome: Math.floor(Math.random() * 500000) * (fiscalStart === 1 ? 10 : 7),
-      personnelExpenses: personnelExpenses * (fiscalStart === 1 ? 10 : 7),
-      adminExpenses: adminExpenses * (fiscalStart === 1 ? 10 : 7),
-      sellingExpenses: sellingExpenses * (fiscalStart === 1 ? 10 : 7),
-      financeExpenses: financeExpenses * (fiscalStart === 1 ? 10 : 7),
-      depreciation: depreciation * (fiscalStart === 1 ? 10 : 7),
-      totalOverheads: totalOverheads * (fiscalStart === 1 ? 10 : 7),
-      provisions: -50000 * (fiscalStart === 1 ? 10 : 7),
-      exchangeGain: 120000 * (fiscalStart === 1 ? 10 : 7),
-      pbtBeforeNonOps: pbtBeforeNonOps * (fiscalStart === 1 ? 10 : 7),
-      npMargin: (pbtBeforeNonOps / revenueLkr) * 100,
-      nonOpsExpenses: 0,
-      nonOpsIncome: 0,
-      pbtAfterNonOps: pbtBeforeNonOps * (fiscalStart === 1 ? 10 : 7),
-      ebit: (pbtBeforeNonOps + financeExpenses) * (fiscalStart === 1 ? 10 : 7),
-      ebitda: (pbtBeforeNonOps + financeExpenses + depreciation) * (fiscalStart === 1 ? 10 : 7),
-    }
-  };
-};
-
-const aggregateCluster = (id: string, name: string, companies: Company[]): Cluster => {
-  const sum = (key: keyof Company) => companies.reduce((acc, c) => acc + (c[key] as number), 0);
-  
-  const mAct = sum("monthActualPbt");
-  const mBud = sum("monthBudgetPbt");
-  const yAct = sum("yearActualPbt");
-  const yBud = sum("yearBudgetPbt");
-
-  return {
-    id, name, companies,
-    monthActualPbt: mAct,
-    monthBudgetPbt: mBud,
-    monthAchievement: mBud ? (mAct / mBud) * 100 : 0,
-    yearActualPbt: yAct,
-    yearBudgetPbt: yBud,
-    yearAchievement: yBud ? (yAct / yBud) * 100 : 0,
-  };
-};
-
-// FULL DATA SET
-const rawClusters = [
-  { id: "liner", name: "Liner", count: 2 },
-  { id: "lube01", name: "Lube 01", count: 3 },
-  { id: "gac", name: "GAC Group", count: 3 },
-  { id: "shipping", name: "Shipping Services", count: 2 },
-  { id: "shipsupply", name: "Ship Supply", count: 2 },
-  { id: "property", name: "Property", count: 1 },
-  { id: "warehouse", name: "Warehouse", count: 1 },
-  { id: "manufacturing", name: "Manufacturing", count: 1 },
-  { id: "hotel", name: "Hotel & Leisure", count: 1 },
-  { id: "strategic", name: "Strategic Inv.", count: 1 },
-  { id: "lube02", name: "Lube 02", count: 2 },
-  { id: "bunkering", name: "Bunkering", count: 1 },
-];
-
-const clusters: Cluster[] = rawClusters.map(rc => {
-  const companies = Array.from({ length: rc.count }).map((_, i) => 
-    generateCompanyData(`${rc.id}-c${i+1}`, `${rc.name} Co. ${i+1}`, rc.id, i % 2 === 0 ? 1 : 4) // Alternate Jan/Apr fiscal
-  );
-  return aggregateCluster(rc.id, rc.name, companies);
-});
 
 const getAchievementColor = (achievement: number) => {
   return achievement >= 100 ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50";
-};
-
-// Mock Comment Data Service
-interface Comment {
-  id: string;
-  authorRole: 'FINANCE_OFFICER' | 'SYSTEM_ADMIN' | 'FINANCE_DIRECTOR'; 
-  authorName: string;
-  message: string;
-  reviewedAt: string;
-}
-
-const getApprovedComments = (companyId: string): Comment[] => {
-  // Simulating fetching only FD Approved comments
-  return [
-    {
-      id: "c1",
-      authorRole: "FINANCE_OFFICER",
-      authorName: "Sahan Hettiarachchi",
-      message: "Revenue increase driven by higher volume in Q3. Operational costs were kept within budget despite fuel price volatility.",
-      reviewedAt: "Oct 16, 2025 • 10:45 AM"
-    },
-    {
-      id: "c2",
-      authorRole: "SYSTEM_ADMIN",
-      authorName: "System",
-      message: "Budget variance aligned with revised forecast v2. No significant anomalies detected in overhead allocation.",
-      reviewedAt: "Oct 16, 2025 • 10:48 AM"
-    }
-  ];
 };
 
 // ============ SUB-COMPONENTS ============
 
 // --- Multi-Select Component ---
 interface MultiSelectProps {
-  options: Company[];
+  options: HCompany[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   colors: Record<string, string>;
@@ -308,11 +98,11 @@ const MultiSelect = ({ options, selectedIds, onChange, colors }: MultiSelectProp
   const [isOpen, setIsOpen] = useState(false);
 
   const toggleOption = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent closing dropdown
+    e.stopPropagation();
     if (selectedIds.includes(id)) {
       onChange(selectedIds.filter(i => i !== id));
     } else {
-      if (selectedIds.length >= 5) return; // Limit to 5
+      if (selectedIds.length >= 5) return;
       onChange([...selectedIds, id]);
     }
   };
@@ -393,47 +183,50 @@ const MultiSelect = ({ options, selectedIds, onChange, colors }: MultiSelectProp
 };
 
 
-interface FinanceUploadModalProps {
-  company: Company | null;
+// ============ COMPANY DETAIL MODAL (Real API Data) ============
+
+interface CompanyDetailModalProps {
+  companyId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  monthName: string;
   year: number;
+  month: number;
+  monthName: string;
 }
 
-const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: FinanceUploadModalProps) => {
-  if (!isOpen || !company) return null;
+const CompanyDetailModal = ({ companyId, isOpen, onClose, year, month, monthName }: CompanyDetailModalProps) => {
+  const detailState = useCompanyDetail(isOpen ? companyId : null, year, month);
+  const detail = detailState.data;
 
-  // Calculate YTD Range Logic
-  const getYtdRangeLabel = () => {
-    // Current assumption: Selected month is calculated from outside (Oct 2025)
-    // Fiscal Start: 1 (Jan) or 4 (Apr)
-    
-    const monthIndex = 10; // October (1-indexed for logic clarity)
-    const fiscalStart = company.fiscalYearStartMonth;
-    let startMonthName = "";
-    let duration = 0;
-    
-    if (fiscalStart === 1) {
-      startMonthName = "Jan";
-      duration = monthIndex; // Jan to Oct = 10 months
-    } else {
-      startMonthName = "Apr";
-      // If Oct (10) >= Apr (4), simple diff
-      duration = monthIndex - fiscalStart + 1; // 10 - 4 + 1 = 7 months
-    }
-    
-    return {
-      label: `${startMonthName}–${monthName.substring(0, 3)} ${year}`,
-      duration
-    };
-  };
+  if (!isOpen || !companyId) return null;
 
-  const ytdInfo = getYtdRangeLabel();
-  
-  // Helper for 3-col Grid Row
-  // Helper for 3-col Grid Row with better visual separation
-  const GridRow = ({ label, monthly, ytd, isBold = false, isHeader = false, isAccent = false, isNegative = false }: any) => {
+  if (detailState.loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl p-12 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b1f3a] mx-auto mb-4"></div>
+          <p className="text-sm text-slate-500">Loading company details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl p-12 text-center">
+          <p className="text-sm text-slate-500">No data available for this company / period</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 text-sm bg-slate-100 rounded-lg hover:bg-slate-200">Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  const m = detail.monthly;
+  const ytd = detail.ytd;
+  const fiscalLabel = detail.fiscal_year_start_month === 1 ? "Jan-Dec" : detail.fiscal_year_start_month === 4 ? "Apr-Mar" : `Month ${detail.fiscal_year_start_month}`;
+
+  const GridRow = ({ label, monthly, ytdVal, isBold = false, isHeader = false, isAccent = false, isNegative = false }: any) => {
     if (isHeader) {
       return (
         <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] md:grid-cols-[1fr_140px_140px] items-center border-b-2 border-slate-100 pb-2 mb-2">
@@ -443,29 +236,11 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
         </div>
       );
     }
-    
     return (
       <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] md:grid-cols-[1fr_140px_140px] items-center py-2 sm:py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 rounded-sm">
-         <div className={`pl-2 pr-2 sm:pr-4 ${isBold ? 'font-semibold text-slate-800' : 'text-slate-600 font-medium'} text-xs sm:text-sm truncate`}>
-           {label}
-         </div>
-         
-         {/* Monthly Value */}
-         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight
-           ${isBold ? 'font-bold' : 'font-medium'} 
-           ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
-         `}>
-           {monthly}
-         </div>
-         
-         {/* YTD Value */}
-         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight
-           ${isBold ? 'font-bold' : 'font-medium'} 
-           ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}
-           bg-slate-50/50 -my-2 sm:-my-2.5 py-2 sm:py-2.5
-         `}>
-           {ytd}
-         </div>
+         <div className={`pl-2 pr-2 sm:pr-4 ${isBold ? 'font-semibold text-slate-800' : 'text-slate-600 font-medium'} text-xs sm:text-sm truncate`}>{label}</div>
+         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight ${isBold ? 'font-bold' : 'font-medium'} ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')}`}>{monthly}</div>
+         <div className={`text-right px-2 sm:px-3 border-l border-slate-100 font-mono text-xs sm:text-sm tracking-tight ${isBold ? 'font-bold' : 'font-medium'} ${isNegative ? 'text-red-600' : (isAccent ? 'text-[#0b1f3a]' : 'text-slate-700')} bg-slate-50/50 -my-2 sm:-my-2.5 py-2 sm:py-2.5`}>{ytdVal}</div>
       </div>
     );
   };
@@ -477,10 +252,10 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
         {/* Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-start sm:items-center justify-between bg-slate-50 gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg sm:text-xl font-bold text-slate-900 truncate">{company.name}</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 truncate">{detail.company_name}</h3>
             <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-6 gap-y-1 mt-1 text-[10px] sm:text-xs text-slate-500">
                <span className="px-1.5 sm:px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-medium">
-                 Fiscal: {company.fiscalYearStartMonth === 1 ? "Jan-Dec" : "Apr-Mar"}
+                 Fiscal: {fiscalLabel}
                </span>
                <span className="flex items-center gap-1 sm:gap-2">
                  <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>
@@ -488,7 +263,7 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
                </span>
                <span className="flex items-center gap-1 sm:gap-2">
                  <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>
-                 <span className="font-semibold text-slate-700">YTD:</span> {ytdInfo.label} ({ytdInfo.duration} Mo.)
+                 <span className="font-semibold text-slate-700">YTD:</span> {detail.ytd_label} ({detail.ytd_months} Mo.)
                </span>
             </div>
           </div>
@@ -505,12 +280,11 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
                <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Revenue & Gross Profit</h4>
                <div className="space-y-1">
-                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
-                  <GridRow label="Revenue (USD)" monthly={formatLKR000(company.revenueUsd)} ytd={formatLKR000(company.ytd.revenueUsd)} />
-                  <GridRow label="Revenue (LKR)" monthly={formatCurrencyLKR(company.revenueLkr)} ytd={formatCurrencyLKR(company.ytd.revenueLkr)} />
+                  <GridRow isHeader label="" monthly="Monthly" ytdVal="YTD" />
+                  <GridRow label="Revenue (LKR)" monthly={formatLKR000(m.revenue_lkr)} ytdVal={formatLKR000(ytd.revenue_lkr)} />
                   <div className="border-t border-slate-100 my-2" />
-                  <GridRow label="Gross Profit (LKR)" isBold monthly={formatCurrencyLKR(company.gpLkr)} ytd={formatCurrencyLKR(company.ytd.gpLkr)} />
-                  <GridRow label="GP Margin" monthly={formatPercent(company.gpMargin)} ytd={formatPercent(company.ytd.gpMargin)} />
+                  <GridRow label="Gross Profit (LKR)" isBold monthly={formatLKR000(m.gp)} ytdVal={formatLKR000(ytd.gp)} />
+                  <GridRow label="GP Margin" monthly={formatPercent(m.gp_margin)} ytdVal={formatPercent(ytd.gp_margin)} />
                </div>
             </div>
 
@@ -518,14 +292,14 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
                <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Expenses Breakdown (LKR)</h4>
                <div className="space-y-1">
-                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
-                  <GridRow label="Personnel Related/HR" monthly={formatLKR000(company.personnelExpenses)} ytd={formatLKR000(company.ytd.personnelExpenses)} />
-                  <GridRow label="Admin & Establishment" monthly={formatLKR000(company.adminExpenses)} ytd={formatLKR000(company.ytd.adminExpenses)} />
-                  <GridRow label="Selling & Distribution" monthly={formatLKR000(company.sellingExpenses)} ytd={formatLKR000(company.ytd.sellingExpenses)} />
-                  <GridRow label="Finance Expenses" monthly={formatLKR000(company.financeExpenses)} ytd={formatLKR000(company.ytd.financeExpenses)} />
-                  <GridRow label="Depreciation" monthly={formatLKR000(company.depreciation)} ytd={formatLKR000(company.ytd.depreciation)} />
+                  <GridRow isHeader label="" monthly="Monthly" ytdVal="YTD" />
+                  <GridRow label="Personnel Related/HR" monthly={formatLKR000(m.personal_exp)} ytdVal={formatLKR000(ytd.personal_exp)} />
+                  <GridRow label="Admin & Establishment" monthly={formatLKR000(m.admin_exp)} ytdVal={formatLKR000(ytd.admin_exp)} />
+                  <GridRow label="Selling & Distribution" monthly={formatLKR000(m.selling_exp)} ytdVal={formatLKR000(ytd.selling_exp)} />
+                  <GridRow label="Finance Expenses" monthly={formatLKR000(m.finance_exp)} ytdVal={formatLKR000(ytd.finance_exp)} />
+                  <GridRow label="Depreciation" monthly={formatLKR000(m.depreciation)} ytdVal={formatLKR000(ytd.depreciation)} />
                   <div className="border-t border-slate-100 my-2" />
-                  <GridRow label="Total Overheads" isBold isNegative monthly={`-${formatLKR000(company.totalOverheads)}`} ytd={`-${formatLKR000(company.ytd.totalOverheads)}`} />
+                  <GridRow label="Total Overheads" isBold isNegative monthly={`-${formatLKR000(Math.abs(m.total_overhead))}`} ytdVal={`-${formatLKR000(Math.abs(ytd.total_overhead))}`} />
                </div>
             </div>
 
@@ -533,13 +307,13 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
                <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2">Other Items (LKR)</h4>
                <div className="space-y-1">
-                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
-                  <GridRow label="Other Income" monthly={formatLKR000(company.otherIncome)} ytd={formatLKR000(company.ytd.otherIncome)} />
-                  <GridRow label="Provisions / Reversal" monthly={formatLKR000(company.provisions)} ytd={formatLKR000(company.ytd.provisions)} />
-                  <GridRow label="Exchange (Loss) / Gain" monthly={formatLKR000(company.exchangeGain)} ytd={formatLKR000(company.ytd.exchangeGain)} />
+                  <GridRow isHeader label="" monthly="Monthly" ytdVal="YTD" />
+                  <GridRow label="Other Income" monthly={formatLKR000(m.other_income)} ytdVal={formatLKR000(ytd.other_income)} />
+                  <GridRow label="Provisions / Reversal" monthly={formatLKR000(m.provisions)} ytdVal={formatLKR000(ytd.provisions)} />
+                  <GridRow label="Exchange (Loss) / Gain" monthly={formatLKR000(m.exchange_gl)} ytdVal={formatLKR000(ytd.exchange_gl)} />
                   <div className="border-t border-slate-100 my-2" />
-                  <GridRow label="Non Ops Income" monthly={formatLKR000(company.nonOpsIncome)} ytd={formatLKR000(company.ytd.nonOpsIncome)} />
-                  <GridRow label="Non Ops Expenses" monthly={formatLKR000(company.nonOpsExpenses)} ytd={formatLKR000(company.ytd.nonOpsExpenses)} />
+                  <GridRow label="Non Ops Income" monthly={formatLKR000(m.non_ops_income)} ytdVal={formatLKR000(ytd.non_ops_income)} />
+                  <GridRow label="Non Ops Expenses" monthly={formatLKR000(m.non_ops_exp)} ytdVal={formatLKR000(ytd.non_ops_exp)} />
                </div>
             </div>
 
@@ -547,16 +321,15 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
              <div className="bg-[#f8fafc] p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
                <h4 className="text-sm font-bold text-[#0b1f3a] uppercase tracking-wide mb-4 border-b border-slate-200 pb-2">Key Profit Metrics (LKR)</h4>
                <div className="space-y-1">
-                  <GridRow isHeader label="" monthly="Monthly" ytd="YTD" />
-                  <GridRow label="EBITDA" isBold monthly={formatLKR000(company.ebitda)} ytd={formatLKR000(company.ytd.ebitda)} />
-                  <GridRow label="EBIT" isBold monthly={formatLKR000(company.ebit)} ytd={formatLKR000(company.ytd.ebit)} />
+                  <GridRow isHeader label="" monthly="Monthly" ytdVal="YTD" />
+                  <GridRow label="EBITDA" isBold monthly={formatLKR000(m.ebitda)} ytdVal={formatLKR000(ytd.ebitda)} />
+                  <GridRow label="EBIT" isBold monthly={formatLKR000(m.ebit)} ytdVal={formatLKR000(ytd.ebit)} />
                   <div className="border-t border-slate-200 my-2" />
-                  <GridRow label="PBT (Before Non-Ops)" monthly={formatLKR000(company.pbtBeforeNonOps)} ytd={formatLKR000(company.ytd.pbtBeforeNonOps)} />
-                  <GridRow label="PBT (After Non-Ops)" isBold isAccent monthly={formatLKR000(company.pbtAfterNonOps)} ytd={formatLKR000(company.ytd.pbtAfterNonOps)} />
-                  <GridRow label="Net Profit Margin" monthly={formatPercent(company.npMargin)} ytd={formatPercent(company.ytd.npMargin)} />
+                  <GridRow label="PBT (Before Non-Ops)" monthly={formatLKR000(m.pbt_before_non_ops)} ytdVal={formatLKR000(ytd.pbt_before_non_ops)} />
+                  <GridRow label="PBT (After Non-Ops)" isBold isAccent monthly={formatLKR000(m.pbt_after_non_ops)} ytdVal={formatLKR000(ytd.pbt_after_non_ops)} />
+                  <GridRow label="Net Profit Margin" monthly={formatPercent(m.np_margin)} ytdVal={formatPercent(ytd.np_margin)} />
                </div>
             </div>
-
 
             {/* GROUP 5: FD Approved Comments */}
             <div className="md:col-span-2 mt-2">
@@ -571,15 +344,19 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
                    </span>
                 </div>
                 <div className="p-5 space-y-4">
-                  {getApprovedComments(company.id).map((comment) => (
-                    <div key={comment.id} className="relative pl-4 border-l-2 border-slate-200">
+                  {detail.fd_comments && detail.fd_comments.length > 0 ? detail.fd_comments.map((comment: any, idx: number) => (
+                    <div key={comment.id || idx} className="relative pl-4 border-l-2 border-slate-200">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-slate-800">{comment.authorRole === 'FINANCE_OFFICER' ? 'Finance Officer' : 'System Admin'}</span>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-xs text-slate-500">{comment.reviewedAt}</span>
+                        <span className="text-xs font-bold text-slate-800">{comment.author || comment.type || 'Finance Officer'}</span>
+                        {comment.timestamp && (
+                          <>
+                            <span className="text-slate-300">&#8226;</span>
+                            <span className="text-xs text-slate-500">{comment.timestamp}</span>
+                          </>
+                        )}
                       </div>
                       <p className="text-sm text-slate-600 leading-relaxed italic">
-                        "{comment.message}"
+                        &ldquo;{comment.message}&rdquo;
                       </p>
                       <div className="mt-2 flex items-center gap-1.5">
                          <div className="h-4 w-4 rounded-full bg-purple-100 flex items-center justify-center">
@@ -590,7 +367,9 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
                          <span className="text-[10px] font-medium text-purple-700 uppercase tracking-wide">Approved by Finance Director</span>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-sm text-slate-400 italic text-center py-4">No FD comments available for this period</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -599,9 +378,9 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
           
           {/* Metadata Footer */}
           <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap gap-6 text-xs text-slate-500">
-             <div><span className="font-semibold text-slate-700">Uploaded By: </span>{company.uploadedBy}</div>
-             <div><span className="font-semibold text-slate-700">Timestamp: </span>{company.uploadedAt}</div>
-             <div><span className="font-semibold text-slate-700">Version: </span>{company.lastUpdated}</div>
+             {detail.uploaded_by && <div><span className="font-semibold text-slate-700">Uploaded By: </span>{detail.uploaded_by}</div>}
+             {detail.uploaded_at && <div><span className="font-semibold text-slate-700">Timestamp: </span>{detail.uploaded_at}</div>}
+             {detail.report_status && <div><span className="font-semibold text-slate-700">Status: </span>{detail.report_status}</div>}
           </div>
         </div>
       </div>
@@ -609,18 +388,20 @@ const FinanceUploadModal = ({ company, isOpen, onClose, monthName, year }: Finan
   );
 };
 
+
+// ============ MAIN COMPONENT ============
+
 export default function PerformancePage() {
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"contribution" | "momentum">("contribution");
-  const [filter, setFilter] = useState<"all" | "positive" | "negative">("all");
 
   // Modal State
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Period selection
-  const [selectedMonth, setSelectedMonth] = useState<number>(10); // October
-  const [selectedYear, setSelectedYear] = useState<number>(2025);
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() || 12);
+  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   
   const availableMonths = [
     { value: 1, label: "January" }, { value: 2, label: "February" }, { value: 3, label: "March" },
@@ -628,28 +409,32 @@ export default function PerformancePage() {
     { value: 7, label: "July" }, { value: 8, label: "August" }, { value: 9, label: "September" },
     { value: 10, label: "October" }, { value: 11, label: "November" }, { value: 12, label: "December" },
   ];
-  const availableYears = [2024, 2025, 2026];
+  const currentYear = now.getFullYear();
+  const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - i);
   const selectedMonthName = availableMonths.find(m => m.value === selectedMonth)?.label || "October";
 
-  const filteredClusters = useMemo(() => {
-    return clusters.filter(c => {
-      // Basic mock filtering logic if needed (can be removed if chart doesn't use it)
-      return true;
-    });
-  }, []); // removed filter dependency as filter state is removed
+  // API Hooks
+  const hierarchyState = usePerformanceHierarchy(selectedYear, selectedMonth);
+  
+  // Derive clusters from API
+  const clusters: HCluster[] = useMemo(() => {
+    return hierarchyState.data?.clusters || [];
+  }, [hierarchyState.data]);
 
   const sortedClusters = useMemo(() => 
-    [...filteredClusters].sort((a, b) => b.monthActualPbt - a.monthActualPbt), [filteredClusters]);
+    [...clusters].sort((a, b) => b.pbt_actual - a.pbt_actual), [clusters]);
 
-  // Drilldown State
-  const [drilldownClusterId, setDrilldownClusterId] = useState<string>(clusters[0]?.id || "");
+  // Drilldown Chart State
+  const [drilldownClusterId, setDrilldownClusterId] = useState<string>("");
   const [drilldownCompanyIds, setDrilldownCompanyIds] = useState<string[]>([]);
-  const [drilldownTimeRange, setDrilldownTimeRange] = useState<"6M" | "12M">("12M");
 
-  // Colors for multi-selection (Fixed order: Blue, Green, Red, Purple, Orange)
+  // Trend data for drilldown chart (manual fetch, not hook-based)
+  const [trendDataMap, setTrendDataMap] = useState<Record<string, Array<{ year: number; month: number; pbt_actual: number }>>>({});
+  const [trendLoading, setTrendLoading] = useState(false);
+
+  // Colors for multi-selection
   const COLOR_PALETTE = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c"];
   
-  // Assign colors to selected companies based on order
   const companyColors = useMemo(() => {
     const colors: Record<string, string> = {};
     drilldownCompanyIds.forEach((id, index) => {
@@ -658,73 +443,89 @@ export default function PerformancePage() {
     return colors;
   }, [drilldownCompanyIds]);
 
-  // Initialize companies when cluster changes
-  useMemo(() => {
+  // Auto-select first cluster when data loads
+  useEffect(() => {
+    if (clusters.length > 0 && !drilldownClusterId) {
+      setDrilldownClusterId(clusters[0].id);
+    }
+  }, [clusters, drilldownClusterId]);
+
+  // Auto-select first 2 companies when cluster changes
+  useEffect(() => {
     const cluster = clusters.find(c => c.id === drilldownClusterId);
     if (cluster && cluster.companies.length > 0) {
-      // Logic: If previously selected companies are NOT in the new cluster, reset selection.
-      // If we want to auto-select the first 1 or 2 companies, we can do that here.
-      // For now, let's auto-select the first 2 companies for a quick view.
-      const firstTwo = cluster.companies.slice(0, 2).map(c => c.id);
-      
-      // Check if current selection is valid for this cluster
       const allExist = drilldownCompanyIds.every(id => cluster.companies.find(c => c.id === id));
-      
       if (!allExist || drilldownCompanyIds.length === 0) {
-         setDrilldownCompanyIds(firstTwo);
+        const firstTwo = cluster.companies.slice(0, Math.min(2, cluster.companies.length)).map(c => c.id);
+        setDrilldownCompanyIds(firstTwo);
       }
     } else {
       setDrilldownCompanyIds([]);
     }
-  }, [drilldownClusterId]); // Deliberately limited deps to prevent cycles
+  }, [drilldownClusterId, clusters]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Derive Drilldown Data - Continuous Series
+  // Fetch PBT trend data for selected companies
+  const companyIdsKey = drilldownCompanyIds.join(",");
+  useEffect(() => {
+    if (!companyIdsKey) {
+      setTrendDataMap({});
+      return;
+    }
+    const ids = companyIdsKey.split(",");
+    setTrendLoading(true);
+    
+    Promise.all(
+      ids.map(id => MDAPI.getPBTTrend({ company_id: id, start_year: 2020 }))
+    ).then(results => {
+      const map: Record<string, Array<{ year: number; month: number; pbt_actual: number }>> = {};
+      results.forEach((res, i) => {
+        if (res.data?.data) {
+          map[ids[i]] = res.data.data.map(p => ({ year: p.year, month: p.month, pbt_actual: p.pbt_actual }));
+        }
+      });
+      setTrendDataMap(map);
+    }).catch(() => {
+      // Silently handle error
+    }).finally(() => setTrendLoading(false));
+  }, [companyIdsKey]);
+
+  // Build chart data from trend responses
   const drilldownData = useMemo(() => {
-    if (drilldownCompanyIds.length === 0) return [];
-    
-    // Continuous timeline from 2020
-    const months = generateMonthSeries(2020);
-    
-    // Generate data for each company for the whole timeline
-    const data = months.map((d, index) => {
-       const row: any = {
-          month: monthLabel(d),
-          year: d.getFullYear(),
-          full: fullLabel(d),
-          key: monthKey(d)
-       };
-       
-       drilldownCompanyIds.forEach((id, i) => {
-          // Mock data: Base + Trend + Seasonality + Noise
-          const seed = (index + 1) * (i + 1) * 123;
-          const base = 25000000; 
-          const growth = index * 100000; // Slight upward trend
-          const seasonal = Math.sin((index / 12) * Math.PI * 2) * 3000000;
-          const noise = (Math.sin(seed) * 10000000) % 5000000;
-          
-          row[id] = Math.max(0, Math.round(base + growth + seasonal + noise));
-       });
-       
-       return row;
+    const activeIds = drilldownCompanyIds.filter(id => trendDataMap[id]?.length > 0);
+    if (activeIds.length === 0) return [];
+
+    const allKeys = new Map<string, any>();
+    activeIds.forEach(id => {
+      (trendDataMap[id] || []).forEach(point => {
+        const key = `${point.year}-${String(point.month).padStart(2, "0")}`;
+        if (!allKeys.has(key)) {
+          const d = new Date(point.year, point.month - 1, 1);
+          allKeys.set(key, {
+            key,
+            month: d.toLocaleString("default", { month: "short" }),
+            year: point.year,
+            full: `${d.toLocaleString("default", { month: "short" })} ${point.year}`,
+          });
+        }
+        allKeys.get(key)![id] = point.pbt_actual;
+      });
     });
-    
-    return data;
-  }, [drilldownCompanyIds]);
+
+    return Array.from(allKeys.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [drilldownCompanyIds, trendDataMap]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to end when data loads or changes
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
     }
   }, [drilldownData]);
 
-
-  const availableDrilldownCompanies = useMemo(() => {
+  const availableDrilldownCompanies: HCompany[] = useMemo(() => {
     const c = clusters.find(cl => cl.id === drilldownClusterId);
     return c ? c.companies : [];
-  }, [drilldownClusterId]);
+  }, [drilldownClusterId, clusters]);
 
   const toggleCluster = (clusterId: string) => {
     const newExpanded = new Set(expandedClusters);
@@ -736,14 +537,14 @@ export default function PerformancePage() {
     setExpandedClusters(newExpanded);
   };
 
-  const handleCompanyClick = (company: Company) => {
-    setSelectedCompany(company);
+  const handleCompanyClick = (company: HCompany) => {
+    setSelectedCompanyId(company.id);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setSelectedCompany(null);
+    setSelectedCompanyId(null);
   };
 
   return (
@@ -752,11 +553,11 @@ export default function PerformancePage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Cluster → Company Drilldown</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Cluster &rarr; Company Drilldown</h1>
             <p className="text-sm text-slate-500 mt-1">Analyze performance drivers from Cluster to Company level</p>
           </div>
           <div className="flex items-center gap-3">
-             {/* Selectors moved to Performance Hierarchy section */}
+             {/* Selectors in Performance Hierarchy section below */}
           </div>
         </div>
 
@@ -765,7 +566,7 @@ export default function PerformancePage() {
           <div className="px-5 py-4 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
              <div>
                 <h3 className="text-base font-semibold text-slate-900">Cluster Drilldown</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Company PBT Trend</p>
+                <p className="text-xs text-slate-500 mt-0.5">Company PBT Trend (2020 &rarr; Current)</p>
              </div>
 
              <div className="flex flex-wrap items-center gap-3">
@@ -773,10 +574,7 @@ export default function PerformancePage() {
                 <div className="relative">
                   <select
                     value={drilldownClusterId}
-                    onChange={(e) => {
-                      setDrilldownClusterId(e.target.value);
-                      // Reset companies will be handled by useMemo effect
-                    }}
+                    onChange={(e) => setDrilldownClusterId(e.target.value)}
                     className="h-8 pl-3 pr-8 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/10 appearance-none min-w-[140px]"
                   >
                     {clusters.map(cluster => (
@@ -797,8 +595,6 @@ export default function PerformancePage() {
                 </div>
 
                 <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
-
-                <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block"></div>
                 <div className="text-[10px] text-slate-400 font-medium">
                   Scroll to view history
                 </div>
@@ -807,7 +603,7 @@ export default function PerformancePage() {
 
           <div className="p-5">
             <div className="h-[320px] w-full">
-              {drilldownCompanyIds.length > 0 ? (
+              {drilldownCompanyIds.length > 0 && drilldownData.length > 0 ? (
                 <div 
                   ref={scrollRef}
                   className="w-full h-full overflow-x-auto overflow-y-hidden"
@@ -817,37 +613,17 @@ export default function PerformancePage() {
                    <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={drilldownData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      
-                      {/* Year Shading Areas defined manually based on known range 2020-Current */}
-                      {Array.from({ length: 7 }).map((_, i) => {
-                         const year = 2020 + i;
-                         // Shade even years (or alternate)
-                         if (year % 2 === 0) {
-                           return (
-                             <ReferenceArea 
-                               key={year} 
-                               x1={`${year}-01`} 
-                               x2={`${year}-12`} 
-                               fill="#f1f5f9" 
-                               fillOpacity={0.5} 
-                             />
-                           );
-                         }
-                         return null;
-                      })}
 
                       <XAxis 
-                        dataKey="key" // Use unique key (YYYY-MM)
+                        dataKey="key"
                         stroke="#64748b" 
                         tick={{ fontSize: 11 }}
                         tickFormatter={(val) => {
-                           // val is "YYYY-MM", return "Jan" etc.
-                           // We can parse or just use a lookup map, but slicing is easiest if strict format
-                           const [y, m] = val.split('-');
-                           const date = new Date(parseInt(y), parseInt(m) - 1, 1);
-                           return date.toLocaleString('default', { month: 'short' });
+                           const [yr, mo] = val.split("-");
+                           const date = new Date(parseInt(yr), parseInt(mo) - 1, 1);
+                           return date.toLocaleString("default", { month: "short" });
                         }}
-                        axisLine={{ stroke: '#cbd5e1' }}
+                        axisLine={{ stroke: "#cbd5e1" }}
                         tickLine={false}
                         dy={10}
                         interval={0}
@@ -856,7 +632,7 @@ export default function PerformancePage() {
                         stroke="#64748b"
                         tick={{ fontSize: 11 }}
                         tickFormatter={(value) => {
-                           if (value >= 1000000) return `LKR ${(value / 1000000).toFixed(1)}M`;
+                           if (Math.abs(value) >= 1000000) return `LKR ${(value / 1000000).toFixed(1)}M`;
                            return `LKR ${(value / 1000).toFixed(0)}K`;
                         }}
                         axisLine={false}
@@ -865,30 +641,30 @@ export default function PerformancePage() {
                       />
                       <Tooltip
                         contentStyle={{ 
-                          backgroundColor: '#fff',
-                          borderRadius: '8px',
-                          border: '1px solid #e2e8f0',
-                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                          fontSize: '12px' 
+                          backgroundColor: "#fff",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                          fontSize: "12px" 
                         }}
-                        labelStyle={{ color: '#0b1f3a', marginBottom: '0.25rem' }}
+                        labelStyle={{ color: "#0b1f3a", marginBottom: "0.25rem" }}
                         labelFormatter={(_, payload) => payload?.[0]?.payload?.full || ""}
                         itemStyle={{ fontWeight: 600 }}
                         formatter={(value: number, name: string) => {
                            const company = availableDrilldownCompanies.find(c => c.id === name);
                            return [`LKR ${value.toLocaleString()}`, company ? company.name : name];
                         }}
-                        cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                        cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "4 4" }}
                       />
                       <Legend 
                         verticalAlign="top" 
                         height={36} 
                         iconType="circle"
-                        formatter={(value, entry: any) => {
+                        formatter={(value: string, entry: any) => {
                            const company = availableDrilldownCompanies.find(c => c.id === entry.dataKey);
                            return <span className="text-slate-600 font-medium ml-1 text-xs">{company ? company.name : value}</span>;
                         }}
-                        wrapperStyle={{ paddingBottom: '10px' }}
+                        wrapperStyle={{ paddingBottom: "10px" }}
                       />
                       
                       {drilldownCompanyIds.map((id) => (
@@ -909,7 +685,16 @@ export default function PerformancePage() {
                 </div>
               ) : (
                  <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                    <p className="text-sm">Select one or more companies to view trend comparison</p>
+                    {drilldownCompanyIds.length === 0 ? (
+                      <p className="text-sm">Select one or more companies to view trend comparison</p>
+                    ) : trendLoading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0b1f3a]"></div>
+                        <p className="text-sm">Loading trend data...</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm">No trend data available for selected companies</p>
+                    )}
                  </div>
               )}
             </div>
@@ -921,7 +706,7 @@ export default function PerformancePage() {
           <div className="px-5 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">Performance Hierarchy</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Click cluster row to expand companies</p>
+              <p className="text-xs text-slate-500 mt-0.5">Click cluster row to expand &bull; Click company for full P&amp;L details</p>
             </div>
             
             <div className="flex items-center gap-3">
@@ -955,6 +740,12 @@ export default function PerformancePage() {
             </div>
           </div>
           
+          {hierarchyState.loading ? (
+            <div className="p-12 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b1f3a] mx-auto mb-4"></div>
+              <p className="text-sm text-slate-500">Loading performance data...</p>
+            </div>
+          ) : (
           <div className="divide-y divide-slate-100">
             {/* STICKY HEADER for Metrics */}
             <div className="sticky top-0 bg-slate-50 z-10 flex border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider shadow-sm">
@@ -972,6 +763,41 @@ export default function PerformancePage() {
                   <div className="w-20 px-2 py-3 text-right">Y. Achv</div>
                </div>
             </div>
+
+            {/* Group Totals Row */}
+            {hierarchyState.data && (
+              <div className="flex items-center bg-[#0b1f3a]/5 border-b-2 border-[#0b1f3a]/20">
+                <div className="flex-1 px-5 py-3">
+                  <span className="font-bold text-[#0b1f3a] text-sm">GROUP TOTAL</span>
+                </div>
+                <div className="hidden md:flex items-center bg-slate-100/30">
+                  <div className="w-24 px-2 py-3 text-right border-l border-slate-200">
+                    <span className="font-bold text-[#0b1f3a] text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_pbt_actual, true)}</span>
+                  </div>
+                  <div className="w-24 px-2 py-3 text-right">
+                    <span className="text-slate-600 text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_pbt_budget, true)}</span>
+                  </div>
+                  <div className="w-20 px-2 py-3 text-right">
+                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(hierarchyState.data.group_achievement_pct)}`}>
+                      {formatPercent(hierarchyState.data.group_achievement_pct)}
+                    </span>
+                  </div>
+                </div>
+                <div className="hidden lg:flex items-center">
+                  <div className="w-24 px-2 py-3 text-right border-l border-slate-200">
+                    <span className="font-bold text-[#0b1f3a] text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_ytd_pbt_actual, true)}</span>
+                  </div>
+                  <div className="w-24 px-2 py-3 text-right">
+                    <span className="text-slate-600 text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_ytd_pbt_budget, true)}</span>
+                  </div>
+                  <div className="w-20 px-2 py-3 text-right">
+                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(hierarchyState.data.group_ytd_achievement_pct)}`}>
+                      {formatPercent(hierarchyState.data.group_ytd_achievement_pct)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {sortedClusters.map((cluster) => {
               const isExpanded = expandedClusters.has(cluster.id);
@@ -993,20 +819,21 @@ export default function PerformancePage() {
                          }
                          <Building2 className="h-4 w-4 text-[#0b1f3a] flex-shrink-0" />
                          <span className="font-bold text-slate-900 truncate">{cluster.name}</span>
+                         <span className="text-xs text-slate-400 ml-1">({cluster.company_count})</span>
                       </div>
                     </div>
 
                     {/* Month Metrics */}
                     <div className="hidden md:flex items-center bg-slate-50/30">
                        <div className="w-24 px-2 py-4 text-right border-l border-slate-100">
-                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.monthActualPbt, true)}</span>
+                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.pbt_actual, true)}</span>
                        </div>
                        <div className="w-24 px-2 py-4 text-right">
-                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.monthBudgetPbt, true)}</span>
+                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.pbt_budget, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                          <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.monthAchievement)}`}>
-                             {formatPercent(cluster.monthAchievement)}
+                          <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.achievement_pct)}`}>
+                             {formatPercent(cluster.achievement_pct)}
                           </span>
                        </div>
                     </div>
@@ -1014,14 +841,14 @@ export default function PerformancePage() {
                     {/* Year Metrics */}
                     <div className="hidden lg:flex items-center">
                        <div className="w-24 px-2 py-4 text-right border-l border-slate-100">
-                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.yearActualPbt, true)}</span>
+                          <span className="font-semibold text-slate-900 text-sm font-mono">{formatCurrencyLKR(cluster.ytd_pbt_actual, true)}</span>
                        </div>
                        <div className="w-24 px-2 py-4 text-right">
-                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.yearBudgetPbt, true)}</span>
+                          <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.ytd_pbt_budget, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                           <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.yearAchievement)}`}>
-                             {formatPercent(cluster.yearAchievement)}
+                           <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.ytd_achievement_pct)}`}>
+                             {formatPercent(cluster.ytd_achievement_pct)}
                           </span>
                        </div>
                     </div>
@@ -1049,14 +876,14 @@ export default function PerformancePage() {
                            {/* Month Metrics */}
                            <div className="hidden md:flex items-center bg-slate-50/30">
                               <div className="w-24 px-2 py-3 text-right border-l border-slate-100">
-                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.monthActualPbt, true)}</span>
+                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.pbt_actual, true)}</span>
                               </div>
                               <div className="w-24 px-2 py-3 text-right">
-                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.monthBudgetPbt, true)}</span>
+                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.pbt_budget, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                  <span className={`text-xs font-bold font-mono ${company.monthAchievement >= 100 ? "text-emerald-700" : "text-red-700"}`}>
-                                    {formatPercent(company.monthAchievement)}
+                                  <span className={`text-xs font-bold font-mono ${company.achievement_pct >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(company.achievement_pct)}
                                   </span>
                               </div>
                            </div>
@@ -1064,14 +891,14 @@ export default function PerformancePage() {
                            {/* Year Metrics */}
                            <div className="hidden lg:flex items-center">
                               <div className="w-24 px-2 py-3 text-right border-l border-slate-100">
-                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.yearActualPbt, true)}</span>
+                                 <span className="text-sm text-slate-700 font-mono font-medium">{formatCurrencyLKR(company.ytd_pbt_actual, true)}</span>
                               </div>
                               <div className="w-24 px-2 py-3 text-right">
-                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.yearBudgetPbt, true)}</span>
+                                 <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.ytd_pbt_budget, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                 <span className={`text-xs font-bold font-mono ${company.yearAchievement >= 100 ? "text-emerald-700" : "text-red-700"}`}>
-                                    {formatPercent(company.yearAchievement)}
+                                 <span className={`text-xs font-bold font-mono ${company.ytd_achievement_pct >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(company.ytd_achievement_pct)}
                                  </span>
                               </div>
                            </div>
@@ -1082,17 +909,25 @@ export default function PerformancePage() {
                 </div>
               );
             })}
+
+            {clusters.length === 0 && !hierarchyState.loading && (
+              <div className="p-12 text-center text-slate-400">
+                <p className="text-sm">No performance data available for the selected period</p>
+              </div>
+            )}
           </div>
+          )}
         </div>
       </div>
       
-      {/* Finance Upload Details Modal */}
-      <FinanceUploadModal 
-        company={selectedCompany} 
+      {/* Company Detail Modal */}
+      <CompanyDetailModal 
+        companyId={selectedCompanyId}
         isOpen={isModalOpen} 
         onClose={closeModal}
-        monthName={selectedMonthName}
         year={selectedYear}
+        month={selectedMonth}
+        monthName={selectedMonthName}
       />
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, AlertCircle, RefreshCw, CheckCircle2, Building2, Calendar, User, Pencil, Save, X } from "lucide-react";
+import { Send, AlertCircle, RefreshCw, CheckCircle2, Building2, Calendar, User, Pencil, Save, X, MessageSquare } from "lucide-react";
 import { FDAPI } from "@/lib/api-client";
 
 const MONTHS = [
@@ -94,7 +94,8 @@ export default function ReportsPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Editable comments state
-  const [editingComments, setEditingComments] = useState(false);
+  const [editingActual, setEditingActual] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
   const [editActualComment, setEditActualComment] = useState("");
   const [editBudgetComment, setEditBudgetComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
@@ -122,7 +123,10 @@ export default function ReportsPage() {
 
   // Reset editing state when selected report changes
   useEffect(() => {
-    setEditingComments(false);
+    setEditingActual(false);
+    setEditingBudget(false);
+    setEditActualComment("");
+    setEditBudgetComment("");
   }, [selectedReport?.company_id, selectedReport?.period_id]);
 
   const handleApprove = async () => {
@@ -160,32 +164,72 @@ export default function ReportsPage() {
     }
   };
 
-  const startEditComments = () => {
+  const startEditActual = () => {
     if (!selectedReport) return;
     setEditActualComment(selectedReport.actual_comment || "");
+    setEditingActual(true);
+  };
+
+  const cancelEditActual = () => {
+    setEditingActual(false);
+    setEditActualComment("");
+  };
+
+  const startEditBudget = () => {
+    if (!selectedReport) return;
     setEditBudgetComment(selectedReport.budget_comment || "");
-    setEditingComments(true);
+    setEditingBudget(true);
   };
 
-  const cancelEditComments = () => {
-    setEditingComments(false);
+  const cancelEditBudget = () => {
+    setEditingBudget(false);
+    setEditBudgetComment("");
   };
 
-  const saveComments = async () => {
+  const saveActualComment = async () => {
     if (!selectedReport) return;
     setCommentSaving(true);
+    // Only update actual comment
     const res = await FDAPI.updateComments(
       selectedReport.company_id,
       selectedReport.period_id,
       editActualComment,
-      editBudgetComment,
+      undefined
     );
     setCommentSaving(false);
     if (res.data) {
-      // Update local state
       const updatedReport = {
         ...selectedReport,
         actual_comment: editActualComment || null,
+      };
+      setSelectedReport(updatedReport);
+      setReports((prev) =>
+        prev.map((r) =>
+          r.company_id === selectedReport.company_id && r.period_id === selectedReport.period_id
+            ? updatedReport
+            : r
+        )
+      );
+      setEditingActual(false);
+    } else {
+      alert(res.error || "Failed to save comment");
+    }
+  };
+
+  const saveBudgetComment = async () => {
+    if (!selectedReport) return;
+    setCommentSaving(true);
+    // Only update budget comment
+    const res = await FDAPI.updateComments(
+      selectedReport.company_id,
+      selectedReport.period_id,
+      undefined,
+      editBudgetComment
+    );
+    setCommentSaving(false);
+    if (res.data) {
+      const updatedReport = {
+        ...selectedReport,
         budget_comment: editBudgetComment || null,
       };
       setSelectedReport(updatedReport);
@@ -196,9 +240,9 @@ export default function ReportsPage() {
             : r
         )
       );
-      setEditingComments(false);
+      setEditingBudget(false);
     } else {
-      alert(res.error || "Failed to save comments");
+      alert(res.error || "Failed to save comment");
     }
   };
 
@@ -318,79 +362,10 @@ export default function ReportsPage() {
                         {new Date(selectedReport.submitted_date).toLocaleString()}
                       </p>
                     )}
-                  </div>
-                </div>
-
-                {/* Comments Section */}
-                <div className="mt-4">
-                  {!editingComments ? (
-                    <div className="space-y-3">
-                      {selectedReport.actual_comment && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                          <span className="font-semibold">Actual Comment:</span> {selectedReport.actual_comment}
-                        </div>
-                      )}
-                      {selectedReport.budget_comment && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                          <span className="font-semibold">Budget Comment:</span> {selectedReport.budget_comment}
-                        </div>
-                      )}
-                      <button
-                        onClick={startEditComments}
-                        className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-[#0b1f3a] transition-colors"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        {selectedReport.actual_comment || selectedReport.budget_comment ? "Edit Comments" : "Add Comments"}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Actual Comment</label>
-                        <textarea
-                          value={editActualComment}
-                          onChange={(e) => setEditActualComment(e.target.value)}
-                          rows={2}
-                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          placeholder="Enter actual comment..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Budget Comment</label>
-                        <textarea
-                          value={editBudgetComment}
-                          onChange={(e) => setEditBudgetComment(e.target.value)}
-                          rows={2}
-                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                          placeholder="Enter budget comment..."
-                        />
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={cancelEditComments}
-                          disabled={commentSaving}
-                          className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          <X className="h-3 w-3" /> Cancel
-                        </button>
-                        <button
-                          onClick={saveComments}
-                          disabled={commentSaving}
-                          className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 disabled:opacity-50"
-                        >
-                          {commentSaving ? (
-                            <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Save className="h-3 w-3" />
-                          )}
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
-
+            </div>
+              
               {/* Monthly + YTD Financial Data Table */}
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
                 <div className="overflow-x-auto">
@@ -457,6 +432,138 @@ export default function ReportsPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+
+              {/* Comments & Analysis */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 mb-5">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
+                    <MessageSquare className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Comments & Analysis</h3>
+                    <p className="text-sm text-slate-500">Review and verify comments from Finance Officer</p>
+                  </div>
+                </div>
+
+                <div className="relative pl-4 border-l border-slate-200 ml-5 space-y-8">
+                  {/* Actual Comment */}
+                  <div className="relative">
+                    <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-blue-500 ring-4 ring-white" />
+                    
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900">{selectedReport.submitted_by || "Finance Officer"}</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wide">
+                          Finance Officer
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        {selectedReport.submitted_date ? new Date(selectedReport.submitted_date).toLocaleString() : ""}
+                      </span>
+                    </div>
+
+                    {editingActual ? (
+                      <div className="mt-2">
+                         <textarea
+                          value={editActualComment}
+                          onChange={(e) => setEditActualComment(e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="Enter actual comment..."
+                        />
+                        <div className="flex gap-2 justify-end mt-2">
+                          <button
+                             onClick={cancelEditActual}
+                             disabled={commentSaving}
+                             className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                          >
+                             <X className="h-3 w-3" /> Cancel
+                          </button>
+                          <button
+                             onClick={saveActualComment}
+                             disabled={commentSaving}
+                             className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+                          >
+                             {commentSaving ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="h-3 w-3" />}
+                             Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-slate-600 leading-relaxed">
+                          {selectedReport.actual_comment || "No comment provided."}
+                        </p>
+                        <button
+                          onClick={startEditActual}
+                          className="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-500 hover:text-[#0b1f3a] transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit / Correct Comment
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Budget Comment */}
+                  <div className="relative">
+                    <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-4 ring-white" />
+                    
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900">System</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wide">
+                          System
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        {selectedReport.submitted_date ? new Date(selectedReport.submitted_date).toLocaleString() : ""}
+                      </span>
+                    </div>
+
+                    {editingBudget ? (
+                      <div className="mt-2">
+                         <textarea
+                          value={editBudgetComment}
+                          onChange={(e) => setEditBudgetComment(e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                          placeholder="Enter budget comment..."
+                        />
+                        <div className="flex gap-2 justify-end mt-2">
+                          <button
+                             onClick={cancelEditBudget}
+                             disabled={commentSaving}
+                             className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                          >
+                             <X className="h-3 w-3" /> Cancel
+                          </button>
+                          <button
+                             onClick={saveBudgetComment}
+                             disabled={commentSaving}
+                             className="flex items-center gap-1 h-8 px-3 text-xs font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+                          >
+                             {commentSaving ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="h-3 w-3" />}
+                             Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-slate-600 leading-relaxed">
+                          {selectedReport.budget_comment || "No budget comment provided."}
+                        </p>
+                        <button
+                          onClick={startEditBudget}
+                          className="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-500 hover:text-[#0b1f3a] transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit / Correct Comment
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 

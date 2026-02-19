@@ -1,138 +1,58 @@
-# Security Documentation
+# 🔐 Security Architecture
 
 ## Overview
 
-MacLarens Analytics implements multiple layers of security to protect sensitive financial data and ensure compliance with organizational security requirements.
+McLarens Analytics employs a **Defense in Depth** strategy, combining strong authentication, strict Role-Based Access Control (RBAC), and data isolation policies.
 
-## Authentication
+## 🛡️ Authentication (Hybrid)
 
-### Azure Entra ID (Azure AD)
+The system supports two authentication modes, configured via `AUTH_MODE` env var:
 
-All authentication is handled through Azure Entra ID:
+### 1. Production: Microsoft Entra ID (Azure AD)
 
-- Single Sign-On (SSO) with corporate credentials
-- Multi-Factor Authentication (MFA) enforced
-- Conditional Access policies
-- Token-based authentication for API
+- **Protocol**: OpenID Connect (OIDC) / OAuth 2.0.
+- **Flow**: Frontend acquires token via MSAL -> Backend validates token signature & claims.
+- **Verification**: Backend verifies `iss`, `aud`, and `exp` claims against the Azure Tenant.
 
-### Token Flow
+### 2. Development: Custom JWT
 
-```
-┌──────────┐    1. Login     ┌──────────────┐
-│  User    │────────────────▶│  Azure AD    │
-└────┬─────┘                 └──────┬───────┘
-     │                              │
-     │   2. Access Token            │
-     │◀─────────────────────────────┘
-     │
-     │   3. API Request + Token
-     ▼
-┌──────────┐    4. Validate  ┌──────────────┐
-│  API     │◀───────────────▶│  Azure AD    │
-└──────────┘                 └──────────────┘
-```
+- **Mechanism**: Local email/password login.
+- **Token**: HMAC-SHA256 signed JWTs.
+- **Purpose**: Allows offline development without Azure dependencies.
 
-## Authorization
+## 👤 Authorization (RBAC)
 
-### Role-Based Access Control (RBAC)
+Access is denied by default. Permissions are granted via roles:
 
-| Permission | Data Officer | Director | CEO | Admin |
-|------------|:------------:|:--------:|:---:|:-----:|
-| Create Reports | ✓ | ✓ | - | - |
-| View Own Reports | ✓ | ✓ | ✓ | ✓ |
-| View Cluster Reports | - | ✓ | ✓ | ✓ |
-| View All Reports | - | - | ✓ | ✓ |
-| Approve Reports | - | ✓ | ✓ | - |
-| View Analytics | - | ✓ | ✓ | ✓ |
-| Manage Users | - | - | - | ✓ |
-| System Config | - | - | - | ✓ |
+| Role                 | Access Scope                                                                                           |
+| :------------------- | :----------------------------------------------------------------------------------------------------- |
+| **Finance Officer**  | RW access to **own company's** drafts only. Read-only access to historical reports.                    |
+| **Finance Director** | RW access to reviews for **assigned clusters**. Read-only access to all reports in cluster.            |
+| **MD**               | Global Read-only access.                                                                               |
+| **Admin**            | Full access to System Configuration (Users, Companies, Clusters). No access to financial data editing. |
 
-### Data Isolation
+## 🔒 Data Security
 
-- Data Officers: Own company data only
-- Directors: Cluster-level data access
-- CEO: Cross-cluster data access
-- Admin: All data for administration
+### 1. Row-Level Isolation
 
-## API Security
+- Users are linked to specific `company_id` or `cluster_id`.
+- API endpoints filter all queries by these IDs.
+- **Prevention**: Prevents Insecure Direct Object Reference (IDOR) attacks. An FO cannot view/edit another FO's report even by guessing the ID.
 
-### Transport Security
+### 2. Input Validation
 
-- TLS 1.3 enforced
-- HTTPS only
-- HSTS headers enabled
+- All inputs are validated using **Pydantic v2** schemas.
+- Strict type checking prevents injection attacks.
 
-### Request Validation
+### 3. Audit Logging
 
-- Input sanitization
-- GraphQL depth limiting
-- Query complexity analysis
-- Rate limiting
+- Critical actions are logged to the `audit_logs` table:
+  - Login events.
+  - Report status changes (Submission, Approval, Rejection).
+  - User/Company administrative changes.
 
-### Headers
+## 🌐 Network Security (Azure)
 
-```
-Strict-Transport-Security: max-age=31536000; includeSubDomains
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-Content-Security-Policy: default-src 'self'
-```
-
-## Data Protection
-
-### Encryption
-
-- **At Rest**: Azure Storage Service Encryption (SSE)
-- **In Transit**: TLS 1.3
-- **Database**: Transparent Data Encryption (TDE)
-
-### Sensitive Data
-
-- PII minimized and encrypted
-- Financial data encrypted in JSONB
-- Audit logs for all data access
-
-## Audit Logging
-
-All significant actions are logged:
-
-- User authentication events
-- Data access and modifications
-- Approval workflow actions
-- Configuration changes
-- Failed access attempts
-
-### Log Retention
-
-- Security logs: 2 years
-- Audit logs: 7 years
-- Application logs: 90 days
-
-## Compliance
-
-### Controls
-
-- Access reviews quarterly
-- Password policies via Azure AD
-- Session timeout (30 minutes)
-- IP whitelisting available
-
-### Security Testing
-
-- Penetration testing annually
-- Vulnerability scanning weekly
-- Dependency scanning in CI/CD
-- SAST/DAST integration
-
-## Incident Response
-
-1. Detection via Azure Security Center
-2. Alert to security team
-3. Containment and investigation
-4. Remediation
-5. Post-incident review
-
-## Security Contacts
-
-- Security Team: security@maclarens.com
-- Report Vulnerabilities: security@maclarens.com
+- **Container Apps**: Running in a secure environment.
+- **Database**: PostgreSQL Flexible Server configured with firewall rules to allow access only from internal Azure services.
+- **TLS**: All data in transit is encrypted via TLS 1.2+.

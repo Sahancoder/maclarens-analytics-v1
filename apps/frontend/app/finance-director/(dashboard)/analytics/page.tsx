@@ -1,13 +1,27 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect } from "react";
+// =============================================================================
+// Company Analytics Page - Finance Director Dashboard
+// =============================================================================
+// This page displays real-time analytics for a selected company assigned to
+// the logged-in Financial Director. All data is fetched live from the backend
+// API which queries the FINANCIAL_FACT table and calculates KPIs server-side.
+//
+// Sections:
+// 1. Monthly Performance KPIs (GP Margin, GP, PBT Before, PBT Achievement)
+// 2. Yearly/YTD Performance KPIs (same metrics year-to-date)
+// 3. Actual PBT Comparison chart (Before vs After, monthly & yearly toggle)
+// 4. PBT Before - Monthly Trend line chart
+// 5. Profitability Margins (GP Margin & NP Margin lines)
+// 6. Expense Breakdown pie chart (current month)
+// 7. Monthly Performance card (Actual PBT, Budget PBT, Achievement)
+// =============================================================================
+import { useState, useEffect, useCallback } from "react";
 import {
   BarChart,
   Bar,
   LineChart,
   Line,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -18,113 +32,94 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { TrendingUp, TrendingDown, Download, Building2, ChevronDown, Trophy } from "lucide-react";
-import { FDAPI } from "@/lib/api-client";
-import { useMyCompanies } from "@/hooks/use-api";
-
-// Finance Director's assigned company (Default/Fallback)
-const DEFAULT_COMPANY = {
-  id: "mclarens-maritime",
-  name: "McLarens Maritime Academy",
-  cluster: "Shipping Services & Logistics",
-  financialYear: "FY 2025-26",
-};
-
+// Icons used across the page
+import { TrendingUp, TrendingDown, Building2, ChevronDown, Trophy } from "lucide-react";
+// API client for backend calls – uses FDAPI (not FO) so only FD-assigned companies appear
+import { FDAPI, type CompanyAnalyticsData } from "@/lib/api-client";
+// ---------------------------------------------------------------
+// Month list for dropdowns (value = 1-12, label = full name)
+// ---------------------------------------------------------------
+const MONTHS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+// ---------------------------------------------------------------
+// Simple company interface for the company dropdown
+// ---------------------------------------------------------------
 interface Company {
   id: string;
   name: string;
 }
-
-interface AnalyticsData {
-  monthlyData: any[];
-  yearlyData: any[];
-  expenseBreakdown: any[];
-  monthlyKpiData: any[];
-  yearlyKpiData: any[];
-  profitabilityData: any[];
-}
-
-// Monthly data for charts
-// Monthly data for charts - PBT Comparison
-const DEFAULT_monthlyData = [
-  { month: "Jan", pbtBefore: 850000, pbtAfter: 845000 },
-  { month: "Feb", pbtBefore: 920000, pbtAfter: 920000 },
-  { month: "Mar", pbtBefore: 880000, pbtAfter: 860000 },
-  { month: "Apr", pbtBefore: 980000, pbtAfter: 975000 },
-  { month: "May", pbtBefore: 1050000, pbtAfter: 1020000 },
-  { month: "Jun", pbtBefore: 920000, pbtAfter: 915000 },
-  { month: "Jul", pbtBefore: 1100000, pbtAfter: 1100000 },
-  { month: "Aug", pbtBefore: 1150000, pbtAfter: 1120000 },
-  { month: "Sep", pbtBefore: 1080000, pbtAfter: 1080000 },
-  { month: "Oct", pbtBefore: 1200000, pbtAfter: 1190000 },
-  { month: "Nov", pbtBefore: 1250000, pbtAfter: 1240000 },
-  { month: "Dec", pbtBefore: 1180000, pbtAfter: 1150000 },
-];
-
-const DEFAULT_yearlyData = [
-  { year: "2023", pbtBefore: 12500000, pbtAfter: 12400000 },
-  { year: "2024", pbtBefore: 13800000, pbtAfter: 13750000 },
-  { year: "2025", pbtBefore: 14200000, pbtAfter: 14100000 },
-];
-
-// Expense breakdown for pie chart
-const DEFAULT_expenseBreakdown = [
-  { name: "Personal", value: 35, color: "#0b1f3a" },
-  { name: "Admin", value: 25, color: "#1e40af" },
-  { name: "Selling", value: 20, color: "#3b82f6" },
-  { name: "Finance", value: 12, color: "#60a5fa" },
-  { name: "Depreciation", value: 8, color: "#93c5fd" },
-];
-
-// KPI data
-// KPI data split
-const DEFAULT_monthlyKpiData = [
-  { label: "GP Margin", value: "34.0%", change: "+1.5%", trend: "up" },
-  { label: "GP", value: "4.2M", change: "+12.1%", trend: "up" },
-  { label: "PBT Before", value: "1.1M", change: "+5.4%", trend: "up" },
-  { label: "PBT Achievement", value: "105.2%", change: "+3.2%", trend: "up" },
-];
-
-const DEFAULT_yearlyKpiData = [
-  { label: "YTD GP Margin", value: "35.2%", change: "+8.5%", trend: "up" },
-  { label: "YTD GP", value: "44.2M", change: "+12.3%", trend: "up" },
-  { label: "YTD PBT Before", value: "12.5M", change: "+5.4%", trend: "up" },
-  { label: "PBT Achievement (YTD)", value: "101.0%", change: "+2.1%", trend: "up" },
-];
-
-// Profitability trend
-const DEFAULT_profitabilityData = [
-  { month: "Apr", gpMargin: 32.5, npMargin: 8.2 },
-  { month: "May", gpMargin: 33.1, npMargin: 8.8 },
-  { month: "Jun", gpMargin: 31.8, npMargin: 7.5 },
-  { month: "Jul", gpMargin: 34.2, npMargin: 9.1 },
-  { month: "Aug", gpMargin: 35.0, npMargin: 9.5 },
-  { month: "Sep", gpMargin: 33.5, npMargin: 8.4 },
-  { month: "Oct", gpMargin: 34.8, npMargin: 9.2 },
-  { month: "Nov", gpMargin: 35.5, npMargin: 9.8 },
-  { month: "Dec", gpMargin: 34.0, npMargin: 8.9 },
-];
-
-function KPICard({ label, value, change, trend }: { label: string; value: string; change: string; trend: string }) {
+// ---------------------------------------------------------------
+// KPICard - Reusable tile for Monthly / YTD KPI display
+// Shows: label, formatted value, YoY change badge, trend arrow
+// ---------------------------------------------------------------
+function KPICard({
+  label,
+  value,
+  change,
+  trend,
+}: {
+  label: string;   // e.g. "GP Margin (Monthly)"
+  value: string;   // formatted display string e.g. "34.0%"
+  change: string;  // e.g. "+1.5% vs last year"
+  trend: string;   // "up" | "down" | "neutral"
+}) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {/* Top row: label + trend icon */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-slate-500">{label}</span>
+        {/* Show green arrow for positive trend, red for negative */}
         {trend === "up" ? (
           <TrendingUp className="h-4 w-4 text-emerald-500" />
-        ) : (
+        ) : trend === "down" ? (
           <TrendingDown className="h-4 w-4 text-red-500" />
+        ) : (
+          // Neutral - no trend data available
+          <div className="h-4 w-4" />
         )}
       </div>
+      {/* Main value */}
       <div className="text-2xl font-bold text-slate-900">{value}</div>
-      <div className={`text-sm mt-1 ${trend === "up" ? "text-emerald-600" : "text-red-600"}`}>
-        {change} vs last year
+      {/* YoY change text */}
+      <div
+        className={`text-sm mt-1 ${
+          trend === "up"
+            ? "text-emerald-600"   // positive = green
+            : trend === "down"
+            ? "text-red-600"       // negative = red
+            : "text-slate-400"     // no data = grey
+        }`}
+      >
+        {change}
       </div>
     </div>
   );
 }
-
-function ChartCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+// ---------------------------------------------------------------
+// ChartCard - Wrapper component for chart sections
+// Provides consistent styling: white card, title, description
+// ---------------------------------------------------------------
+function ChartCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;       // Chart heading
+  description: string; // Subtitle / explanation
+  children: React.ReactNode;
+}) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="mb-4">
@@ -135,112 +130,176 @@ function ChartCard({ title, description, children }: { title: string; descriptio
     </div>
   );
 }
-
+// ---------------------------------------------------------------
+// Utility: format large numbers into human-readable strings
+// e.g. 1200000 -> "1.2M", 450000 -> "450K"
+// ---------------------------------------------------------------
+function formatCurrency(value: number): string {
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return value.toFixed(0);
+}
+// ---------------------------------------------------------------
+// Utility: format YoY change string for KPI card
+// e.g. 1.5 -> "+1.5% vs last year", -2.3 -> "-2.3% vs last year"
+// ---------------------------------------------------------------
+function formatYoY(val: number | null): { text: string; trend: string } {
+  if (val === null || val === undefined) {
+    return { text: "No prior year data", trend: "neutral" };
+  }
+  // Determine direction: positive is up, negative is down
+  const sign = val >= 0 ? "+" : "";
+  const trend = val >= 0 ? "up" : "down";
+  return { text: `${sign}${val.toFixed(1)}% vs last year`, trend };
+}
+// ---------------------------------------------------------------
+// Utility: Generate FY year options for the YTD dropdown
+// Uses the company's FY start month to calc FY labels
+// ---------------------------------------------------------------
+function generateFYOptions(
+  currentYear: number,
+  fyStartMonth: number,
+  availableLabels: string[]
+): { value: number; label: string }[] {
+  // If backend provides available FY labels, use them
+  if (availableLabels && availableLabels.length > 0) {
+    return availableLabels.map((lbl) => {
+      // Parse year from label: "FY 2025" or "FY 2025-26"
+      const match = lbl.match(/FY (\d{4})/);
+      const yr = match ? parseInt(match[1]) : currentYear;
+      return { value: yr, label: lbl };
+    });
+  }
+  // Fallback: generate last 3 FY labels
+  const options = [];
+  for (let i = 0; i < 3; i++) {
+    const yr = currentYear - i;
+    if (fyStartMonth === 1) {
+      options.push({ value: yr, label: `FY ${yr}` });
+    } else {
+      options.push({ value: yr, label: `FY ${yr}-${String(yr + 1).slice(-2)}` });
+    }
+  }
+  return options;
+}
+// =============================================================================
+// MAIN PAGE COMPONENT
+// =============================================================================
 export default function AnalyticsPage() {
-  const [year, setYear] = useState("2025-26");
-  const [month, setMonth] = useState("December");
-  const [pbtViewMode, setPbtViewMode] = useState("monthly");
-
-  // Company Selector State (real API)
-  const companiesState = useMyCompanies();
-  const realCompanies = companiesState.data || [];
+  // -- Current date defaults --
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // JS months are 0-indexed
+  // -- Company selection state --
+  // We fetch assigned companies directly from FDAPI (not the FO hook)
+  // so each FD only sees their own mapped companies
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  // -- Period selection state --
+  // Monthly performance: which month to show
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  // Yearly/YTD performance: which FY year to show
+  const [ytdYear, setYtdYear] = useState<number>(currentYear);
+  // -- Analytics data from API --
+  const [analytics, setAnalytics] = useState<CompanyAnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // Company Rank State
+  const [error, setError] = useState<string | null>(null);
+  // -- PBT comparison chart toggle (monthly vs yearly view) --
+  const [pbtViewMode, setPbtViewMode] = useState<"monthly" | "yearly">("monthly");
+  // -- Company Rank state --
   const [rankData, setRankData] = useState<{
     rank: number;
     total_companies: number;
     pbt_before_actual: number | null;
   } | null>(null);
   const [rankLoading, setRankLoading] = useState(false);
-
-  // Table comparison state
-  const [tableMonth, setTableMonth] = useState("Dec");
-  const [tableYear, setTableYear] = useState("2025");
-
-  // Map real companies to local format
+  // -- Performance card filter (monthly vs yearly) --
+  const [perfFilter, setPerfFilter] = useState<"monthly" | "yearly">("monthly");
+  // ---------------------------------------------------------------
+  // Effect: Fetch FD-assigned companies from /fd/companies
+  // Each FD only sees companies mapped to them in user_company_role_map
+  // Also restores previously selected company from localStorage
+  // ---------------------------------------------------------------
   useEffect(() => {
-    if (!realCompanies.length) return;
-    const mapped = realCompanies.map((c: any) => ({
-      id: c.id || c.company_id,
-      name: c.name || c.company_name,
-    }));
-    setCompanies(mapped);
-
-    const savedId = localStorage.getItem("fd_selected_company");
-    const validSavedId = mapped.find((c: Company) => c.id === savedId)?.id;
-    setSelectedCompanyId(validSavedId || (mapped.length > 0 ? mapped[0].id : null));
-  }, [realCompanies]);
-
-  // Fetch Analytics when Company Changes
-  useEffect(() => {
-    if (!selectedCompanyId) return;
-
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // Mock API Call: GET /api/analytics/company?companyId=...
-      // Generate slightly different data based on company to show the switch works
-      const isLogistics = selectedCompanyId === "mclarens-logistics";
-      
-      const multiplier = isLogistics ? 1.2 : 1.0; // Logistics is 20% bigger
-      
-      const mockData: AnalyticsData = {
-        monthlyData: DEFAULT_monthlyData.map(d => ({
-          ...d,
-          pbtBefore: d.pbtBefore * multiplier,
-          pbtAfter: d.pbtAfter * multiplier
-        })),
-        yearlyData: DEFAULT_yearlyData.map(d => ({
-          ...d,
-          pbtBefore: d.pbtBefore * multiplier,
-          pbtAfter: d.pbtAfter * multiplier
-        })),
-        expenseBreakdown: isLogistics ? [
-           { name: "Personal", value: 40, color: "#0b1f3a" },
-           { name: "Admin", value: 20, color: "#1e40af" },
-           { name: "Selling", value: 25, color: "#3b82f6" }, 
-           { name: "Finance", value: 10, color: "#60a5fa" },
-           { name: "Depreciation", value: 5, color: "#93c5fd" },
-        ] : DEFAULT_expenseBreakdown,
-        monthlyKpiData: DEFAULT_monthlyKpiData.map(k => ({
-          ...k,
-          value: k.label.includes("%") ? k.value : ((parseFloat(k.value) * multiplier).toFixed(1) + "M")
-        })),
-        yearlyKpiData: DEFAULT_yearlyKpiData.map(k => ({
-          ...k,
-          value: k.label.includes("%") ? k.value : ((parseFloat(k.value) * multiplier).toFixed(1) + "M")
-        })),
-        profitabilityData: DEFAULT_profitabilityData.map(d => ({
-           ...d,
-           gpMargin: isLogistics ? d.gpMargin + 2 : d.gpMargin,
-           npMargin: isLogistics ? d.npMargin + 1 : d.npMargin
-        }))
-      };
-
-      setAnalyticsData(mockData);
-      setLoading(false);
-      localStorage.setItem("fd_selected_company", selectedCompanyId);
+    const loadCompanies = async () => {
+      setCompaniesLoading(true);
+      try {
+        // Call FD-specific endpoint (not FO) so only assigned companies appear
+        const res = await FDAPI.getMyCompanies();
+        if (res.data && res.data.length > 0) {
+          // Map backend objects to simplified {id, name} format
+          const mapped = res.data.map((c: any) => ({
+            id: c.id || c.company_id,
+            name: c.name || c.company_name,
+          }));
+          setCompanies(mapped);
+          // Restore last selected company from localStorage if valid
+          const savedId = localStorage.getItem("fd_selected_company");
+          const validSaved = mapped.find((c: Company) => c.id === savedId)?.id;
+          // Use saved company or default to first in list
+          setSelectedCompanyId(validSaved || mapped[0].id);
+        } else {
+          setCompanies([]);
+        }
+      } catch {
+        setCompanies([]);
+      } finally {
+        setCompaniesLoading(false);
+      }
     };
-
+    loadCompanies();
+  }, []);
+  // ---------------------------------------------------------------
+  // Fetch analytics data from backend when company or month changes
+  // Calls: GET /fd/company-analytics?company_id=...&year=...&month=...
+  // ---------------------------------------------------------------
+  const fetchAnalytics = useCallback(async () => {
+    if (!selectedCompanyId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // Call the backend company-analytics endpoint
+      const res = await FDAPI.getCompanyAnalytics(
+        selectedCompanyId,
+        selectedYear,
+        selectedMonth
+      );
+      if (res.data) {
+        setAnalytics(res.data);
+      } else {
+        // API returned an error - show the message
+        setError(res.error || "Failed to load analytics");
+        setAnalytics(null);
+      }
+    } catch (err) {
+      setError("Network error loading analytics");
+      setAnalytics(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCompanyId, selectedYear, selectedMonth]);
+  // Trigger fetch whenever company or period selection changes
+  useEffect(() => {
     fetchAnalytics();
+  }, [fetchAnalytics]);
+  // ---------------------------------------------------------------
+  // Persist company selection to localStorage for next visit
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (selectedCompanyId) {
+      localStorage.setItem("fd_selected_company", selectedCompanyId);
+    }
   }, [selectedCompanyId]);
-
-  // Fetch company rank when company changes
+  // ---------------------------------------------------------------
+  // Fetch company rank (separate lightweight call)
+  // ---------------------------------------------------------------
   useEffect(() => {
     if (!selectedCompanyId) return;
-
     const fetchRank = async () => {
       setRankLoading(true);
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-
+      // Use current real month for ranking
       const res = await FDAPI.getCompanyRank(selectedCompanyId, currentYear, currentMonth);
       if (res.data) {
         setRankData({
@@ -253,53 +312,152 @@ export default function AnalyticsPage() {
       }
       setRankLoading(false);
     };
-
     fetchRank();
-  }, [selectedCompanyId]);
-
-  // Use fetched data or fallbacks (initially)
-  const {
-    monthlyData,
-    yearlyData,
-    expenseBreakdown,
-    monthlyKpiData,
-    yearlyKpiData,
-    profitabilityData 
-  } = analyticsData || {
-    monthlyData: DEFAULT_monthlyData,
-    yearlyData: DEFAULT_yearlyData,
-    expenseBreakdown: DEFAULT_expenseBreakdown,
-    monthlyKpiData: DEFAULT_monthlyKpiData,
-    yearlyKpiData: DEFAULT_yearlyKpiData,
-    profitabilityData: DEFAULT_profitabilityData
-  };
-
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId) || DEFAULT_COMPANY;
-
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
-    return value.toString();
-  };
-
+  }, [selectedCompanyId, currentYear, currentMonth]);
+  // ---------------------------------------------------------------
+  // Derived display values from analytics state
+  // ---------------------------------------------------------------
+  const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
+  const finYearStart = analytics?.fin_year_start_month || 1;
+  // Build FY dropdown options
+  const fyOptions = generateFYOptions(currentYear, finYearStart, analytics?.available_fy_labels || []);
+  // ---------------------------------------------------------------
+  // Build Monthly KPI tile data from API response
+  // Each tile: { label, value, change, trend }
+  // ---------------------------------------------------------------
+  const monthlyKpiTiles = analytics
+    ? [
+        {
+          // GP Margin = (GP / Revenue) * 100 - shows as percentage
+          label: "GP Margin (Monthly)",
+          value: analytics.monthly_kpi.gp_margin !== null
+            ? `${analytics.monthly_kpi.gp_margin.toFixed(1)}%`
+            : "\u2014",
+          ...formatYoY(analytics.monthly_kpi.gp_margin_yoy),
+        },
+        {
+          // GP = Gross Profit amount for selected month
+          label: "GP (Monthly)",
+          value: analytics.monthly_kpi.gp !== null
+            ? formatCurrency(analytics.monthly_kpi.gp)
+            : "\u2014",
+          ...formatYoY(analytics.monthly_kpi.gp_yoy),
+        },
+        {
+          // PBT Before = Operational Profit Before Tax (before adjustments)
+          label: "PBT Before (Monthly)",
+          value: analytics.monthly_kpi.pbt_before !== null
+            ? formatCurrency(analytics.monthly_kpi.pbt_before)
+            : "\u2014",
+          ...formatYoY(analytics.monthly_kpi.pbt_before_yoy),
+        },
+        {
+          // PBT Achievement = (Actual PBT / Budget PBT) * 100
+          label: "PBT Achievement (Monthly)",
+          value: analytics.monthly_kpi.pbt_achievement !== null
+            ? `${analytics.monthly_kpi.pbt_achievement.toFixed(1)}%`
+            : "\u2014",
+          // For achievement, trend is up if >= 100%, down if < 100%
+          change: analytics.monthly_kpi.pbt_achievement !== null
+            ? `${analytics.monthly_kpi.pbt_achievement >= 100 ? "On" : "Below"} target`
+            : "No budget data",
+          trend: analytics.monthly_kpi.pbt_achievement !== null
+            ? analytics.monthly_kpi.pbt_achievement >= 100
+              ? "up"
+              : "down"
+            : "neutral",
+        },
+      ]
+    : [];
+  // ---------------------------------------------------------------
+  // Build Yearly/YTD KPI tile data from API response
+  // Year-To-Date values aggregated from FY start to selected month
+  // ---------------------------------------------------------------
+  const yearlyKpiTiles = analytics
+    ? [
+        {
+          // YTD GP Margin = SUM(YTD GP) / SUM(YTD Revenue) * 100
+          label: "YTD GP Margin",
+          value: analytics.yearly_kpi.ytd_gp_margin !== null
+            ? `${analytics.yearly_kpi.ytd_gp_margin.toFixed(1)}%`
+            : "\u2014",
+          ...formatYoY(analytics.yearly_kpi.ytd_gp_margin_yoy),
+        },
+        {
+          // YTD GP = SUM of GP for all periods in FY range
+          label: "YTD GP",
+          value: analytics.yearly_kpi.ytd_gp !== null
+            ? formatCurrency(analytics.yearly_kpi.ytd_gp)
+            : "\u2014",
+          ...formatYoY(analytics.yearly_kpi.ytd_gp_yoy),
+        },
+        {
+          // YTD PBT Before = SUM of PBT_BEFORE for YTD period range
+          label: "YTD PBT Before",
+          value: analytics.yearly_kpi.ytd_pbt_before !== null
+            ? formatCurrency(analytics.yearly_kpi.ytd_pbt_before)
+            : "\u2014",
+          ...formatYoY(analytics.yearly_kpi.ytd_pbt_before_yoy),
+        },
+        {
+          // PBT Achievement YTD = SUM(YTD Actual PBT) / SUM(YTD Budget PBT) * 100
+          label: "PBT Achievement (YTD)",
+          value: analytics.yearly_kpi.ytd_pbt_achievement !== null
+            ? `${analytics.yearly_kpi.ytd_pbt_achievement.toFixed(1)}%`
+            : "\u2014",
+          change: analytics.yearly_kpi.ytd_pbt_achievement !== null
+            ? `${analytics.yearly_kpi.ytd_pbt_achievement >= 100 ? "On" : "Below"} target`
+            : "No budget data",
+          trend: analytics.yearly_kpi.ytd_pbt_achievement !== null
+            ? analytics.yearly_kpi.ytd_pbt_achievement >= 100
+              ? "up"
+              : "down"
+            : "neutral",
+        },
+      ]
+    : [];
+  // ---------------------------------------------------------------
+  // Chart data: PBT Comparison, Trend, Profitability, Expenses
+  // Directly use API arrays (already in the correct format)
+  // ---------------------------------------------------------------
+  const pbtCompMonthly = analytics?.pbt_comparison_monthly || [];
+  const pbtCompYearly = analytics?.pbt_comparison_yearly || [];
+  const pbtTrend = analytics?.pbt_trend || [];
+  const profitabilityData = analytics?.profitability || [];
+  const expenseBreakdown = analytics?.expense_breakdown || [];
+  // ---------------------------------------------------------------
+  // Performance card data (Section 7)
+  // ---------------------------------------------------------------
+  const perfCard = perfFilter === "monthly"
+    ? analytics?.performance_monthly
+    : analytics?.performance_yearly;
+  // ===========================================================================
+  // RENDER
+  // ===========================================================================
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
       <div className="p-6">
-        {/* Header */}
+        {/* ================================================================
+            HEADER: Company name + company selector dropdown
+            No Export button per requirement
+        ================================================================ */}
         <div className="flex items-center justify-between mb-6">
+          {/* Left: icon + company name */}
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-[#0b1f3a]/10 flex items-center justify-center">
               <Building2 className="h-6 w-6 text-[#0b1f3a]" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">{selectedCompany.name}</h1>
-              <p className="text-sm text-slate-500">Analytics Dashboard - {DEFAULT_COMPANY.financialYear}</p>
+              <h1 className="text-xl font-semibold text-slate-900">
+                {/* Show selected company name or loading placeholder */}
+                {selectedCompany?.name || "Select a Company"}
+              </h1>
+              <p className="text-sm text-slate-500">Company Analytics Dashboard</p>
             </div>
           </div>
+          {/* Right: Company selector dropdown */}
           <div className="flex items-center gap-3">
-            
-            {/* Company Selector */}
-            {companies.length > 1 && (
+            {companies.length > 0 && (
               <div className="relative">
                 <select
                   value={selectedCompanyId || ""}
@@ -307,26 +465,35 @@ export default function AnalyticsPage() {
                   className="h-10 pl-3 pr-8 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 appearance-none cursor-pointer min-w-[200px]"
                   disabled={loading}
                 >
+                  {/* List all companies assigned to this FD */}
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
                 </select>
+                {/* Dropdown chevron icon */}
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               </div>
             )}
-            
+            {/* Spinner while data is loading */}
             {loading && (
               <div className="h-5 w-5 border-2 border-[#0b1f3a] border-t-transparent rounded-full animate-spin" />
             )}
-            <button className="flex items-center gap-2 h-10 px-4 text-sm font-medium text-white bg-[#0b1f3a] rounded-lg hover:bg-[#0b1f3a]/90">
-              <Download className="h-4 w-4" /> Export
-            </button>
           </div>
         </div>
-
-        {/* Company Rank Card */}
+        {/* ================================================================
+            ERROR BANNER - shown when API call fails
+        ================================================================ */}
+        {error && (
+          <div className="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+        {/* ================================================================
+            COMPANY RANK CARD - shows ranking among FD's companies
+            Based on monthly PBT Before (Actual) from backend
+        ================================================================ */}
         {selectedCompanyId && (
           <div className="mb-6">
             <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-6">
@@ -338,88 +505,139 @@ export default function AnalyticsPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Company Rank</h3>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+                  Company Rank
+                </h3>
                 {rankData ? (
                   <>
                     <p className="text-2xl font-bold text-slate-900 mt-0.5">
-                      #{rankData.rank} <span className="text-base font-medium text-slate-400">of {rankData.total_companies}</span>
+                      #{rankData.rank}{" "}
+                      <span className="text-base font-medium text-slate-400">
+                        of {rankData.total_companies}
+                      </span>
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Based on monthly PBT Before (Actual)
                       {rankData.pbt_before_actual != null && (
                         <span className="ml-2 text-slate-600 font-medium">
-                          PBT: LKR {rankData.pbt_before_actual.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                          PBT: LKR{" "}
+                          {rankData.pbt_before_actual.toLocaleString("en-US", {
+                            maximumFractionDigits: 0,
+                          })}
                         </span>
                       )}
                     </p>
                   </>
                 ) : (
-                  <p className="text-lg text-slate-400 mt-1">{rankLoading ? "Loading..." : "No rank data"}</p>
+                  <p className="text-lg text-slate-400 mt-1">
+                    {rankLoading ? "Loading..." : "No rank data"}
+                  </p>
                 )}
               </div>
             </div>
           </div>
         )}
-
-        {/* Monthly Performance Section */}
+        {/* ================================================================
+            SECTION 1: MONTHLY PERFORMANCE KPIs
+            4 tiles showing GP Margin, GP, PBT Before, PBT Achievement
+            Each with YoY comparison (same month last year)
+            Dropdown to select which month to analyse
+        ================================================================ */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Monthly Performance</h3>
-            <select
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
-            >
-              <option value="January">January</option>
-              <option value="February">February</option>
-              <option value="March">March</option>
-              <option value="April">April</option>
-              <option value="May">May</option>
-              <option value="June">June</option>
-              <option value="July">July</option>
-              <option value="August">August</option>
-              <option value="September">September</option>
-              <option value="October">October</option>
-              <option value="November">November</option>
-              <option value="December">December</option>
-            </select>
+            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+              Monthly Performance
+            </h3>
+            {/* Month selector dropdown - changes selectedMonth state */}
+            <div className="flex items-center gap-2">
+              {/* Year selector for the monthly section */}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
+              >
+                {/* Show last 3 years as options */}
+                {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              {/* Month selector */}
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
+              >
+                {MONTHS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          {/* 4 KPI tiles in a responsive grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {monthlyKpiData.map((kpi, i) => (
+            {monthlyKpiTiles.map((kpi, i) => (
               <KPICard key={i} {...kpi} />
             ))}
+            {/* Show placeholder tiles when data is loading */}
+            {!analytics && !loading && (
+              <div className="col-span-4 text-center text-sm text-slate-400 py-8">
+                Select a company to view analytics
+              </div>
+            )}
+            {loading && !analytics && (
+              <div className="col-span-4 text-center text-sm text-slate-400 py-8">
+                Loading analytics...
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Yearly Performance Section */}
+        {/* ================================================================
+            SECTION 2: YEARLY PERFORMANCE (YTD)
+            4 tiles showing YTD GP Margin, YTD GP, YTD PBT Before,
+            PBT Achievement YTD
+            Dropdown to select financial year
+            YTD range = FY start month -> selected month
+        ================================================================ */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Yearly Performance (YTD)</h3>
+            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+              Yearly Performance (YTD)
+            </h3>
+            {/* Financial Year selector dropdown */}
             <select
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
+              value={ytdYear}
+              onChange={(e) => {
+                const yr = Number(e.target.value);
+                setYtdYear(yr);
+                // Also update selectedYear so the API fetches correct FY data
+                setSelectedYear(yr);
+              }}
               className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
             >
-              <option value="2025-26">FY 2025-26</option>
-              <option value="2024-25">FY 2024-25</option>
-              <option value="2023-24">FY 2023-24</option>
+              {fyOptions.map((fy) => (
+                <option key={fy.value} value={fy.value}>{fy.label}</option>
+              ))}
             </select>
           </div>
+          {/* 4 YTD KPI tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {yearlyKpiData.map((kpi, i) => (
+            {yearlyKpiTiles.map((kpi, i) => (
               <KPICard key={i} {...kpi} />
             ))}
           </div>
         </div>
-
-        {/* Charts Row 1 */}
+        {/* ================================================================
+            SECTION 3 & 4: CHARTS ROW 1
+            Left: PBT Before vs After comparison (bar chart)
+            Right: PBT Before monthly trend (line chart)
+        ================================================================ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Budget vs Actual Bar Chart */}
-          {/* Actual PBT Comparison Chart */}
+          {/* ------ 3. Actual PBT Comparison (Before vs After) ------ */}
           <ChartCard
             title="Actual PBT Comparison (Before vs After)"
             description="Comparison of Profit Before Tax (PBT) before and after adjustments"
           >
+            {/* Toggle between Monthly / Yearly view */}
             <div className="flex justify-end mb-4">
               <div className="bg-slate-100 p-1 rounded-lg flex text-sm font-medium">
                 <button
@@ -446,52 +664,51 @@ export default function AnalyticsPage() {
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={pbtViewMode === "monthly" ? monthlyData : yearlyData} 
+                {/* Bar chart: PBT Before (dark) and PBT After (blue) side by side */}
+                <BarChart
+                  data={pbtViewMode === "monthly" ? pbtCompMonthly : pbtCompYearly}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey={pbtViewMode === "monthly" ? "month" : "year"} 
-                    tick={{ fontSize: 12 }} 
-                    stroke="#64748b" 
-                  />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#64748b" />
                   <YAxis tick={{ fontSize: 12 }} stroke="#64748b" tickFormatter={formatCurrency} />
                   <Tooltip
                     formatter={(value: number) => [`LKR ${formatCurrency(value)}`, ""]}
                     contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                   />
                   <Legend />
-                  <Bar dataKey="pbtBefore" name="PBT Before" fill="#0b1f3a" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pbtAfter" name="PBT After" fill="#0341a5ff" radius={[4, 4, 0, 0]} />
+                  {/* PBT Before bars - dark navy */}
+                  <Bar dataKey="pbt_before" name="PBT Before" fill="#0b1f3a" radius={[4, 4, 0, 0]} />
+                  {/* PBT After bars - blue */}
+                  <Bar dataKey="pbt_after" name="PBT After" fill="#0341a5" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
-
-          {/* Variance Trend Line Chart */}
-          {/* Variance Trend Line Chart */}
+          {/* ------ 4. PBT Before - Monthly Trend ------ */}
           <ChartCard
-            title="PBT Before – Monthly Trend"
-            description="Monthly trend of Profit Before Tax (Pre-adjustment)"
+            title="PBT Before - Monthly Trend"
+            description="Monthly trend of Profit Before Tax (Pre-adjustment) - detect seasonality and turning points"
           >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart 
-                  data={monthlyData} 
+                {/* Line chart: single series showing PBT Before over 12 months */}
+                <LineChart
+                  data={pbtTrend}
                   margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#64748b" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#64748b" />
                   <YAxis tick={{ fontSize: 12 }} stroke="#64748b" tickFormatter={formatCurrency} />
                   <Tooltip
                     formatter={(value: number) => [`LKR ${formatCurrency(value)}`, "PBT Before"]}
                     contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                   />
                   <Legend />
+                  {/* Single trend line in dark navy */}
                   <Line
                     type="linear"
-                    dataKey="pbtBefore"
+                    dataKey="pbt_before"
                     name="PBT Before"
                     stroke="#0b1f3a"
                     strokeWidth={2}
@@ -503,37 +720,46 @@ export default function AnalyticsPage() {
             </div>
           </ChartCard>
         </div>
-
-        {/* Charts Row 2 */}
+        {/* ================================================================
+            SECTION 5 & 6: CHARTS ROW 2
+            Left (2/3): Profitability Margins line chart
+            Right (1/3): Expense Breakdown pie chart
+        ================================================================ */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Profitability Margins Line Chart */}
+          {/* ------ 5. Profitability Margins ------ */}
           <div className="lg:col-span-2">
             <ChartCard
               title="Profitability Margins"
-              description="GP Margin and NP Margin trends over the financial year"
+              description="GP Margin and Net Profit Margin (PBT Before / Revenue) trends"
             >
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={profitabilityData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  {/* Dual-line chart: GP Margin + NP Margin over 12 months */}
+                  <LineChart
+                    data={profitabilityData}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#64748b" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#64748b" />
                     <YAxis tick={{ fontSize: 12 }} stroke="#64748b" unit="%" />
                     <Tooltip
-                      formatter={(value: number) => [`${value}%`, ""]}
+                      formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                     />
                     <Legend />
+                    {/* GP Margin line - dark navy colour */}
                     <Line
                       type="monotone"
-                      dataKey="gpMargin"
+                      dataKey="gp_margin"
                       name="GP Margin"
                       stroke="#0b1f3a"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                     />
+                    {/* Net Profit Margin line - blue colour */}
                     <Line
                       type="monotone"
-                      dataKey="npMargin"
+                      dataKey="np_margin"
                       name="NP Margin"
                       stroke="#3b82f6"
                       strokeWidth={2}
@@ -544,14 +770,14 @@ export default function AnalyticsPage() {
               </div>
             </ChartCard>
           </div>
-
-          {/* Expense Breakdown Pie Chart */}
+          {/* ------ 6. Expense Breakdown Pie Chart ------ */}
           <ChartCard
             title="Expense Breakdown"
-            description="Distribution of operating expenses by category"
+            description="Distribution of operating expenses for the selected month"
           >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
+                {/* Donut chart showing expense category proportions */}
                 <PieChart>
                   <Pie
                     data={expenseBreakdown}
@@ -560,154 +786,134 @@ export default function AnalyticsPage() {
                     innerRadius={50}
                     outerRadius={80}
                     paddingAngle={2}
-                    dataKey="value"
+                    dataKey="percentage"
                   >
+                    {/* Each slice gets its colour from the API response */}
                     {expenseBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => [`${value}%`, ""]}
+                    formatter={(value: number, _name: string, props: any) => {
+                      // Show both percentage and actual amount in tooltip
+                      const item = props.payload;
+                      return [
+                        `${value.toFixed(1)}% (LKR ${formatCurrency(item.value)})`,
+                        item.name,
+                      ];
+                    }}
                     contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                   />
                 </PieChart>
               </ResponsiveContainer>
+              {/* Legend below the pie chart showing category names + colours */}
               <div className="flex flex-wrap justify-center gap-3 mt-2">
                 {expenseBreakdown.map((item, i) => (
                   <div key={i} className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-xs text-slate-600">{item.name}</span>
+                    {/* Colour dot matching the pie slice */}
+                    <div
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    {/* Category name and percentage */}
+                    <span className="text-xs text-slate-600">
+                      {item.name} ({item.percentage.toFixed(0)}%)
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           </ChartCard>
         </div>
-
-        {/* Comparative Performance Dashboard */}
+        {/* ================================================================
+            SECTION 7: MONTHLY PERFORMANCE CARD
+            Compact summary: Actual PBT, Budget PBT, Achievement %
+            Can toggle between Monthly and Yearly (YTD) views
+            Values calculated from database in real-time
+        ================================================================ */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-            
-            {/* Monthly Section */}
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-base font-semibold text-slate-900 border-l-4 border-[#0b1f3a] pl-3">
-                  Monthly Performance
-                </h3>
-                <select
-                  value={tableMonth}
-                  onChange={(e) => setTableMonth(e.target.value)}
-                  className="h-9 px-3 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-slate-50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 transition-all cursor-pointer"
+          <div className="p-6">
+            {/* Header with toggle buttons */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-semibold text-slate-900 border-l-4 border-[#0b1f3a] pl-3">
+                Monthly Performance
+              </h3>
+              {/* Monthly / Yearly toggle for performance card */}
+              <div className="bg-slate-100 p-1 rounded-lg flex text-sm font-medium">
+                <button
+                  onClick={() => setPerfFilter("monthly")}
+                  className={`px-3 py-1.5 rounded-md transition-all ${
+                    perfFilter === "monthly"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
                 >
-                  <option value="Jan">January</option>
-                  <option value="Feb">February</option>
-                  <option value="Mar">March</option>
-                  <option value="Apr">April</option>
-                  <option value="May">May</option>
-                  <option value="Jun">June</option>
-                  <option value="Jul">July</option>
-                  <option value="Aug">August</option>
-                  <option value="Sep">September</option>
-                  <option value="Oct">October</option>
-                  <option value="Nov">November</option>
-                  <option value="Dec">December</option>
-                </select>
-              </div>
-
-              {(() => {
-                const monthData = monthlyData.find(m => m.month === tableMonth) || monthlyData[0];
-                const actual = monthData.pbtAfter;
-                const budget = monthData.pbtBefore;
-                const achievement = ((actual / budget) * 100);
-                const isMeetingBudget = achievement >= 100;
-
-                return (
-                  <div className="grid grid-cols-3 gap-6">
-                     <div className="space-y-1">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actual PBT</p>
-                      <p className="text-xl font-bold text-slate-900 font-mono">
-                        LKR {formatCurrency(actual)}
-                      </p>
-                    </div>
-                    <div className="space-y-1 border-l border-slate-100 pl-6">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Budget PBT</p>
-                      <p className="text-xl font-bold text-slate-900 font-mono">
-                        LKR {formatCurrency(budget)}
-                      </p>
-                    </div>
-                    <div className="space-y-1 border-l border-slate-100 pl-6">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Achievement</p>
-                      <div className={`flex items-baseline gap-1.5 ${isMeetingBudget ? "text-emerald-600" : "text-red-600"}`}>
-                        <span className="text-xl font-bold">{achievement.toFixed(1)}%</span>
-                        {isMeetingBudget ? (
-                          <TrendingUp className="h-4 w-4" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Yearly Section */}
-            <div className="p-6 bg-slate-50/50">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-base font-semibold text-slate-900 border-l-4 border-blue-600 pl-3">
-                  Yearly Performance
-                </h3>
-                <select
-                  value={tableYear}
-                  onChange={(e) => setTableYear(e.target.value)}
-                  className="h-9 px-3 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 transition-all cursor-pointer"
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setPerfFilter("yearly")}
+                  className={`px-3 py-1.5 rounded-md transition-all ${
+                    perfFilter === "yearly"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
                 >
-                  <option value="2025">2025</option>
-                  <option value="2024">2024</option>
-                  <option value="2023">2023</option>
-                </select>
+                  Yearly (YTD)
+                </button>
               </div>
-
-              {(() => {
-                // Find year data or fallback to accumulated monthly data if current year
-                const yearRecord = yearlyData.find(y => y.year === tableYear);
-                
-                // For demonstration, if specific year record exists use it, else sum monthly
-                const actual = yearRecord ? yearRecord.pbtAfter : monthlyData.reduce((acc, curr) => acc + curr.pbtAfter, 0);
-                const budget = yearRecord ? yearRecord.pbtBefore : monthlyData.reduce((acc, curr) => acc + curr.pbtBefore, 0);
-                const achievement = ((actual / budget) * 100);
-                const isMeetingBudget = achievement >= 100;
-
-                return (
-                  <div className="grid grid-cols-3 gap-6">
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actual PBT</p>
-                      <p className="text-xl font-bold text-slate-900 font-mono">
-                        LKR {formatCurrency(actual)}
-                      </p>
-                    </div>
-                    <div className="space-y-1 border-l border-slate-200 pl-6">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Budget PBT</p>
-                      <p className="text-xl font-bold text-slate-900 font-mono">
-                        LKR {formatCurrency(budget)}
-                      </p>
-                    </div>
-                    <div className="space-y-1 border-l border-slate-200 pl-6">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Achievement</p>
-                      <div className={`flex items-baseline gap-1.5 ${isMeetingBudget ? "text-emerald-600" : "text-red-600"}`}>
-                        <span className="text-xl font-bold">{achievement.toFixed(1)}%</span>
-                        {isMeetingBudget ? (
-                          <TrendingUp className="h-4 w-4" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
-
+            {/* 3-column grid: Actual PBT | Budget PBT | Achievement */}
+            {perfCard ? (
+              <div className="grid grid-cols-3 gap-6">
+                {/* Actual PBT - value from backend */}
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Actual PBT
+                  </p>
+                  <p className="text-xl font-bold text-slate-900 font-mono">
+                    LKR {perfCard.actual_pbt !== null ? formatCurrency(perfCard.actual_pbt) : "\u2014"}
+                  </p>
+                </div>
+                {/* Budget PBT - value from backend */}
+                <div className="space-y-1 border-l border-slate-100 pl-6">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Budget PBT
+                  </p>
+                  <p className="text-xl font-bold text-slate-900 font-mono">
+                    LKR {perfCard.budget_pbt !== null ? formatCurrency(perfCard.budget_pbt) : "\u2014"}
+                  </p>
+                </div>
+                {/* Achievement % - (Actual / Budget) * 100 */}
+                <div className="space-y-1 border-l border-slate-100 pl-6">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Achievement
+                  </p>
+                  <div
+                    className={`flex items-baseline gap-1.5 ${
+                      perfCard.achievement !== null && perfCard.achievement >= 100
+                        ? "text-emerald-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    <span className="text-xl font-bold">
+                      {perfCard.achievement !== null
+                        ? `${perfCard.achievement.toFixed(1)}%`
+                        : "\u2014"}
+                    </span>
+                    {/* Trend arrow icon */}
+                    {perfCard.achievement !== null && perfCard.achievement >= 100 ? (
+                      <TrendingUp className="h-4 w-4" />
+                    ) : perfCard.achievement !== null ? (
+                      <TrendingDown className="h-4 w-4" />
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-sm text-slate-400 py-4">
+                {loading ? "Loading..." : "No performance data available"}
+              </div>
+            )}
           </div>
         </div>
       </div>

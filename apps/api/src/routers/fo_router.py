@@ -863,6 +863,70 @@ async def submit_report(
     }
 
 
+@router.delete("/reports/{report_id}")
+async def delete_draft_report(
+    report_id: str,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete a draft report and its associated actual data.
+    Only allowed for DRAFT status.
+    """
+    # Get report
+    result = await db.execute(
+        select(Report).where(Report.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Verify access
+    if not await can_access_company(db, user, report.company_id):
+        raise HTTPException(status_code=403, detail="Access denied to this report")
+    
+    # Check status - can only delete DRAFT
+    if report.status != ReportStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete report in {report.status.value} status. Only drafts can be deleted."
+        )
+    
+    # Delete associated financial facts (Actuals)
+    from sqlalchemy import delete
+    await db.execute(
+        delete(FinancialFact).where(
+            and_(
+                FinancialFact.company_id == report.company_id,
+                FinancialFact.period_id == report.period_id,
+                FinancialFact.actual_budget == Scenario.ACTUAL.value
+            )
+        )
+    )
+    
+    # Delete report status history
+    await db.execute(
+        delete(ReportStatusHistory).where(
+            ReportStatusHistory.report_id == report_id
+        )
+    )
+    
+    # Delete comments if any
+    await db.execute(
+        delete(ReportComment).where(
+            ReportComment.report_id == report_id
+        )
+    )
+    
+    # Delete the report itself
+    await db.delete(report)
+    
+    await db.commit()
+    
+    return {"success": True, "message": "Draft report deleted successfully"}
+
+
 @router.get("/budget/{company_id}/{year}/{month}", response_model=Optional[FinancialDataResponse])
 async def get_budget_for_period(
     company_id: str,

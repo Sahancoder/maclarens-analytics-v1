@@ -1,95 +1,74 @@
-# Approval Workflows
+# 🔄 Workflows & Processes
 
 ## Overview
 
-MacLarens Analytics implements a multi-stage approval workflow for financial reports, ensuring proper review and sign-off at each organizational level.
+The core function of the platform is the monthly financial reporting cycle, where **Finance Officers** submit data for their respective companies, and **Finance Directors** review and approve it.
 
-## Workflow Stages
+## 👥 Actors & Roles
 
-### 1. Data Entry (Draft)
+| Role                  | Abbr.     | Responsibilities                                                 |
+| :-------------------- | :-------- | :--------------------------------------------------------------- |
+| **Finance Officer**   | **FO**    | Data entry, Variance analysis, Submission.                       |
+| **Finance Director**  | **FD**    | Review, Approval, Rejection, Group-level analysis.               |
+| **Managing Director** | **MD**    | Read-only access to high-level dashboards and finalized reports. |
+| **System Admin**      | **Admin** | User management, Company/Cluster configuration.                  |
 
-**Actor**: Data Officer
+## 📉 Monthly Reporting Workflow
 
-- Create new reports with financial data
-- Save drafts for later completion
-- Edit and update draft reports
-- Submit for director review
+### 1. Draft Stage
 
-### 2. Director Review
+- **Actor**: Finance Officer (FO)
+- **Action**: Enters financial data (Revenue, Expenses, etc.) for the current open period.
+- **System State**: Report status is `DRAFT`.
+- **Note**: Data is saved automatically. Variance against budget is calculated in real-time.
 
-**Actor**: Director
+### 2. Submission
 
-- Review submitted reports from companies in their cluster
-- Validate data accuracy and completeness
-- Approve to forward to CEO
-- Reject with feedback for revision
+- **Actor**: Finance Officer (FO)
+- **Action**: Clicks "Submit for Review".
+- **Validation**: System checks for completeness and data integrity.
+- **System State**:
+  - Report status changes to `SUBMITTED`.
+  - **Notification**: Email sent to the assigned Finance Director.
+  - **Lock**: FO can no longer edit the report.
 
-### 3. CEO Approval
+### 3. Review Cycle
 
-**Actor**: CEO
+- **Actor**: Finance Director (FD)
+- **Action**: Reviews the submitted report, analyzing variances and comments.
+- **Outcome A: Rejection**
+  - FD clicks "Send Back for Correction" with a mandatory comment.
+  - **System State**: Status reverts to `REJECTED`.
+  - **Notification**: Email sent to FO with the rejection reason.
+  - FO can edit and re-submit.
+- **Outcome B: Approval**
+  - FD clicks "Approve".
+  - **System State**: Status changes to `APPROVED`.
+  - **Notification**: Email sent to FO confirming approval.
+  - Report is now part of the confirmed Group Financials.
 
-- Final review of reports
-- Executive approval for finalization
-- Reject for further review
+### 4. Group Analysis
 
-### 4. Completed
+- **Actor**: MD / FD
+- **Action**: View consolidated dashboards.
+- **Data Source**: Aggregates only `APPROVED` reports (or submitted ones depending on filter settings).
 
-**Status**: Approved
+## 📊 State Machine
 
-- Report is finalized and locked
-- Data contributes to analytics dashboards
-- Historical record maintained
-
-## Workflow Diagram
-
-```
-┌──────────────┐     Submit      ┌──────────────┐
-│    DRAFT     │───────────────▶│  SUBMITTED   │
-└──────────────┘                 └──────┬───────┘
-       ▲                                │
-       │                         Director
-       │ Reject                  Reviews
-       │                                │
-       │         ┌─────────────────────┬┘
-       │         │                     │
-       │         ▼                     ▼
-       │    ┌──────────┐        ┌──────────────┐
-       └────│ REJECTED │        │ UNDER_REVIEW │
-            └──────────┘        └──────┬───────┘
-                  ▲                    │
-                  │              CEO Reviews
-                  │                    │
-                  │         ┌──────────┴──────────┐
-                  │         │                     │
-                  │         ▼                     ▼
-                  │    ┌──────────┐        ┌──────────┐
-                  └────│ REJECTED │        │ APPROVED │
-                       └──────────┘        └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> SUBMITTED: FO Submits
+    SUBMITTED --> APPROVED: FD Approves
+    SUBMITTED --> REJECTED: FD Rejects
+    REJECTED --> SUBMITTED: FO Re-submits
+    APPROVED --> [*]
 ```
 
-## Status Definitions
+## 🔔 Notifications
 
-| Status | Description |
-|--------|-------------|
-| DRAFT | Report is being prepared by Data Officer |
-| SUBMITTED | Report submitted for director review |
-| UNDER_REVIEW | Director approved, awaiting CEO review |
-| APPROVED | Final approval granted, report is complete |
-| REJECTED | Report rejected, returned for revision |
-
-## Notifications
-
-The system sends notifications at each workflow stage:
-
-- **Submission**: Directors notified of pending review
-- **Approval**: Author notified, next approver notified
-- **Rejection**: Author notified with rejection reason
-- **Deadline Reminders**: Sent before reporting deadlines
-
-## Business Rules
-
-1. Only draft reports can be edited
-2. Reports cannot skip workflow stages
-3. Rejection returns report to draft status
-4. Approvers cannot approve their own reports
-5. CEO can approve at any stage (emergency approval)
+| Event                | Recipient        | Channel        | Content                          |
+| :------------------- | :--------------- | :------------- | :------------------------------- |
+| **Report Submitted** | Finance Director | Email + In-App | Link to review page.             |
+| **Report Approved**  | Finance Officer  | Email + In-App | Confirmation of completion.      |
+| **Report Rejected**  | Finance Officer  | Email + In-App | Rejection reason & link to edit. |

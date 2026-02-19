@@ -26,21 +26,45 @@ TEMPLATES = {
     "report_submitted": {
         "subject": "Report Submitted for Review - {company_name}",
         "html": """
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 20px; border-radius: 8px 8px 0 0;">
-                <h2 style="color: white; margin: 0;">📊 New Report Submitted</h2>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+            <!-- Header with Logo -->
+            <div style="text-align: center; padding: 20px; border-bottom: 3px solid #0b1f3a;">
+                <img src="{app_url}/blue-75-years-logo.svg" alt="McLarens Group" height="60" style="display: inline-block;">
             </div>
-            <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
-                <p>A new report has been submitted and requires your review.</p>
-                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{company_name}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Period:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{period}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Submitted by:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{submitted_by}</td></tr>
-                </table>
-                <a href="{review_url}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Review Report →</a>
+            
+            <!-- Status Banner -->
+            <div style="background-color: #f0fdf4; padding: 15px 20px; border-left: 4px solid #22c55e; margin: 20px 0;">
+                <h2 style="color: #15803d; margin: 0; font-size: 18px;">📊 New Report Submitted</h2>
             </div>
-            <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-                McLarens Analytics System
+            
+            <div style="padding: 0 20px;">
+                <p style="color: #374151; font-size: 16px; line-height: 1.5;">A new report has been submitted and requires your review.</p>
+                
+                <div style="background-color: #f9fafb; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 120px;">Company</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{company_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Period</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{period}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Submitted by</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{submitted_by}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{review_url}" style="background-color: #0b1f3a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Review Report</a>
+                </div>
+            </div>
+            
+            <div style="padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">
+                <p style="margin: 0;">McLarens Analytics System</p>
+                <p style="margin: 5px 0 0 0;">This is an automated message, please do not reply.</p>
             </div>
         </div>
         """
@@ -48,43 +72,90 @@ TEMPLATES = {
     "report_approved": {
         "subject": "✓ Report Approved - {company_name}",
         "html": """
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 20px; border-radius: 8px 8px 0 0;">
-                <h2 style="color: white; margin: 0;">✓ Report Approved</h2>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+            <!-- Header with Logo -->
+            <div style="text-align: center; padding: 20px; border-bottom: 3px solid #0b1f3a;">
+                <img src="{app_url}/blue-75-years-logo.svg" alt="McLarens Group" height="60" style="display: inline-block;">
             </div>
-            <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
-                <p>Great news! Your report has been approved.</p>
-                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{company_name}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Period:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{period}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Approved by:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{approved_by}</td></tr>
-                </table>
+            
+            <!-- Status Banner -->
+            <div style="background-color: #f0fdf4; padding: 15px 20px; border-left: 4px solid #22c55e; margin: 20px 0;">
+                <h2 style="color: #15803d; margin: 0; font-size: 18px;">✓ Report Approved</h2>
             </div>
-            <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-                McLarens Analytics System
+            
+            <div style="padding: 0 20px;">
+                <p style="color: #374151; font-size: 16px; line-height: 1.5;">Great news! Your report has been successfully approved.</p>
+                
+                <div style="background-color: #f9fafb; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 120px;">Company</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{company_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Period</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{period}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Approved by</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{approved_by}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div style="padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">
+                <p style="margin: 0;">McLarens Analytics System</p>
             </div>
         </div>
         """
     },
     "report_rejected": {
-        "subject": "⚠️ Report Rejected - Action Required - {company_name}",
+        "subject": "⚠️ Action Required: Report Returned - {company_name}",
         "html": """
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 20px; border-radius: 8px 8px 0 0;">
-                <h2 style="color: white; margin: 0;">⚠️ Report Rejected</h2>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+            <!-- Header with Logo -->
+            <div style="text-align: center; padding: 20px; border-bottom: 3px solid #0b1f3a;">
+                <img src="{app_url}/blue-75-years-logo.svg" alt="McLarens Group" height="60" style="display: inline-block;">
             </div>
-            <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
-                <p>Your report has been rejected and requires revision.</p>
-                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{company_name}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Period:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{period}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Rejected by:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{rejected_by}</td></tr>
-                    <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Reason:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee; color: #ef4444;">{rejection_reason}</td></tr>
-                </table>
-                <a href="{edit_url}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Edit Report →</a>
+            
+            <!-- Status Banner -->
+            <div style="background-color: #fef2f2; padding: 15px 20px; border-left: 4px solid #ef4444; margin: 20px 0;">
+                <h2 style="color: #b91c1c; margin: 0; font-size: 18px;">⚠️ Report Returned for Correction</h2>
             </div>
-            <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-                McLarens Analytics System
+            
+            <div style="padding: 0 20px;">
+                <p style="color: #374151; font-size: 16px; line-height: 1.5;">Your report has been sent back for correction.</p>
+                
+                <div style="background-color: #fff1f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <strong style="color: #991b1b; display: block; margin-bottom: 5px;">Rejection Reason:</strong>
+                    <p style="margin: 0; color: #7f1d1d;">{rejection_reason}</p>
+                </div>
+                
+                <div style="background-color: #f9fafb; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 120px;">Company</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{company_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Period</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{period}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Rejected by</td>
+                            <td style="padding: 8px 0; color: #111827; font-weight: 600;">{rejected_by}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{edit_url}" style="background-color: #0b1f3a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Edit Report</a>
+                </div>
+            </div>
+            
+            <div style="padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">
+                <p style="margin: 0;">McLarens Analytics System</p>
             </div>
         </div>
         """
@@ -183,6 +254,9 @@ class NotificationService:
         template = TEMPLATES.get(template_name)
         if not template:
             return {"success": False, "error": f"Template '{template_name}' not found"}
+        
+        # Add global variables
+        variables["app_url"] = settings.app_url
         
         subject = template["subject"].format(**variables)
         html_content = template["html"].format(**variables)

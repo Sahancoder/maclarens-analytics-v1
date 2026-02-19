@@ -22,6 +22,7 @@ import {
   ClusterDrilldownResponse,
   PBTTrendResponse,
   PerformanceHierarchyResponse,
+  CompanyDetailResponse,
   Report,
   PendingReport,
   Company,
@@ -171,6 +172,20 @@ export function usePerformanceHierarchy(
     () => MDAPI.getPerformanceHierarchy(year, month),
     [year, month],
     (data) => data.clusters.length === 0
+  );
+}
+
+export function useCompanyDetail(
+  companyId: string | null,
+  year?: number,
+  month?: number
+): UseApiState<CompanyDetailResponse> {
+  return useApiCall(
+    () => companyId && year && month
+      ? MDAPI.getCompanyDetail(companyId, year, month)
+      : Promise.resolve({ data: null, error: 'No company selected', status: 400 }),
+    [companyId, year, month],
+    () => false
   );
 }
 

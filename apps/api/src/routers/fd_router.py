@@ -236,6 +236,66 @@ async def get_submitter_info(db: AsyncSession, user_id: str) -> Optional[dict]:
 
 # ============ ENDPOINTS ============
 
+
+class FDCompanyInfo(BaseModel):
+    """Company summary returned by GET /fd/companies"""
+    id: str
+    name: str
+    code: str
+    cluster_name: Optional[str] = None
+    fy_start_month: int = 1
+    currency: str = "LKR"
+
+
+@router.get("/companies", response_model=List[FDCompanyInfo])
+async def get_fd_companies(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return only the companies assigned to this Financial Director
+    via user_company_role_map.  Each FD sees only their own companies.
+    """
+    # Get the list of company IDs mapped to this FD
+    fd_company_ids = await _get_fd_company_ids(db, user.user_id if hasattr(user, 'user_id') else str(user.id))
+
+    if not fd_company_ids:
+        return []
+
+    # Fetch full company records for those IDs
+    result = await db.execute(
+        select(CompanyMaster).where(
+            and_(
+                CompanyMaster.company_id.in_(fd_company_ids),
+                CompanyMaster.is_active == True,
+            )
+        )
+    )
+    companies = result.scalars().all()
+
+    # Resolve cluster names in one go
+    cluster_ids = {c.cluster_id for c in companies if getattr(c, "cluster_id", None)}
+    cluster_map: Dict[str, str] = {}
+    if cluster_ids:
+        cl_result = await db.execute(
+            select(ClusterMaster.cluster_id, ClusterMaster.cluster_name)
+            .where(ClusterMaster.cluster_id.in_(cluster_ids))
+        )
+        cluster_map = {cid: cname for cid, cname in cl_result.all()}
+
+    return [
+        FDCompanyInfo(
+            id=str(c.company_id),
+            name=c.company_name,
+            code=c.company_code if hasattr(c, 'company_code') else "",
+            cluster_name=cluster_map.get(c.cluster_id),
+            fy_start_month=c.fin_year_start_month if hasattr(c, 'fin_year_start_month') else 1,
+            currency=c.currency if hasattr(c, 'currency') else "LKR",
+        )
+        for c in companies
+    ]
+
+
 @router.get("/pending", response_model=PendingReviewResponse)
 async def get_pending_reports(
     user: User = Depends(get_current_active_user),
@@ -939,6 +999,99 @@ class CompanyRankResponse(BaseModel):
     month: int
 
 
+# ============================================================
+# Company Analytics Response Models
+# ============================================================
+
+
+class MonthlyKPI(BaseModel):
+    """Single month KPI tile: value + YoY comparison."""
+    gp_margin: Optional[float] = None          # GP Margin % for selected month
+    gp_margin_yoy: Optional[float] = None       # Change vs same month last year
+    gp: Optional[float] = None                  # Gross Profit amount for selected month
+    gp_yoy: Optional[float] = None              # Change vs same month last year
+    pbt_before: Optional[float] = None          # PBT Before (operational) for selected month
+    pbt_before_yoy: Optional[float] = None      # Change vs same month last year
+    pbt_achievement: Optional[float] = None     # (Actual PBT / Budget PBT) * 100
+    revenue: Optional[float] = None             # Revenue for selected month (used in calculations)
+
+
+class YearlyKPI(BaseModel):
+    """YTD KPI tile: value + YoY comparison across fiscal year to date."""
+    ytd_gp_margin: Optional[float] = None       # YTD GP Margin %
+    ytd_gp_margin_yoy: Optional[float] = None   # Change vs previous FY same period range
+    ytd_gp: Optional[float] = None              # YTD Gross Profit
+    ytd_gp_yoy: Optional[float] = None          # Change vs previous FY same period range
+    ytd_pbt_before: Optional[float] = None      # YTD PBT Before
+    ytd_pbt_before_yoy: Optional[float] = None  # Change vs previous FY same period range
+    ytd_pbt_achievement: Optional[float] = None # (YTD Actual PBT / YTD Budget PBT) * 100
+    ytd_revenue: Optional[float] = None         # YTD Revenue
+
+
+class PBTComparisonItem(BaseModel):
+    """Single period PBT Before vs After comparison."""
+    label: str                                  # e.g. "Jan" or "2024"
+    pbt_before: float = 0                       # PBT Before Non-Ops
+    pbt_after: float = 0                        # PBT After Non-Ops
+
+
+class PBTTrendItem(BaseModel):
+    """Single point on the PBT Before monthly trend line."""
+    label: str                                  # e.g. "Jan"
+    month: int
+    year: int
+    pbt_before: float = 0
+
+
+class ProfitabilityItem(BaseModel):
+    """Single point on profitability margins chart."""
+    label: str                                  # Month short name
+    gp_margin: float = 0                        # GP Margin % for this month
+    np_margin: float = 0                        # Net Profit Margin % (PBT Before / Revenue)
+
+
+class ExpenseItem(BaseModel):
+    """Single category in expense breakdown."""
+    name: str                                   # Category name
+    value: float = 0                            # Amount
+    percentage: float = 0                       # Share of total %
+    color: str = "#0b1f3a"                      # Chart colour
+
+
+class PerformanceCard(BaseModel):
+    """Monthly / Yearly performance summary card with Actual vs Budget."""
+    actual_pbt: Optional[float] = None
+    budget_pbt: Optional[float] = None
+    achievement: Optional[float] = None         # (actual / budget) * 100
+
+
+class CompanyAnalyticsResponse(BaseModel):
+    """Full analytics payload for one company + selected period."""
+    company_id: str
+    company_name: str
+    fin_year_start_month: int
+    selected_year: int
+    selected_month: int
+    # Section 1 – Monthly KPIs (4 tiles)
+    monthly_kpi: MonthlyKPI
+    # Section 2 – Yearly / YTD KPIs (4 tiles)
+    yearly_kpi: YearlyKPI
+    # Section 3 – PBT Before vs After comparison bars (monthly list)
+    pbt_comparison_monthly: List[PBTComparisonItem]
+    pbt_comparison_yearly: List[PBTComparisonItem]
+    # Section 4 – PBT Before monthly trend line
+    pbt_trend: List[PBTTrendItem]
+    # Section 5 – Profitability margins line chart
+    profitability: List[ProfitabilityItem]
+    # Section 6 – Expense breakdown pie chart
+    expense_breakdown: List[ExpenseItem]
+    # Section 7 – Performance card (monthly + yearly)
+    performance_monthly: PerformanceCard
+    performance_yearly: PerformanceCard
+    # Available financial years for dropdown
+    available_fy_labels: List[str]
+
+
 async def _get_fd_company_ids(db: AsyncSession, user_id: str) -> List[str]:
     """Get company_ids accessible to this FD user via user_company_role_map."""
     stmt = (
@@ -1477,4 +1630,348 @@ async def get_company_rank(
         pbt_before_actual=target_pbt,
         year=year,
         month=month,
+    )
+
+
+# ============================================================
+# Company Analytics – Full dashboard data for one company
+# ============================================================
+
+
+async def _get_metric_for_periods(
+    db: AsyncSession,
+    company_id: str,
+    period_ids: List[int],
+    metric_id: int,
+    scenario: str,
+) -> Optional[float]:
+    """
+    Sum a single metric across given periods for one scenario (ACTUAL/BUDGET).
+    Returns None when no rows exist.
+    """
+    if not period_ids:
+        return None
+
+    result = await db.execute(
+        select(func.sum(FinancialFact.amount)).where(
+            FinancialFact.company_id == company_id,
+            FinancialFact.period_id.in_(period_ids),
+            FinancialFact.metric_id == metric_id,
+            func.upper(FinancialFact.actual_budget) == scenario.upper(),
+        )
+    )
+    val = result.scalar_one_or_none()
+    return float(val) if val is not None else None
+
+
+async def _period_id_for(db: AsyncSession, year: int, month: int) -> Optional[int]:
+    """Look up single period_id for a given year+month."""
+    result = await db.execute(
+        select(PeriodMaster.period_id).where(
+            and_(PeriodMaster.year == year, PeriodMaster.month == month)
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+@router.get("/company-analytics", response_model=CompanyAnalyticsResponse)
+async def get_company_analytics(
+    company_id: str,
+    year: int,
+    month: int,
+    fy_label: Optional[str] = None,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Full analytics payload for the Company Analytics tab.
+
+    Parameters
+    ----------
+    company_id : str   – Target company
+    year       : int   – Calendar year of the selected month
+    month      : int   – Calendar month (1-12) being analysed
+    fy_label   : str   – Optional FY label (unused currently, reserved)
+
+    Returns all 7 dashboard sections with real-time calculated values.
+    """
+
+    # ── 0. Access control ──────────────────────────────────────
+    fd_companies = await _get_fd_company_ids(db, user.user_id)
+    if company_id not in fd_companies:
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    # ── 1. Load company master for FY start month ──────────────
+    company_row = (
+        await db.execute(
+            select(CompanyMaster).where(CompanyMaster.company_id == company_id)
+        )
+    ).scalar_one_or_none()
+    if not company_row:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    fin_year_start = company_row.fin_year_start_month or 1
+    company_name = company_row.company_name
+
+    # ── 2. Resolve period IDs ──────────────────────────────────
+    # Current selected period
+    current_pid = await _period_id_for(db, year, month)
+    # Same month last year (for YoY)
+    prev_year_pid = await _period_id_for(db, year - 1, month)
+
+    # YTD period range: FY start → selected month
+    ytd_pids = await _get_ytd_period_ids(db, fin_year_start, year, month)
+    # YTD same range last year (for YoY)
+    ytd_pids_prev = await _get_ytd_period_ids(db, fin_year_start, year - 1, month)
+
+    # ── Helper: fetch single-period metrics ────────────────────
+    async def _single(pid: Optional[int], scenario: str) -> Dict[str, Optional[float]]:
+        """Fetch all metrics for one period+scenario, return dict."""
+        if pid is None:
+            return {}
+        rows = (
+            await db.execute(
+                select(FinancialFact.metric_id, FinancialFact.amount).where(
+                    FinancialFact.company_id == company_id,
+                    FinancialFact.period_id == pid,
+                    func.upper(FinancialFact.actual_budget) == scenario.upper(),
+                )
+            )
+        ).all()
+        out: Dict[str, Optional[float]] = {}
+        for mid, amt in rows:
+            fname = _METRIC_ID_TO_FIELD.get(int(mid))
+            if fname:
+                out[fname] = float(amt) if amt is not None else None
+        return out
+
+    # Fetch current-month actuals + budget
+    cur_actual = await _single(current_pid, "ACTUAL")
+    cur_budget = await _single(current_pid, "BUDGET")
+    # Same month last year actuals
+    prev_actual = await _single(prev_year_pid, "ACTUAL")
+
+    # ── 3. Monthly KPIs (Section 1) ───────────────────────────
+    # GP Margin = (GP / Revenue) * 100
+    cur_revenue = cur_actual.get("revenue") or 0
+    cur_gp = cur_actual.get("gp") or 0
+    cur_gp_margin = (cur_gp / cur_revenue * 100) if cur_revenue else None
+
+    prev_revenue = prev_actual.get("revenue") or 0
+    prev_gp = prev_actual.get("gp") or 0
+    prev_gp_margin = (prev_gp / prev_revenue * 100) if prev_revenue else None
+
+    # YoY change for GP Margin is difference in percentage points
+    gp_margin_yoy = (cur_gp_margin - prev_gp_margin) if (cur_gp_margin is not None and prev_gp_margin is not None) else None
+    # YoY change for GP is percentage change
+    gp_yoy = (((cur_gp - prev_gp) / abs(prev_gp)) * 100) if prev_gp else None
+
+    # PBT Before – use pre-computed or reconstruct
+    cur_pbt_before = cur_actual.get("pbt_before_non_ops")
+    if cur_pbt_before is None:
+        # Reconstruct: GP + Other Income – Total Overhead + Provisions + Exchange Var
+        oh = sum(cur_actual.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
+        cur_pbt_before = cur_gp + (cur_actual.get("other_income") or 0) - oh + (cur_actual.get("provisions") or 0) + (cur_actual.get("exchange_variance") or 0)
+    prev_pbt_before = prev_actual.get("pbt_before_non_ops")
+    if prev_pbt_before is None:
+        oh_prev = sum(prev_actual.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
+        prev_pbt_before = prev_gp + (prev_actual.get("other_income") or 0) - oh_prev + (prev_actual.get("provisions") or 0) + (prev_actual.get("exchange_variance") or 0)
+    pbt_before_yoy = (((cur_pbt_before - prev_pbt_before) / abs(prev_pbt_before)) * 100) if prev_pbt_before else None
+
+    # PBT Achievement = (Actual PBT / Budget PBT) * 100
+    budget_pbt_before = cur_budget.get("pbt_before_non_ops")
+    if budget_pbt_before is None:
+        oh_b = sum(cur_budget.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
+        budget_pbt_before = (cur_budget.get("gp") or 0) + (cur_budget.get("other_income") or 0) - oh_b + (cur_budget.get("provisions") or 0) + (cur_budget.get("exchange_variance") or 0)
+    pbt_achievement = (cur_pbt_before / budget_pbt_before * 100) if budget_pbt_before else None
+
+    monthly_kpi = MonthlyKPI(
+        gp_margin=round(cur_gp_margin, 2) if cur_gp_margin is not None else None,
+        gp_margin_yoy=round(gp_margin_yoy, 2) if gp_margin_yoy is not None else None,
+        gp=round(cur_gp, 2),
+        gp_yoy=round(gp_yoy, 2) if gp_yoy is not None else None,
+        pbt_before=round(cur_pbt_before, 2) if cur_pbt_before is not None else None,
+        pbt_before_yoy=round(pbt_before_yoy, 2) if pbt_before_yoy is not None else None,
+        pbt_achievement=round(pbt_achievement, 2) if pbt_achievement is not None else None,
+        revenue=round(cur_revenue, 2),
+    )
+
+    # ── 4. Yearly / YTD KPIs (Section 2) ─────────────────────
+    ytd_actual = await _get_ytd_metrics(db, company_id, ytd_pids, "ACTUAL")
+    ytd_budget = await _get_ytd_metrics(db, company_id, ytd_pids, "BUDGET")
+    ytd_prev = await _get_ytd_metrics(db, company_id, ytd_pids_prev, "ACTUAL")
+
+    ytd_revenue = ytd_actual.get("revenue") or 0
+    ytd_gp = ytd_actual.get("gp") or 0
+    ytd_gp_margin_val = (ytd_gp / ytd_revenue * 100) if ytd_revenue else None
+
+    prev_ytd_rev = ytd_prev.get("revenue") or 0
+    prev_ytd_gp = ytd_prev.get("gp") or 0
+    prev_ytd_gp_margin = (prev_ytd_gp / prev_ytd_rev * 100) if prev_ytd_rev else None
+
+    ytd_gp_margin_yoy = (ytd_gp_margin_val - prev_ytd_gp_margin) if (ytd_gp_margin_val is not None and prev_ytd_gp_margin is not None) else None
+    ytd_gp_yoy_val = (((ytd_gp - prev_ytd_gp) / abs(prev_ytd_gp)) * 100) if prev_ytd_gp else None
+
+    ytd_pbt_before_val = ytd_actual.get("pbt_before_non_ops") or 0
+    prev_ytd_pbt = ytd_prev.get("pbt_before_non_ops") or 0
+    ytd_pbt_yoy = (((ytd_pbt_before_val - prev_ytd_pbt) / abs(prev_ytd_pbt)) * 100) if prev_ytd_pbt else None
+
+    ytd_budget_pbt = ytd_budget.get("pbt_before_non_ops") or 0
+    ytd_pbt_ach = (ytd_pbt_before_val / ytd_budget_pbt * 100) if ytd_budget_pbt else None
+
+    yearly_kpi = YearlyKPI(
+        ytd_gp_margin=round(ytd_gp_margin_val, 2) if ytd_gp_margin_val is not None else None,
+        ytd_gp_margin_yoy=round(ytd_gp_margin_yoy, 2) if ytd_gp_margin_yoy is not None else None,
+        ytd_gp=round(ytd_gp, 2),
+        ytd_gp_yoy=round(ytd_gp_yoy_val, 2) if ytd_gp_yoy_val is not None else None,
+        ytd_pbt_before=round(ytd_pbt_before_val, 2),
+        ytd_pbt_before_yoy=round(ytd_pbt_yoy, 2) if ytd_pbt_yoy is not None else None,
+        ytd_pbt_achievement=round(ytd_pbt_ach, 2) if ytd_pbt_ach is not None else None,
+        ytd_revenue=round(ytd_revenue, 2),
+    )
+
+    # ── 5. PBT Before vs After comparison (Section 3) ────────
+    # Monthly: fetch all 12 months of selected year
+    pbt_comp_monthly: List[PBTComparisonItem] = []
+    month_names_short = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    for m in range(1, 13):
+        pid = await _period_id_for(db, year, m)
+        if pid is None:
+            pbt_comp_monthly.append(PBTComparisonItem(label=month_names_short[m], pbt_before=0, pbt_after=0))
+            continue
+        m_data = await _single(pid, "ACTUAL")
+        pb = m_data.get("pbt_before_non_ops")
+        if pb is None:
+            oh_m = sum(m_data.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
+            pb = (m_data.get("gp") or 0) + (m_data.get("other_income") or 0) - oh_m + (m_data.get("provisions") or 0) + (m_data.get("exchange_variance") or 0)
+        pa = m_data.get("pbt_after_non_ops")
+        if pa is None:
+            pa = (pb or 0) - (m_data.get("non_ops_exp") or 0) + (m_data.get("non_ops_income") or 0)
+        pbt_comp_monthly.append(PBTComparisonItem(
+            label=month_names_short[m],
+            pbt_before=round(pb or 0, 2),
+            pbt_after=round(pa or 0, 2),
+        ))
+
+    # Yearly: sum per FY for last 3 years using company FY start
+    pbt_comp_yearly: List[PBTComparisonItem] = []
+    for y_offset in range(2, -1, -1):
+        fy_year = year - y_offset
+        fy_pids = await _get_ytd_period_ids(db, fin_year_start, fy_year, 12 if fy_year < year else month)
+        fy_metrics = await _get_ytd_metrics(db, company_id, fy_pids, "ACTUAL")
+        pb_y = fy_metrics.get("pbt_before_non_ops") or 0
+        pa_y = fy_metrics.get("pbt_after_non_ops") or 0
+        pbt_comp_yearly.append(PBTComparisonItem(
+            label=str(fy_year),
+            pbt_before=round(pb_y, 2),
+            pbt_after=round(pa_y, 2),
+        ))
+
+    # ── 6. PBT Before Monthly Trend (Section 4) ──────────────
+    # Same 12-month data – reuse from pbt_comp_monthly
+    pbt_trend_list: List[PBTTrendItem] = []
+    for m in range(1, 13):
+        pbt_trend_list.append(PBTTrendItem(
+            label=month_names_short[m],
+            month=m,
+            year=year,
+            pbt_before=pbt_comp_monthly[m - 1].pbt_before,
+        ))
+
+    # ── 7. Profitability Margins (Section 5) ──────────────────
+    profitability_list: List[ProfitabilityItem] = []
+    for m in range(1, 13):
+        pid = await _period_id_for(db, year, m)
+        if pid is None:
+            profitability_list.append(ProfitabilityItem(label=month_names_short[m]))
+            continue
+        m_data = await _single(pid, "ACTUAL")
+        m_rev = m_data.get("revenue") or 0
+        m_gp = m_data.get("gp") or 0
+        m_gp_margin = (m_gp / m_rev * 100) if m_rev else 0
+        # NP Margin = PBT Before / Revenue
+        m_pbt = m_data.get("pbt_before_non_ops")
+        if m_pbt is None:
+            oh_m2 = sum(m_data.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
+            m_pbt = m_gp + (m_data.get("other_income") or 0) - oh_m2 + (m_data.get("provisions") or 0) + (m_data.get("exchange_variance") or 0)
+        m_np_margin = (m_pbt / m_rev * 100) if m_rev else 0
+        profitability_list.append(ProfitabilityItem(
+            label=month_names_short[m],
+            gp_margin=round(m_gp_margin, 2),
+            np_margin=round(m_np_margin, 2),
+        ))
+
+    # ── 8. Expense Breakdown (Section 6) ──────────────────────
+    # Current month expense categories
+    expense_colors = ["#0b1f3a", "#1e40af", "#3b82f6", "#60a5fa", "#93c5fd"]
+    expense_cats = [
+        ("Personnel", cur_actual.get("personal_exp") or 0),
+        ("Admin", cur_actual.get("admin_exp") or 0),
+        ("Selling", cur_actual.get("selling_exp") or 0),
+        ("Finance", cur_actual.get("finance_exp") or 0),
+        ("Depreciation", cur_actual.get("depreciation") or 0),
+    ]
+    total_exp = sum(v for _, v in expense_cats) or 1  # avoid division by zero
+    expense_items: List[ExpenseItem] = []
+    for i, (name, val) in enumerate(expense_cats):
+        expense_items.append(ExpenseItem(
+            name=name,
+            value=round(val, 2),
+            percentage=round(val / total_exp * 100, 1),
+            color=expense_colors[i % len(expense_colors)],
+        ))
+
+    # ── 9. Performance Cards (Section 7) ──────────────────────
+    # Monthly performance card
+    perf_monthly = PerformanceCard(
+        actual_pbt=round(cur_pbt_before, 2) if cur_pbt_before is not None else None,
+        budget_pbt=round(budget_pbt_before, 2) if budget_pbt_before is not None else None,
+        achievement=round(pbt_achievement, 2) if pbt_achievement is not None else None,
+    )
+    # Yearly performance card
+    perf_yearly = PerformanceCard(
+        actual_pbt=round(ytd_pbt_before_val, 2),
+        budget_pbt=round(ytd_budget_pbt, 2),
+        achievement=round(ytd_pbt_ach, 2) if ytd_pbt_ach is not None else None,
+    )
+
+    # ── 10. Available FY Labels for dropdown ──────────────────
+    # Query distinct years from FinancialFact for this company
+    distinct_years_result = await db.execute(
+        select(PeriodMaster.year)
+        .join(FinancialFact, FinancialFact.period_id == PeriodMaster.period_id)
+        .where(FinancialFact.company_id == company_id)
+        .distinct()
+        .order_by(PeriodMaster.year.desc())
+    )
+    distinct_years = [row[0] for row in distinct_years_result.all()]
+    # Generate FY labels based on fin_year_start
+    fy_labels: List[str] = []
+    seen = set()
+    for y in distinct_years:
+        if fin_year_start == 1:
+            lbl = f"FY {y}"
+        else:
+            lbl = f"FY {y}-{str(y + 1)[-2:]}"
+        if lbl not in seen:
+            fy_labels.append(lbl)
+            seen.add(lbl)
+
+    return CompanyAnalyticsResponse(
+        company_id=company_id,
+        company_name=company_name,
+        fin_year_start_month=fin_year_start,
+        selected_year=year,
+        selected_month=month,
+        monthly_kpi=monthly_kpi,
+        yearly_kpi=yearly_kpi,
+        pbt_comparison_monthly=pbt_comp_monthly,
+        pbt_comparison_yearly=pbt_comp_yearly,
+        pbt_trend=pbt_trend_list,
+        profitability=profitability_list,
+        expense_breakdown=expense_items,
+        performance_monthly=perf_monthly,
+        performance_yearly=perf_yearly,
+        available_fy_labels=fy_labels,
     )

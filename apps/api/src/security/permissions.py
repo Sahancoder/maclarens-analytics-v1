@@ -92,6 +92,8 @@ ROLE_PERMISSIONS: dict[int, Set[Permission]] = {
         Permission.VIEW_USERS,
         Permission.MANAGE_USERS,
         Permission.ASSIGN_ROLES,
+        Permission.VIEW_ANALYTICS,
+        Permission.VIEW_DASHBOARDS,
         Permission.MANAGE_SYSTEM,
         Permission.VIEW_AUDIT_LOGS,
         Permission.EXPORT_DATA,
