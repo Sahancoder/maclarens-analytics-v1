@@ -6,7 +6,7 @@ import os
 import aiosmtplib
 from email.message import EmailMessage
 
-from fastapi import FastAPI, Depends, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, Request, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +17,6 @@ from src.db.session import init_db, close_db, AsyncSessionLocal
 from src.gql_schema.schema import schema
 from src.services.auth_service import AuthService
 from src.services.health_service import HealthService
-from src.db.models import UserRole
 from src.services.export_service import ExportService
 from src.routers.auth_router import router as auth_router
 from src.routers.admin_router import router as admin_router
@@ -49,11 +48,16 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
+_is_prod = settings.environment.lower() in ("production", "staging")
+
 app = FastAPI(
     title="McLarens Analytics API",
     description="Enterprise financial analytics platform API",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
 )
 
 # CORS middleware
@@ -131,8 +135,9 @@ async def get_context(request: Request):
                             else:
                                 auth_error = "not_provisioned"
 
-                if user and auth_mode == "entra" and user.role in {UserRole.FINANCE_OFFICER, UserRole.FINANCE_DIRECTOR}:
-                    if not user.company_id and not user.cluster_id:
+                if user and auth_mode == "entra" and getattr(user, "current_role_id", None) in {1, 2}:
+                    # FO/FD must have at least one accessible company
+                    if not getattr(user, "accessible_companies", []):
                         auth_error = "not_provisioned"
                         user = None
 
@@ -230,7 +235,12 @@ async def export_financial_summary(
                 }
             )
         except Exception as e:
-            return {"error": str(e), "status": "export_failed"}
+            import logging
+            logging.getLogger(__name__).error("Export failed: %s", e)
+            raise HTTPException(
+                status_code=500,
+                detail="Export failed. Please try again or contact support.",
+            )
 
 
 @app.get("/export/available-periods")
@@ -254,14 +264,11 @@ class TestEmailRequest(BaseModel):
 async def send_test_email(request: TestEmailRequest):
     """
     Send a test email via SMTP (for local Mailpit testing).
-    
-    Usage:
-        curl -X POST http://localhost:8000/dev/send-test-email \
-            -H "Content-Type: application/json" \
-            -d '{"to":"test@example.com","subject":"Hello","body":"Test message"}'
-    
-    Then check Mailpit UI at: http://localhost:8025
+    Disabled in production/staging environments.
     """
+    if settings.environment.lower() in ("production", "staging"):
+        raise HTTPException(status_code=404, detail="Not found")
+
     smtp_host = os.getenv("SMTP_HOST", "mailpit")
     smtp_port = int(os.getenv("SMTP_PORT", "1025"))
     sender_email = os.getenv("SENDER_EMAIL", "no-reply@maclarens.local")

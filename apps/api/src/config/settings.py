@@ -1,9 +1,14 @@
 """
 Application Settings with Feature Switches for Dev/Production
 """
+import secrets
+import logging
 from pydantic_settings import BaseSettings
-from typing import Optional, List, Literal
+from pydantic import model_validator
+from typing import ClassVar, Optional, List
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class AuthMode(str, Enum):
@@ -31,8 +36,9 @@ class Settings(BaseSettings):
     # Switch: "dev" for local testing, "entra" for production
     auth_mode: AuthMode = AuthMode.DEV
     
-    # JWT Configuration (used in dev mode)
-    jwt_secret: str = "maclarens-secret-key-change-in-production"
+    # JWT Configuration
+    # IMPORTANT: Override via JWT_SECRET env var. Default is random per-process (dev only).
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
     
@@ -97,6 +103,41 @@ class Settings(BaseSettings):
     def use_resend(self) -> bool:
         return self.email_provider == EmailProvider.RESEND
     
+    # Known insecure default secrets that must never be used in production
+    _INSECURE_SECRETS: ClassVar[List[str]] = [
+        "maclarens-secret-key-change-in-production",
+        "local-dev-super-secret-key-change-in-production-min-32-chars",
+        "GENERATE-A-STRONG-SECRET-HERE",
+        "",
+    ]
+
+    @model_validator(mode="after")
+    def _validate_production_settings(self) -> "Settings":
+        """Enforce security invariants for production."""
+        is_prod = self.environment.lower() in ("production", "staging")
+
+        # Generate a random secret for dev if none provided
+        if self.jwt_secret in self._INSECURE_SECRETS:
+            if is_prod:
+                raise ValueError(
+                    "CRITICAL: JWT_SECRET is not set or uses an insecure default. "
+                    "Generate a secure key: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                )
+            # Dev mode: generate a random per-process secret
+            self.jwt_secret = secrets.token_urlsafe(64)
+            logger.warning("JWT_SECRET not set — using random per-process secret (dev only)")
+
+        # Enforce Entra ID config in production
+        if is_prod and self.auth_mode == AuthMode.DEV:
+            raise ValueError(
+                "AUTH_MODE=dev is not allowed in production/staging. Set AUTH_MODE=entra."
+            )
+
+        if is_prod and self.debug:
+            logger.warning("DEBUG=true in production — this should be false for security")
+
+        return self
+
     class Config:
         env_file = ".env"
         extra = "allow"

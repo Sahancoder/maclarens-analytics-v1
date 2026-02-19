@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config.settings import settings
 from src.db.models import UserMaster
 from src.security.middleware import get_current_active_user, get_db
+from src.security.rate_limit import rate_limit_auth
 from src.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class DevLoginRequest(BaseModel):
 
 
 class PortalAccessRequest(BaseModel):
-    email: str
+    email: EmailStr
     portal: str
 
 
@@ -158,7 +159,7 @@ async def _login_with_rbac(
 #  ENDPOINTS
 # ════════════════════════════════════════════════════════════════════
 
-@router.post("/microsoft-login", response_model=TokenResponse)
+@router.post("/microsoft-login", response_model=TokenResponse, dependencies=[rate_limit_auth()])
 async def microsoft_login(
     request: MicrosoftLoginRequest,
     db: AsyncSession = Depends(get_db),
@@ -191,7 +192,7 @@ async def microsoft_login(
     return await _login_with_rbac(db, email, request.portal, "Access denied")
 
 
-@router.post("/login/dev", response_model=TokenResponse)
+@router.post("/login/dev", response_model=TokenResponse, dependencies=[rate_limit_auth()])
 async def dev_login(
     request: DevLoginRequest,
     db: AsyncSession = Depends(get_db),
@@ -212,7 +213,7 @@ async def dev_login(
     return await _login_with_rbac(db, request.email, request.portal, "Access denied")
 
 
-@router.post("/check-access", response_model=PortalAccessResponse)
+@router.post("/check-access", response_model=PortalAccessResponse, dependencies=[rate_limit_auth()])
 async def check_portal_access(
     request: PortalAccessRequest,
     db: AsyncSession = Depends(get_db),

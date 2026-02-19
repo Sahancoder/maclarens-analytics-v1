@@ -16,7 +16,7 @@
 // 6. Expense Breakdown pie chart (current month)
 // 7. Monthly Performance card (Actual PBT, Budget PBT, Achievement)
 // =============================================================================
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -33,7 +33,7 @@ import {
   Cell,
 } from "recharts";
 // Icons used across the page
-import { TrendingUp, TrendingDown, Building2, ChevronDown, Trophy } from "lucide-react";
+import { TrendingUp, TrendingDown, Building2, ChevronDown, Trophy, Search, X } from "lucide-react";
 // API client for backend calls – uses FDAPI (not FO) so only FD-assigned companies appear
 import { FDAPI, type CompanyAnalyticsData } from "@/lib/api-client";
 // ---------------------------------------------------------------
@@ -139,48 +139,26 @@ function formatCurrency(value: number): string {
   if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
   return value.toFixed(0);
 }
+
+// Unified Achievement Formula
+// (1 + SIGN(Budget) * ((Actual - Budget) / Budget)) * 100
+const calculateAchievement = (actual: number | null | undefined, budget: number | null | undefined) => {
+  if (budget === 0 || budget === null || budget === undefined || actual === null || actual === undefined) return 0; // Handle division by zero / no budget
+  const sign = budget >= 0 ? 1 : -1;
+  return (1 + sign * ((actual - budget) / budget)) * 100;
+};
 // ---------------------------------------------------------------
 // Utility: format YoY change string for KPI card
 // e.g. 1.5 -> "+1.5% vs last year", -2.3 -> "-2.3% vs last year"
 // ---------------------------------------------------------------
-function formatYoY(val: number | null): { text: string; trend: string } {
+function formatYoY(val: number | null): { change: string; trend: string } {
   if (val === null || val === undefined) {
-    return { text: "No prior year data", trend: "neutral" };
+    return { change: "No prior year data", trend: "neutral" };
   }
   // Determine direction: positive is up, negative is down
   const sign = val >= 0 ? "+" : "";
   const trend = val >= 0 ? "up" : "down";
-  return { text: `${sign}${val.toFixed(1)}% vs last year`, trend };
-}
-// ---------------------------------------------------------------
-// Utility: Generate FY year options for the YTD dropdown
-// Uses the company's FY start month to calc FY labels
-// ---------------------------------------------------------------
-function generateFYOptions(
-  currentYear: number,
-  fyStartMonth: number,
-  availableLabels: string[]
-): { value: number; label: string }[] {
-  // If backend provides available FY labels, use them
-  if (availableLabels && availableLabels.length > 0) {
-    return availableLabels.map((lbl) => {
-      // Parse year from label: "FY 2025" or "FY 2025-26"
-      const match = lbl.match(/FY (\d{4})/);
-      const yr = match ? parseInt(match[1]) : currentYear;
-      return { value: yr, label: lbl };
-    });
-  }
-  // Fallback: generate last 3 FY labels
-  const options = [];
-  for (let i = 0; i < 3; i++) {
-    const yr = currentYear - i;
-    if (fyStartMonth === 1) {
-      options.push({ value: yr, label: `FY ${yr}` });
-    } else {
-      options.push({ value: yr, label: `FY ${yr}-${String(yr + 1).slice(-2)}` });
-    }
-  }
-  return options;
+  return { change: `${sign}${val.toFixed(1)}% vs last year`, trend };
 }
 // =============================================================================
 // MAIN PAGE COMPONENT
@@ -200,8 +178,6 @@ export default function AnalyticsPage() {
   // Monthly performance: which month to show
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  // Yearly/YTD performance: which FY year to show
-  const [ytdYear, setYtdYear] = useState<number>(currentYear);
   // -- Analytics data from API --
   const [analytics, setAnalytics] = useState<CompanyAnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -215,8 +191,20 @@ export default function AnalyticsPage() {
     pbt_before_actual: number | null;
   } | null>(null);
   const [rankLoading, setRankLoading] = useState(false);
-  // -- Performance card filter (monthly vs yearly) --
-  const [perfFilter, setPerfFilter] = useState<"monthly" | "yearly">("monthly");
+  // -- Searchable company dropdown state --
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setCompanyDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   // ---------------------------------------------------------------
   // Effect: Fetch FD-assigned companies from /fd/companies
   // Each FD only sees companies mapped to them in user_company_role_map
@@ -318,9 +306,10 @@ export default function AnalyticsPage() {
   // Derived display values from analytics state
   // ---------------------------------------------------------------
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
-  const finYearStart = analytics?.fin_year_start_month || 1;
-  // Build FY dropdown options
-  const fyOptions = generateFYOptions(currentYear, finYearStart, analytics?.available_fy_labels || []);
+  // Filtered companies for searchable dropdown
+  const filteredCompanies = companies.filter((c) =>
+    c.name.toLowerCase().includes(companySearch.toLowerCase())
+  );
   // ---------------------------------------------------------------
   // Build Monthly KPI tile data from API response
   // Each tile: { label, value, change, trend }
@@ -352,17 +341,17 @@ export default function AnalyticsPage() {
           ...formatYoY(analytics.monthly_kpi.pbt_before_yoy),
         },
         {
-          // PBT Achievement = (Actual PBT / Budget PBT) * 100
+          // PBT Achievement = Unified Formula
           label: "PBT Achievement (Monthly)",
-          value: analytics.monthly_kpi.pbt_achievement !== null
-            ? `${analytics.monthly_kpi.pbt_achievement.toFixed(1)}%`
+          value: analytics.performance_monthly?.budget_pbt
+            ? `${calculateAchievement(analytics.performance_monthly.actual_pbt, analytics.performance_monthly.budget_pbt).toFixed(1)}%`
             : "\u2014",
           // For achievement, trend is up if >= 100%, down if < 100%
-          change: analytics.monthly_kpi.pbt_achievement !== null
-            ? `${analytics.monthly_kpi.pbt_achievement >= 100 ? "On" : "Below"} target`
+          change: analytics.performance_monthly?.budget_pbt
+            ? `${calculateAchievement(analytics.performance_monthly.actual_pbt, analytics.performance_monthly.budget_pbt) >= 100 ? "On" : "Below"} target`
             : "No budget data",
-          trend: analytics.monthly_kpi.pbt_achievement !== null
-            ? analytics.monthly_kpi.pbt_achievement >= 100
+          trend: analytics.performance_monthly?.budget_pbt
+            ? calculateAchievement(analytics.performance_monthly.actual_pbt, analytics.performance_monthly.budget_pbt) >= 100
               ? "up"
               : "down"
             : "neutral",
@@ -400,16 +389,16 @@ export default function AnalyticsPage() {
           ...formatYoY(analytics.yearly_kpi.ytd_pbt_before_yoy),
         },
         {
-          // PBT Achievement YTD = SUM(YTD Actual PBT) / SUM(YTD Budget PBT) * 100
+          // PBT Achievement YTD = Unified Formula
           label: "PBT Achievement (YTD)",
-          value: analytics.yearly_kpi.ytd_pbt_achievement !== null
-            ? `${analytics.yearly_kpi.ytd_pbt_achievement.toFixed(1)}%`
+          value: analytics.performance_yearly?.budget_pbt
+            ? `${calculateAchievement(analytics.performance_yearly.actual_pbt, analytics.performance_yearly.budget_pbt).toFixed(1)}%`
             : "\u2014",
-          change: analytics.yearly_kpi.ytd_pbt_achievement !== null
-            ? `${analytics.yearly_kpi.ytd_pbt_achievement >= 100 ? "On" : "Below"} target`
+          change: analytics.performance_yearly?.budget_pbt
+            ? `${calculateAchievement(analytics.performance_yearly.actual_pbt, analytics.performance_yearly.budget_pbt) >= 100 ? "On" : "Below"} target`
             : "No budget data",
-          trend: analytics.yearly_kpi.ytd_pbt_achievement !== null
-            ? analytics.yearly_kpi.ytd_pbt_achievement >= 100
+          trend: analytics.performance_yearly?.budget_pbt
+            ? calculateAchievement(analytics.performance_yearly.actual_pbt, analytics.performance_yearly.budget_pbt) >= 100
               ? "up"
               : "down"
             : "neutral",
@@ -425,12 +414,6 @@ export default function AnalyticsPage() {
   const pbtTrend = analytics?.pbt_trend || [];
   const profitabilityData = analytics?.profitability || [];
   const expenseBreakdown = analytics?.expense_breakdown || [];
-  // ---------------------------------------------------------------
-  // Performance card data (Section 7)
-  // ---------------------------------------------------------------
-  const perfCard = perfFilter === "monthly"
-    ? analytics?.performance_monthly
-    : analytics?.performance_yearly;
   // ===========================================================================
   // RENDER
   // ===========================================================================
@@ -455,25 +438,71 @@ export default function AnalyticsPage() {
               <p className="text-sm text-slate-500">Company Analytics Dashboard</p>
             </div>
           </div>
-          {/* Right: Company selector dropdown */}
+          {/* Right: Searchable Company selector dropdown */}
           <div className="flex items-center gap-3">
             {companies.length > 0 && (
-              <div className="relative">
-                <select
-                  value={selectedCompanyId || ""}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="h-10 pl-3 pr-8 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 appearance-none cursor-pointer min-w-[200px]"
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setCompanyDropdownOpen(!companyDropdownOpen)}
+                  className="h-10 pl-3 pr-8 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 cursor-pointer min-w-[280px] text-left truncate"
                   disabled={loading}
                 >
-                  {/* List all companies assigned to this FD */}
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                {/* Dropdown chevron icon */}
+                  {selectedCompany?.name || "Select a Company"}
+                </button>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                {/* Dropdown panel with search */}
+                {companyDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-[360px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                    {/* Search input */}
+                    <div className="p-2 border-b border-slate-100">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search company..."
+                          value={companySearch}
+                          onChange={(e) => setCompanySearch(e.target.value)}
+                          className="w-full h-9 pl-8 pr-8 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20 focus:bg-white"
+                          autoFocus
+                        />
+                        {companySearch && (
+                          <button
+                            onClick={() => setCompanySearch("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                          >
+                            <X className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Company list */}
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredCompanies.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-slate-400 text-center">
+                          No companies found
+                        </div>
+                      ) : (
+                        filteredCompanies.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setSelectedCompanyId(c.id);
+                              setCompanyDropdownOpen(false);
+                              setCompanySearch("");
+                            }}
+                            className={`w-full px-4 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors ${
+                              c.id === selectedCompanyId
+                                ? "bg-[#0b1f3a]/5 text-[#0b1f3a] font-medium"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            {c.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {/* Spinner while data is loading */}
@@ -550,14 +579,14 @@ export default function AnalyticsPage() {
             </h3>
             {/* Month selector dropdown - changes selectedMonth state */}
             <div className="flex items-center gap-2">
-              {/* Year selector for the monthly section */}
+              {/* Year selector for the monthly section - past 3 + 4 forward */}
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
               >
-                {/* Show last 3 years as options */}
-                {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
+                {/* Show past 3 years + current + 4 forward years */}
+                {Array.from({ length: 8 }, (_, i) => currentYear - 3 + i).map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
@@ -595,29 +624,17 @@ export default function AnalyticsPage() {
             SECTION 2: YEARLY PERFORMANCE (YTD)
             4 tiles showing YTD GP Margin, YTD GP, YTD PBT Before,
             PBT Achievement YTD
-            Dropdown to select financial year
-            YTD range = FY start month -> selected month
+            YTD is calculated based on FY start month → selected month
+            using the same year/month selected above
         ================================================================ */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
               Yearly Performance (YTD)
             </h3>
-            {/* Financial Year selector dropdown */}
-            <select
-              value={ytdYear}
-              onChange={(e) => {
-                const yr = Number(e.target.value);
-                setYtdYear(yr);
-                // Also update selectedYear so the API fetches correct FY data
-                setSelectedYear(yr);
-              }}
-              className="h-9 px-3 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0b1f3a]/20"
-            >
-              {fyOptions.map((fy) => (
-                <option key={fy.value} value={fy.value}>{fy.label}</option>
-              ))}
-            </select>
+            <span className="text-xs text-slate-400">
+              Based on selected year &amp; month above
+            </span>
           </div>
           {/* 4 YTD KPI tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -826,89 +843,121 @@ export default function AnalyticsPage() {
           </ChartCard>
         </div>
         {/* ================================================================
-            SECTION 7: MONTHLY PERFORMANCE CARD
-            Compact summary: Actual PBT, Budget PBT, Achievement %
-            Can toggle between Monthly and Yearly (YTD) views
+            SECTION 7: PERFORMANCE CARD
+            6-column layout: Monthly (Actual PBT, Budget PBT, Achievement)
+            + Yearly/YTD (Actual PBT, Budget PBT, Achievement)
             Values calculated from database in real-time
         ================================================================ */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           <div className="p-6">
-            {/* Header with toggle buttons */}
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-base font-semibold text-slate-900 border-l-4 border-[#0b1f3a] pl-3">
-                Monthly Performance
-              </h3>
-              {/* Monthly / Yearly toggle for performance card */}
-              <div className="bg-slate-100 p-1 rounded-lg flex text-sm font-medium">
-                <button
-                  onClick={() => setPerfFilter("monthly")}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    perfFilter === "monthly"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setPerfFilter("yearly")}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    perfFilter === "yearly"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Yearly (YTD)
-                </button>
-              </div>
-            </div>
-            {/* 3-column grid: Actual PBT | Budget PBT | Achievement */}
-            {perfCard ? (
-              <div className="grid grid-cols-3 gap-6">
-                {/* Actual PBT - value from backend */}
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Actual PBT
-                  </p>
-                  <p className="text-xl font-bold text-slate-900 font-mono">
-                    LKR {perfCard.actual_pbt !== null ? formatCurrency(perfCard.actual_pbt) : "\u2014"}
-                  </p>
-                </div>
-                {/* Budget PBT - value from backend */}
-                <div className="space-y-1 border-l border-slate-100 pl-6">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Budget PBT
-                  </p>
-                  <p className="text-xl font-bold text-slate-900 font-mono">
-                    LKR {perfCard.budget_pbt !== null ? formatCurrency(perfCard.budget_pbt) : "\u2014"}
-                  </p>
-                </div>
-                {/* Achievement % - (Actual / Budget) * 100 */}
-                <div className="space-y-1 border-l border-slate-100 pl-6">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Achievement
-                  </p>
-                  <div
-                    className={`flex items-baseline gap-1.5 ${
-                      perfCard.achievement !== null && perfCard.achievement >= 100
-                        ? "text-emerald-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    <span className="text-xl font-bold">
-                      {perfCard.achievement !== null
-                        ? `${perfCard.achievement.toFixed(1)}%`
-                        : "\u2014"}
-                    </span>
-                    {/* Trend arrow icon */}
-                    {perfCard.achievement !== null && perfCard.achievement >= 100 ? (
-                      <TrendingUp className="h-4 w-4" />
-                    ) : perfCard.achievement !== null ? (
-                      <TrendingDown className="h-4 w-4" />
-                    ) : null}
+            <h3 className="text-base font-semibold text-slate-900 border-l-4 border-[#0b1f3a] pl-3 mb-6">
+              Performance Summary
+            </h3>
+            {analytics ? (
+              <>
+                {/* Sub-headers */}
+                <div className="grid grid-cols-6 gap-4 mb-2">
+                  <div className="col-span-3">
+                    <p className="text-xs font-bold text-[#0b1f3a] uppercase tracking-wider">Monthly</p>
+                  </div>
+                  <div className="col-span-3">
+                    <p className="text-xs font-bold text-[#0b1f3a] uppercase tracking-wider">Yearly (YTD)</p>
                   </div>
                 </div>
-              </div>
+                {/* 6 columns: Monthly (3) + Yearly (3) */}
+                <div className="grid grid-cols-6 gap-4">
+                  {/* Monthly Actual PBT */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Actual PBT
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 font-mono">
+                      LKR {analytics.performance_monthly?.actual_pbt !== null
+                        ? formatCurrency(analytics.performance_monthly.actual_pbt)
+                        : "\u2014"}
+                    </p>
+                  </div>
+                  {/* Monthly Budget PBT */}
+                  <div className="space-y-1 border-l border-slate-100 pl-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Budget PBT
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 font-mono">
+                      LKR {analytics.performance_monthly?.budget_pbt !== null
+                        ? formatCurrency(analytics.performance_monthly.budget_pbt)
+                        : "\u2014"}
+                    </p>
+                  </div>
+                  {/* Monthly Achievement */}
+                  <div className="space-y-1 border-l border-slate-100 pl-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Achievement
+                    </p>
+                    {(() => {
+                      const ach = analytics.performance_monthly?.budget_pbt
+                        ? calculateAchievement(analytics.performance_monthly.actual_pbt, analytics.performance_monthly.budget_pbt)
+                        : null;
+                      return (
+                        <div className={`flex items-baseline gap-1.5 ${ach !== null && ach >= 100 ? "text-emerald-600" : "text-red-600"}`}>
+                          <span className="text-lg font-bold">
+                            {ach !== null ? `${ach.toFixed(1)}%` : "\u2014"}
+                          </span>
+                          {ach !== null && ach >= 100 ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : ach !== null ? (
+                            <TrendingDown className="h-4 w-4" />
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  {/* Yearly Actual PBT */}
+                  <div className="space-y-1 border-l-2 border-slate-200 pl-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Actual PBT
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 font-mono">
+                      LKR {analytics.performance_yearly?.actual_pbt !== null
+                        ? formatCurrency(analytics.performance_yearly.actual_pbt)
+                        : "\u2014"}
+                    </p>
+                  </div>
+                  {/* Yearly Budget PBT */}
+                  <div className="space-y-1 border-l border-slate-100 pl-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Budget PBT
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 font-mono">
+                      LKR {analytics.performance_yearly?.budget_pbt !== null
+                        ? formatCurrency(analytics.performance_yearly.budget_pbt)
+                        : "\u2014"}
+                    </p>
+                  </div>
+                  {/* Yearly Achievement */}
+                  <div className="space-y-1 border-l border-slate-100 pl-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Achievement
+                    </p>
+                    {(() => {
+                      const ach = analytics.performance_yearly?.budget_pbt
+                        ? calculateAchievement(analytics.performance_yearly.actual_pbt, analytics.performance_yearly.budget_pbt)
+                        : null;
+                      return (
+                        <div className={`flex items-baseline gap-1.5 ${ach !== null && ach >= 100 ? "text-emerald-600" : "text-red-600"}`}>
+                          <span className="text-lg font-bold">
+                            {ach !== null ? `${ach.toFixed(1)}%` : "\u2014"}
+                          </span>
+                          {ach !== null && ach >= 100 ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : ach !== null ? (
+                            <TrendingDown className="h-4 w-4" />
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </>
             ) : (
               <div className="text-center text-sm text-slate-400 py-4">
                 {loading ? "Loading..." : "No performance data available"}

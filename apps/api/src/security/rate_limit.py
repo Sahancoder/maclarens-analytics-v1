@@ -5,8 +5,7 @@ Simple in-memory rate limiter for API endpoints
 For production, consider using Redis-backed rate limiting.
 """
 import time
-from typing import Dict, Tuple, Optional, Callable
-from functools import wraps
+from typing import Dict, Tuple, Optional
 from collections import defaultdict
 
 from fastapi import Request, HTTPException, status, Depends
@@ -136,8 +135,8 @@ def rate_limit(
             ...
     """
     async def check_rate_limit(request: Request):
-        # Skip rate limiting in dev mode if configured
-        if settings.auth_mode.value == "dev" and not settings.debug:
+        # Only skip rate limiting in dev mode with debug enabled
+        if settings.debug and settings.is_dev_mode:
             return
         
         client_id = get_client_identifier(request)

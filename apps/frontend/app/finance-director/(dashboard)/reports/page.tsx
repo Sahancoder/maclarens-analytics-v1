@@ -72,12 +72,15 @@ function fmtNum(v: number | null | undefined): string {
 
 function achievement(actual: number | null | undefined, budget: number | null | undefined): string {
   if (actual == null || budget == null || budget === 0) return "\u2014";
-  return ((actual / budget) * 100).toFixed(1) + "%";
+  const sign = budget >= 0 ? 1 : -1;
+  const pct = (1 + sign * ((actual - budget) / budget)) * 100;
+  return pct.toFixed(1) + "%";
 }
 
 function achvColor(actual: number | null | undefined, budget: number | null | undefined): string {
   if (actual == null || budget == null || budget === 0) return "text-slate-400";
-  const pct = (actual / budget) * 100;
+  const sign = budget >= 0 ? 1 : -1;
+  const pct = (1 + sign * ((actual - budget) / budget)) * 100;
   return pct >= 100 ? "text-emerald-600" : "text-amber-600";
 }
 

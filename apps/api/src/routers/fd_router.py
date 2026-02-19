@@ -289,8 +289,8 @@ async def get_fd_companies(
             name=c.company_name,
             code=c.company_code if hasattr(c, 'company_code') else "",
             cluster_name=cluster_map.get(c.cluster_id),
-            fy_start_month=c.fin_year_start_month if hasattr(c, 'fin_year_start_month') else 1,
-            currency=c.currency if hasattr(c, 'currency') else "LKR",
+            fy_start_month=(c.fin_year_start_month or 1) if hasattr(c, 'fin_year_start_month') else 1,
+            currency=(c.currency or "LKR") if hasattr(c, 'currency') else "LKR",
         )
         for c in companies
     ]
@@ -1778,12 +1778,19 @@ async def get_company_analytics(
         prev_pbt_before = prev_gp + (prev_actual.get("other_income") or 0) - oh_prev + (prev_actual.get("provisions") or 0) + (prev_actual.get("exchange_variance") or 0)
     pbt_before_yoy = (((cur_pbt_before - prev_pbt_before) / abs(prev_pbt_before)) * 100) if prev_pbt_before else None
 
-    # PBT Achievement = (Actual PBT / Budget PBT) * 100
+    # PBT Achievement = Unified Formula:
+    # Budget > 0: (Actual / Budget) * 100
+    # Budget < 0: (2 - Actual / Budget) * 100
+    # i.e. (1 + sign(Budget) * (Actual - Budget) / Budget) * 100
     budget_pbt_before = cur_budget.get("pbt_before_non_ops")
     if budget_pbt_before is None:
         oh_b = sum(cur_budget.get(k, 0) or 0 for k in ["personal_exp", "admin_exp", "selling_exp", "finance_exp", "depreciation"])
         budget_pbt_before = (cur_budget.get("gp") or 0) + (cur_budget.get("other_income") or 0) - oh_b + (cur_budget.get("provisions") or 0) + (cur_budget.get("exchange_variance") or 0)
-    pbt_achievement = (cur_pbt_before / budget_pbt_before * 100) if budget_pbt_before else None
+    if budget_pbt_before and budget_pbt_before != 0:
+        sign = 1 if budget_pbt_before >= 0 else -1
+        pbt_achievement = (1 + sign * ((cur_pbt_before - budget_pbt_before) / budget_pbt_before)) * 100
+    else:
+        pbt_achievement = None
 
     monthly_kpi = MonthlyKPI(
         gp_margin=round(cur_gp_margin, 2) if cur_gp_margin is not None else None,
@@ -1817,7 +1824,11 @@ async def get_company_analytics(
     ytd_pbt_yoy = (((ytd_pbt_before_val - prev_ytd_pbt) / abs(prev_ytd_pbt)) * 100) if prev_ytd_pbt else None
 
     ytd_budget_pbt = ytd_budget.get("pbt_before_non_ops") or 0
-    ytd_pbt_ach = (ytd_pbt_before_val / ytd_budget_pbt * 100) if ytd_budget_pbt else None
+    if ytd_budget_pbt and ytd_budget_pbt != 0:
+        ytd_sign = 1 if ytd_budget_pbt >= 0 else -1
+        ytd_pbt_ach = (1 + ytd_sign * ((ytd_pbt_before_val - ytd_budget_pbt) / ytd_budget_pbt)) * 100
+    else:
+        ytd_pbt_ach = None
 
     yearly_kpi = YearlyKPI(
         ytd_gp_margin=round(ytd_gp_margin_val, 2) if ytd_gp_margin_val is not None else None,

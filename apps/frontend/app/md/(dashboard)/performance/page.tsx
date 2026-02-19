@@ -78,7 +78,14 @@ const formatCurrencyLKR = (val: number, compact = false) => {
   return `LKR ${val.toLocaleString()}`;
 };
 const formatLKR000 = (val: number) => val.toLocaleString();
-const formatPercent = (val: number) => `${val.toFixed(1)}%`;
+const formatPercent = (val: number) => val !== null && val !== undefined ? `${val.toFixed(1)}%` : "—";
+
+// Unified Achievement Formula
+const calculateAchievement = (actual: number, budget: number) => {
+  if (budget === 0 || budget === null || budget === undefined) return 0; 
+  const sign = budget >= 0 ? 1 : -1;
+  return (1 + sign * ((actual - budget) / budget)) * 100;
+};
 
 const getAchievementColor = (achievement: number) => {
   return achievement >= 100 ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50";
@@ -778,8 +785,8 @@ export default function PerformancePage() {
                     <span className="text-slate-600 text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_pbt_budget, true)}</span>
                   </div>
                   <div className="w-20 px-2 py-3 text-right">
-                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(hierarchyState.data.group_achievement_pct)}`}>
-                      {formatPercent(hierarchyState.data.group_achievement_pct)}
+                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(calculateAchievement(hierarchyState.data.group_pbt_actual, hierarchyState.data.group_pbt_budget))}`}>
+                      {formatPercent(calculateAchievement(hierarchyState.data.group_pbt_actual, hierarchyState.data.group_pbt_budget))}
                     </span>
                   </div>
                 </div>
@@ -791,8 +798,8 @@ export default function PerformancePage() {
                     <span className="text-slate-600 text-sm font-mono">{formatCurrencyLKR(hierarchyState.data.group_ytd_pbt_budget, true)}</span>
                   </div>
                   <div className="w-20 px-2 py-3 text-right">
-                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(hierarchyState.data.group_ytd_achievement_pct)}`}>
-                      {formatPercent(hierarchyState.data.group_ytd_achievement_pct)}
+                    <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(calculateAchievement(hierarchyState.data.group_ytd_pbt_actual, hierarchyState.data.group_ytd_pbt_budget))}`}>
+                      {formatPercent(calculateAchievement(hierarchyState.data.group_ytd_pbt_actual, hierarchyState.data.group_ytd_pbt_budget))}
                     </span>
                   </div>
                 </div>
@@ -832,8 +839,8 @@ export default function PerformancePage() {
                           <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.pbt_budget, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                          <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.achievement_pct)}`}>
-                             {formatPercent(cluster.achievement_pct)}
+                          <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(calculateAchievement(cluster.pbt_actual, cluster.pbt_budget))}`}>
+                             {formatPercent(calculateAchievement(cluster.pbt_actual, cluster.pbt_budget))}
                           </span>
                        </div>
                     </div>
@@ -847,8 +854,8 @@ export default function PerformancePage() {
                           <span className="text-slate-500 text-sm font-mono">{formatCurrencyLKR(cluster.ytd_pbt_budget, true)}</span>
                        </div>
                        <div className="w-20 px-2 py-4 text-right">
-                           <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(cluster.ytd_achievement_pct)}`}>
-                             {formatPercent(cluster.ytd_achievement_pct)}
+                           <span className={`text-xs px-2 py-1 rounded font-bold font-mono ${getAchievementColor(calculateAchievement(cluster.ytd_pbt_actual, cluster.ytd_pbt_budget))}`}>
+                             {formatPercent(calculateAchievement(cluster.ytd_pbt_actual, cluster.ytd_pbt_budget))}
                           </span>
                        </div>
                     </div>
@@ -882,8 +889,8 @@ export default function PerformancePage() {
                                  <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.pbt_budget, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                  <span className={`text-xs font-bold font-mono ${company.achievement_pct >= 100 ? "text-emerald-700" : "text-red-700"}`}>
-                                    {formatPercent(company.achievement_pct)}
+                                  <span className={`text-xs font-bold font-mono ${calculateAchievement(company.pbt_actual, company.pbt_budget) >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(calculateAchievement(company.pbt_actual, company.pbt_budget))}
                                   </span>
                               </div>
                            </div>
@@ -897,8 +904,8 @@ export default function PerformancePage() {
                                  <span className="text-slate-400 text-xs font-mono">{formatCurrencyLKR(company.ytd_pbt_budget, true)}</span>
                               </div>
                               <div className="w-20 px-2 py-3 text-right">
-                                 <span className={`text-xs font-bold font-mono ${company.ytd_achievement_pct >= 100 ? "text-emerald-700" : "text-red-700"}`}>
-                                    {formatPercent(company.ytd_achievement_pct)}
+                                 <span className={`text-xs font-bold font-mono ${calculateAchievement(company.ytd_pbt_actual, company.ytd_pbt_budget) >= 100 ? "text-emerald-700" : "text-red-700"}`}>
+                                    {formatPercent(calculateAchievement(company.ytd_pbt_actual, company.ytd_pbt_budget))}
                                  </span>
                               </div>
                            </div>

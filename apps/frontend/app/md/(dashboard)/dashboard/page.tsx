@@ -106,6 +106,14 @@ const formatShort = (num: number | undefined | null) => {
   return num.toFixed(2);
 };
 
+// Unified Achievement Formula
+// (1 + SIGN(Budget) * ((Actual - Budget) / Budget)) * 100
+const calculateAchievement = (actual: number, budget: number) => {
+  if (budget === 0 || budget === null) return 0; // Handle division by zero / no budget
+  const sign = budget >= 0 ? 1 : -1;
+  return (1 + sign * ((actual - budget) / budget)) * 100;
+};
+
 const getRiskColor = (risk: string) => {
   switch (risk) {
     case "critical": return { bg: "bg-red-500", text: "text-red-600", light: "bg-red-50", border: "border-red-200" };
@@ -313,6 +321,7 @@ function CompanyPbtTrendScroller({
 export default function MDDashboard() {
   const [selectedCluster, setSelectedCluster] = useState<Cluster | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
   
   // Period selection
   const [overviewMode, setOverviewMode] = useState<"month" | "ytd">("month");
@@ -377,7 +386,8 @@ export default function MDDashboard() {
         const actual = Number(co.pbt_actual || 0);
         const pbtBudget = Number(co.pbt_budget || 0);
         const companyVariance = actual - pbtBudget;
-        const companyVariancePct = pbtBudget !== 0 ? (companyVariance / pbtBudget) * 100 : 0;
+        const ach = calculateAchievement(actual, pbtBudget);
+        const companyVariancePct = pbtBudget !== 0 ? ach - 100 : 0;
         return {
           id: String(co.id),
           name: co.name,
@@ -385,10 +395,13 @@ export default function MDDashboard() {
           budget: pbtBudget,
           variance: companyVariance,
           variancePercent: companyVariancePct,
-          risk: toRisk(Number(co.achievement_pct || 0)),
+          risk: toRisk(ach),
           trend: companyVariance >= 0 ? "up" : "down",
         } as Company;
       });
+
+      const clusterAch = calculateAchievement(pbt, budget);
+      const clusterVariancePct = budget !== 0 ? clusterAch - 100 : 0;
 
       return {
         id: c.cluster_id,
@@ -398,8 +411,8 @@ export default function MDDashboard() {
         ytdPBT: pbt,
         contribution: Number(c.pbt_contribution_pct || 0),
         variance,
-        variancePercent,
-        risk: riskByCluster.get(c.cluster_id) || toRisk(Number(c.pbt_achievement_pct || 0)),
+        variancePercent: clusterVariancePct,
+        risk: riskByCluster.get(c.cluster_id) || toRisk(clusterAch),
         trend: variance >= 0 ? "up" : "down",
         forecast: budget,
         fiscalCycle: "Jan-Dec",
@@ -412,7 +425,12 @@ export default function MDDashboard() {
     if (!contributionState.data?.clusters?.length) {
       return [];
     }
-    return contributionState.data.clusters.map((c) => ({
+    // Sort descending by contribution (Strong to Left, Weak to Right)
+    const sortedDetails = [...contributionState.data.clusters].sort((a, b) => 
+      (b.pbt_contribution_pct || 0) - (a.pbt_contribution_pct || 0)
+    );
+
+    return sortedDetails.map((c) => ({
       name: c.cluster_name,
       value: Number(c.pbt_contribution_pct || 0),
       pbt: Number(c.pbt || 0),
@@ -424,32 +442,59 @@ export default function MDDashboard() {
 
   const groupData = useMemo(() => {
     const overview = overviewState.data;
+    const contribution = contributionState.data;
+
     if (!overview) {
       return emptyGroupData;
     }
+
+    // Default from overview
+    let revenue = Number(overview.revenue.actual || 0);
+    let gp = Number(overview.gp.actual || 0);
+    let pbt = Number(overview.pbt.actual || 0);
+    // Use overview budget by default, unless using clusters
+    let budgetPbt = Number(overview.pbt.budget || 0);
+
+    // Override with Cluster Sums if available (User Requirement: "cluster okkogema... enna one")
+    if (contribution && contribution.clusters.length > 0) {
+       revenue = contribution.total_revenue; // Sum of clusters
+       gp = contribution.total_gp;
+       pbt = contribution.total_pbt; // Sum of clusters "PBT" (Used as PBT Before per requirement)
+       
+       // Calculate aggregated budget from clusters to be consistent
+       budgetPbt = contribution.clusters.reduce((sum, c) => sum + (c.pbt_budget || 0), 0);
+       
+       // Note: contribution response doesn't have revenue/gp budget sums easily available 
+       // without iterating or trusting overview for budget. 
+       // Assuming overview budget is correct aggregate, but actuals might vary due to partial data?
+       // Let's rely on overview for budgets if distinct from actuals agg.
+    }
+
+    const gpMargin = revenue !== 0 ? (gp / revenue) * 100 : 0;
     const completion = overview.companies_total
       ? (overview.companies_reporting / overview.companies_total) * 100
       : 0;
+
     return {
-      totalPBT: Number(overview.pbt.actual || 0),
-      budget: Number(overview.pbt.budget || 0),
-      ytdPBT: Number(overview.pbt.actual || 0),
+      totalPBT: pbt,
+      budget: budgetPbt,
+      ytdPBT: pbt, // In monthly mode, this is month. In YTD mode, contribution returns YTD sums.
       priorYearPBT: Number((overview.pbt as any).prior_year ?? overview.pbt.budget ?? 0),
       healthScore: Number(completion.toFixed(2)),
       cashPositive: overview.companies_reporting,
       cashNegative: Math.max(overview.companies_total - overview.companies_reporting, 0),
       totalCompanies: overview.companies_total,
-      gp: Number(overview.gp.actual || 0),
-      gpMargin: Number(overview.gp_margin.actual || 0),
+      gp: gp,
+      gpMargin: Number(gpMargin.toFixed(2)), // Ensure 2 decimal places
       priorYearGp: Number((overview.gp as any).prior_year ?? overview.gp.budget ?? 0),
       priorYearGpMargin: Number((overview.gp_margin as any).prior_year ?? overview.gp_margin.budget ?? 0),
-      pbtAchievement: Number(overview.pbt_achievement.actual || 0),
-      revenue: Number(overview.revenue.actual || 0),
+      pbtAchievement: calculateAchievement(pbt, budgetPbt), // Recalculate achievement based on sums
+      revenue: revenue,
       revenuePriorYear: Number((overview.revenue as any).prior_year ?? overview.revenue.budget ?? 0),
       overhead: Number(overview.total_overhead.actual || 0),
       overheadPriorYear: Number((overview.total_overhead as any).prior_year ?? overview.total_overhead.budget ?? 0),
     };
-  }, [overviewState.data, overviewMode]);
+  }, [overviewState.data, overviewMode, contributionState.data]);
 
   // Currency State
   const [currency, setCurrency] = useState<"LKR" | "USD">("LKR");
@@ -516,6 +561,12 @@ export default function MDDashboard() {
 
   const handleCompanyClick = (company: Company) => {
     setSelectedCompany(company);
+    setShowCompanyModal(true);
+  };
+
+  const closeCompanyModal = () => {
+    setShowCompanyModal(false);
+    setSelectedCompany(null);
   };
 
   const closePanel = () => {
@@ -533,28 +584,34 @@ export default function MDDashboard() {
   // Compute Top & Bottom 5 Performers by Achievement %
   const { topPerformers, bottomPerformers } = useMemo(() => {
     if (performersState.data) {
-      const top = performersState.data.top_performers.map((p) => ({
-        id: p.company_id,
-        name: p.company_name,
-        pbt: p.pbt_actual,
-        budget: p.pbt_budget,
-        variance: p.variance,
-        variancePercent: p.pbt_budget !== 0 ? (p.variance / p.pbt_budget) * 100 : 0,
-        risk: toRisk(p.achievement_pct),
-        trend: p.variance >= 0 ? "up" : "down",
-        achievement: p.achievement_pct,
-      }));
-      const bottom = performersState.data.bottom_performers.map((p) => ({
-        id: p.company_id,
-        name: p.company_name,
-        pbt: p.pbt_actual,
-        budget: p.pbt_budget,
-        variance: p.variance,
-        variancePercent: p.pbt_budget !== 0 ? (p.variance / p.pbt_budget) * 100 : 0,
-        risk: toRisk(p.achievement_pct),
-        trend: p.variance >= 0 ? "up" : "down",
-        achievement: p.achievement_pct,
-      }));
+      const top = performersState.data.top_performers.map((p) => {
+        const ach = calculateAchievement(p.pbt_actual, p.pbt_budget);
+        return {
+          id: p.company_id,
+          name: p.company_name,
+          pbt: p.pbt_actual,
+          budget: p.pbt_budget,
+          variance: p.variance,
+          variancePercent: p.pbt_budget !== 0 ? ach - 100 : 0,
+          risk: toRisk(ach),
+          trend: p.variance >= 0 ? "up" : "down",
+          achievement: ach,
+        };
+      });
+      const bottom = performersState.data.bottom_performers.map((p) => {
+        const ach = calculateAchievement(p.pbt_actual, p.pbt_budget);
+        return {
+          id: p.company_id,
+          name: p.company_name,
+          pbt: p.pbt_actual,
+          budget: p.pbt_budget,
+          variance: p.variance,
+          variancePercent: p.pbt_budget !== 0 ? ach - 100 : 0,
+          risk: toRisk(ach),
+          trend: p.variance >= 0 ? "up" : "down",
+          achievement: ach,
+        };
+      });
       return { topPerformers: top, bottomPerformers: bottom };
     }
 
@@ -563,9 +620,8 @@ export default function MDDashboard() {
     
     // 2. Calculate achievement % for each and add to object
     const companiesWithAchievement = allCompanies.map(company => {
-      // Avoid division by zero
-      const budget = company.budget === 0 ? 1 : company.budget;
-      const achievement = (company.pbt / budget) * 100;
+      // Use Unified Formula
+      const achievement = calculateAchievement(company.pbt, company.budget);
       return { ...company, achievement };
     });
 
@@ -573,9 +629,12 @@ export default function MDDashboard() {
     const sorted = [...companiesWithAchievement].sort((a, b) => b.achievement - a.achievement);
 
     // 4. Slice top 5 and bottom 5
+    // Bottom 5 should be sorted ascending (lowest achievement first)
+    const bottomSorted = [...companiesWithAchievement].sort((a, b) => a.achievement - b.achievement);
+
     return {
       topPerformers: sorted.slice(0, 5),
-      bottomPerformers: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement), // Sort bottom list ascending (lowest first)
+      bottomPerformers: bottomSorted.slice(0, 5), 
     };
   }, [clusters, performersState.data]);
 
@@ -590,9 +649,9 @@ export default function MDDashboard() {
         pbt: co.ytd_pbt_actual,
         budget: co.ytd_pbt_budget,
         fiscalCycle: co.fiscal_year_start_month === 4 ? "Apr-Mar" : "Jan-Dec",
-        achievement: co.ytd_budget_pbt !== 0 
-          ? (co.ytd_pbt_actual / Math.abs(co.ytd_pbt_budget)) * 100 
-          : co.ytd_achievement_pct
+        achievement: co.ytd_pbt_budget !== 0 
+          ? calculateAchievement(co.ytd_pbt_actual, co.ytd_pbt_budget)
+          : (co.ytd_achievement_pct || 0)
       })));
       
       const janDec = allCompanies.filter(c => c.fiscalCycle === "Jan-Dec");
@@ -600,9 +659,10 @@ export default function MDDashboard() {
 
       const getRanked = (list: typeof allCompanies) => {
         const sorted = [...list].sort((a, b) => b.achievement - a.achievement);
+        const bottomSorted = [...list].sort((a, b) => a.achievement - b.achievement);
         return {
           top: sorted.slice(0, 5),
-          bottom: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement)
+          bottom: bottomSorted.slice(0, 5)
         };
       };
 
@@ -613,7 +673,7 @@ export default function MDDashboard() {
     const allCompanies = clusters.flatMap(c => c.companies.map(co => ({
         ...co, 
         fiscalCycle: c.fiscalCycle || "Jan-Dec",
-        achievement: (co.pbt / (co.budget === 0 ? 1 : co.budget)) * 100
+        achievement: calculateAchievement(co.pbt, co.budget)
     })));
     
     const janDec = allCompanies.filter(c => c.fiscalCycle === "Jan-Dec");
@@ -621,9 +681,10 @@ export default function MDDashboard() {
 
     const getRanked = (list: typeof allCompanies) => {
         const sorted = [...list].sort((a, b) => b.achievement - a.achievement);
+        const bottomSorted = [...list].sort((a, b) => a.achievement - b.achievement);
         return {
             top: sorted.slice(0, 5),
-            bottom: sorted.slice(-5).sort((a, b) => a.achievement - b.achievement)
+            bottom: bottomSorted.slice(0, 5)
         };
     };
 
@@ -765,11 +826,15 @@ export default function MDDashboard() {
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.revenue)}</p>
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
-              <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +{((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(2)}%
-              </span>
-              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+              {groupData.revenuePriorYear ? (
+                <span className={`flex items-center text-[10px] sm:text-xs font-medium ${groupData.revenue >= groupData.revenuePriorYear ? "text-emerald-600" : "text-red-600"}`}>
+                  {groupData.revenue >= groupData.revenuePriorYear ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+                  {Math.abs((groupData.revenue - groupData.revenuePriorYear) / groupData.revenuePriorYear * 100).toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-[10px] sm:text-xs text-slate-400">No prior year</span>
+              )}
+              {groupData.revenuePriorYear && <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>}
             </div>
           </div>
 
@@ -801,7 +866,7 @@ export default function MDDashboard() {
               <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase truncate">GP Margin</span>
               <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
-            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin}%</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a]">{groupData.gpMargin.toFixed(2)}%</p>
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
               <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-600">
                 <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -819,11 +884,15 @@ export default function MDDashboard() {
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a] truncate">{formatFinancial(groupData.overhead)}</p>
             <div className="flex items-center gap-1 sm:gap-2 mt-2 flex-wrap">
-              <span className="flex items-center text-[10px] sm:text-xs font-medium text-red-600">
-                <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                +{((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(2)}%
-              </span>
-              <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>
+              {groupData.overheadPriorYear ? (
+                <span className={`flex items-center text-[10px] sm:text-xs font-medium ${groupData.overhead <= groupData.overheadPriorYear ? "text-emerald-600" : "text-red-600"}`}>
+                  {groupData.overhead > groupData.overheadPriorYear ? <ArrowUpRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDownRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+                  {Math.abs((groupData.overhead - groupData.overheadPriorYear) / groupData.overheadPriorYear * 100).toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-[10px] sm:text-xs text-slate-400">No prior year</span>
+              )}
+              {groupData.overheadPriorYear && <span className="text-[10px] sm:text-xs text-slate-400">vs Prior Year</span>}
             </div>
           </div>
 
@@ -856,7 +925,7 @@ export default function MDDashboard() {
               <Target className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400 flex-shrink-0" />
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#0b1f3a]">
-              {groupData.pbtAchievement}%
+              {groupData.pbtAchievement.toFixed(1)}%
             </p>
             <div className="w-full h-1 sm:h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
               <div 
@@ -1171,8 +1240,8 @@ export default function MDDashboard() {
       </div>
 
       {/* ============ DRILL-DOWN PANEL (Level 3 - Companies) ============ */}
-      {selectedCluster && (
-        <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 z-50 overflow-y-auto">
+       {selectedCluster && (
+        <div className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-white shadow-2xl border-l border-slate-200 z-50 overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold text-slate-900">{selectedCluster.name}</h3>
@@ -1213,12 +1282,9 @@ export default function MDDashboard() {
             </div>
           </div>
 
-          {/* Company PBT Trend Chart (Visible when Company Selected) */}
-          {selectedCompany && (
-            <CompanyPbtTrendScroller
-              selectedCompany={{ id: selectedCompany.id, name: selectedCompany.name, pbt: selectedCompany.pbt, budget: selectedCompany.budget }}
-            />
-          )}
+          {/* Company PBT Trend Chart (Visible when Company Selected - now in Modal) */}
+          {/* We keep the logic here but don't render it in the sidebar anymore because of the modal requirement */}
+          {/* The modal code will be added at the end of the component */}
           {/* Placeholder for chart - kept for structure */}
           {false && selectedCompany && (
             <div className="p-5 border-b border-slate-100 bg-slate-50/50">
@@ -1290,6 +1356,7 @@ export default function MDDashboard() {
 
           <div className="p-5">
             <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {selectedCluster.companies.map(company => {
                 const isSelected = selectedCompany?.id === company.id;
                 const colors = getRiskColor(company.risk);
@@ -1297,43 +1364,129 @@ export default function MDDashboard() {
                   <div
                     key={company.id}
                     onClick={() => handleCompanyClick(company)}
-                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                    className={`p-4 rounded-lg border cursor-pointer transition-all flex flex-col justify-between h-full ${
                       isSelected ? "border-[#0b1f3a] ring-2 ring-[#0b1f3a]/10 bg-blue-50" : `${colors.border} hover:shadow-md`
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-slate-800">{company.name}</span>
-                      {company.trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-500" />}
-                      {company.trend === "down" && <TrendingDown className="h-4 w-4 text-red-500" />}
+                      <span className="font-medium text-slate-800 text-sm truncate" title={company.name}>{company.name}</span>
+                      {company.trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-500 flex-shrink-0" />}
+                      {company.trend === "down" && <TrendingDown className="h-4 w-4 text-red-500 flex-shrink-0" />}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <p className="text-slate-500">PBT</p>
-                        <p className={`font-semibold ${company.pbt >= 0 ? "text-slate-800" : "text-red-600"}`}>
+                    <div className="grid grid-cols-1 gap-1 text-xs mt-auto">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">PBT</span>
+                        <span className={`font-semibold ${company.pbt >= 0 ? "text-slate-800" : "text-red-600"}`}>
                           {formatNumber(company.pbt)}
-                        </p>
+                        </span>
                       </div>
-                      <div>
-                        <p className="text-slate-500">Variance</p>
-                        <p className={`font-semibold ${company.variance >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Var</span>
+                        <span className={`font-semibold ${company.variance >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                           {company.variancePercent}%
-                        </p>
+                        </span>
                       </div>
                     </div>
                     {company.risk !== "low" && (
                       <div className="mt-2 pt-2 border-t border-slate-100">
-                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium inline-block w-full text-center ${
                           company.risk === "critical" ? "bg-red-100 text-red-700" :
                           company.risk === "high" ? "bg-amber-100 text-amber-700" :
                           "bg-yellow-100 text-yellow-700"
                         }`}>
-                          {company.risk} risk
+                          {company.risk.toUpperCase()}
                         </span>
                       </div>
                     )}
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Company Detail Modal */}
+      {showCompanyModal && selectedCompany && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">{selectedCompany.name}</h3>
+                <p className="text-sm text-slate-500">Detailed Performance View</p>
+              </div>
+              <button 
+                onClick={closeCompanyModal}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="h-6 w-6 text-slate-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* Key Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Month PBT</p>
+                  <p className={`text-base font-bold ${selectedCompany.pbt >= 0 ? "text-slate-900" : "text-red-600"}`}>
+                    {formatFinancial(selectedCompany.pbt)}
+                  </p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Budget</p>
+                  <p className="text-base font-bold text-slate-700">
+                    {formatFinancial(selectedCompany.budget)}
+                  </p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Variance</p>
+                  <div className="flex items-center gap-1">
+                     <p className={`text-base font-bold ${selectedCompany.variance >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {selectedCompany.variancePercent}%
+                    </p>
+                    {selectedCompany.variance >= 0 ? 
+                      <ArrowUpRight className="h-4 w-4 text-emerald-500" /> : 
+                      <ArrowDownRight className="h-4 w-4 text-red-500" />
+                    }
+                  </div>
+                </div>
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Risk Status</p>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${
+                    selectedCompany.risk === 'critical' ? 'bg-red-50 text-red-700 border-red-200' :
+                    selectedCompany.risk === 'high' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    selectedCompany.risk === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                    'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {selectedCompany.risk.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Trend Chart */}
+              <div className="mb-6">
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                   <CompanyPbtTrendScroller
+                    selectedCompany={{ 
+                      id: selectedCompany.id, 
+                      name: selectedCompany.name, 
+                      pbt: selectedCompany.pbt, 
+                      budget: selectedCompany.budget 
+                    }}
+                  />
+                </div>
+              </div>
+
+               {/* Action Footer */}
+               <div className="flex justify-end pt-4 border-t border-slate-100">
+                <Link 
+                  href={`/md/company/${selectedCompany.id}`}
+                  className="px-4 py-2 bg-[#0b1f3a] text-white text-sm font-medium rounded-lg hover:bg-[#1e3a5f] transition-colors"
+                >
+                  View Full Report
+                </Link>
+               </div>
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; role: string; name?: string } | null>(null);
 
   useEffect(() => {
     const auth =
@@ -44,6 +44,10 @@ export function Header() {
   };
 
   const getDisplayName = (email: string) => {
+    // If we have a name stored, use it
+    if (user?.name) return user.name;
+    
+    // Fallback to email parsing
     const name = email.split("@")[0];
     return name
       .split(/[._-]/)

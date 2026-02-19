@@ -195,12 +195,26 @@ class AuthService:
         client_id = settings.azure_client_id
 
         if not tenant_id or not client_id:
-            # Dev mode fallback: accept unverified claims
             if cls._is_dev_mode():
+                logger.warning(
+                    "Entra ID verification skipped — AZURE_TENANT_ID/AZURE_CLIENT_ID not configured. "
+                    "This is only acceptable in dev mode."
+                )
                 try:
-                    return jwt.get_unverified_claims(token)
+                    claims = jwt.get_unverified_claims(token)
+                    # Require at least an email-like claim to prevent garbage tokens
+                    email = (
+                        claims.get("preferred_username")
+                        or claims.get("email")
+                        or claims.get("upn")
+                    )
+                    if not email:
+                        logger.warning("Dev mode Entra fallback: token has no email claim")
+                        return None
+                    return claims
                 except JWTError:
                     return None
+            logger.error("Entra ID verification failed — AZURE_TENANT_ID/AZURE_CLIENT_ID not configured")
             return None
 
         jwks = await cls._fetch_jwks(str(tenant_id))
