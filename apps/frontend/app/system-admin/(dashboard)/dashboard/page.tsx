@@ -89,7 +89,7 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="text-lg font-semibold text-slate-900 mb-3">System Health</h2>
-            <div className="space-y-2">
+            <div className="space-y-2 h-80 overflow-y-auto pr-2">
               {healthRows.map((row) => {
                 const isOk = row.status === "healthy" || row.status === "operational";
                 const isNotConfigured = row.status === "not_configured" || row.status === "not_available";
@@ -114,7 +114,7 @@ export default function AdminDashboardPage() {
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="text-lg font-semibold text-slate-900 mb-3">Recent Activity</h2>
-            <div className="space-y-3">
+            <div className="space-y-3 h-80 overflow-y-auto pr-2">
               {!loading && activities.length === 0 && <p className="text-sm text-slate-500">No recent activity.</p>}
               {activities.map((activity) => (
                 <div key={activity.id} className="border-b border-slate-100 last:border-0 pb-2">
@@ -130,7 +130,7 @@ export default function AdminDashboardPage() {
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="text-lg font-semibold text-slate-900 mb-3">Pending Reports</h2>
-            <div className="space-y-3">
+            <div className="space-y-3 h-80 overflow-y-auto pr-2">
               {!loading && pendingReports.length === 0 && <p className="text-sm text-slate-500">No pending reports.</p>}
               {pendingReports.map((report) => (
                 <div key={`${report.id || report.company_id}-${report.period_id || report.month}`} className="border-b border-slate-100 last:border-0 pb-2">

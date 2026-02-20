@@ -505,10 +505,11 @@ export default function MDDashboard() {
   
   const formatFinancial = (val: number) => { // Replaces formatCurrency
     const converted = convertValue(val);
+    const millions = Math.abs(converted) / 1000000;
     if (currency === "USD") {
-      return `$${(Math.abs(converted) / 1000).toFixed(2)}`;
+      return `$${millions.toFixed(2)} M`;
     }
-    return `LKR ${(Math.abs(converted) / 1000).toFixed(2)}`;
+    return `LKR ${millions.toFixed(2)} M`;
   };
 
   const formatRawNumber = (val: number) => { // Replaces formatNumber for lists

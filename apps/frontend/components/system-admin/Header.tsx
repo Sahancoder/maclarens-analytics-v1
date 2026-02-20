@@ -12,7 +12,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; role: string; first_name?: string; last_name?: string } | null>(null);
 
   useEffect(() => {
     const auth =
@@ -38,13 +38,19 @@ export function Header() {
     router.push("/");
   };
 
-  const getInitials = (email: string) => {
-    const name = email.split("@")[0];
+  const getInitials = (user: { email: string; first_name?: string; last_name?: string }) => {
+    if (user.first_name && user.last_name) {
+      return `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase();
+    }
+    const name = user.email.split("@")[0];
     return name.substring(0, 2).toUpperCase();
   };
 
-  const getDisplayName = (email: string) => {
-    const name = email.split("@")[0];
+  const getDisplayName = (user: { email: string; first_name?: string; last_name?: string }) => {
+    if (user.first_name && user.last_name) {
+      return `${user.first_name} ${user.last_name}`;
+    }
+    const name = user.email.split("@")[0];
     return name
       .split(/[._-]/)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -76,12 +82,12 @@ export function Header() {
           {user && (
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end">
-                <span className="text-sm font-semibold">{getDisplayName(user.email)}</span>
+                <span className="text-sm font-semibold">{getDisplayName(user)}</span>
                 <span className="text-xs text-white/70">System Administrator</span>
               </div>
               <div className="relative">
                 <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-slate-100 flex items-center justify-center text-[#0b1f3a] font-bold text-sm">
-                  {getInitials(user.email)}
+                  {getInitials(user)}
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-emerald-500 rounded-full border-2 border-[#0b1f3a]" />
               </div>
