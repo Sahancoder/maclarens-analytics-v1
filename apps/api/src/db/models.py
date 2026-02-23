@@ -663,7 +663,27 @@ class AuditLog(Base):
     entity_type = Column(Text, nullable=True)
     entity_id = Column(Text, nullable=True)
     details = Column(Text, nullable=True)
+    ip_address = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class ReportExportHistory(Base):
+    __tablename__ = "report_export_history"
+    __table_args__ = {"schema": "analytics", "extend_existing": True}
+
+    id = Column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    exported_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    exported_by = Column(Text, nullable=False)
+    export_format = Column(Text, nullable=False)
+    file_name = Column(Text, nullable=False)
+
+    cluster_id = Column(Text, nullable=False)
+    cluster_name = Column(Text, nullable=False)
+    company_id = Column(Text, nullable=False)
+    company_name = Column(Text, nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    period_label = Column(Text, nullable=False)
 
 
 # ============================================================
@@ -675,4 +695,3 @@ User = UserMaster
 Company = CompanyMaster
 Cluster = ClusterMaster
 CompanyUserRole = UserCompanyRoleMap
-

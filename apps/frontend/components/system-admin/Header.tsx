@@ -8,18 +8,32 @@ import { Menu, X, LogOut } from "lucide-react";
 
 import { navItems } from "./Sidebar";
 
+type HeaderUser = {
+  email?: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  user_email?: string;
+  user_name?: string;
+};
+
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string; role: string; first_name?: string; last_name?: string } | null>(null);
+  const [user, setUser] = useState<HeaderUser | null>(null);
 
   useEffect(() => {
     const auth =
       localStorage.getItem("mclarens_user") ||
       localStorage.getItem("admin-auth");
     if (auth) {
-      setUser(JSON.parse(auth));
+      try {
+        setUser(JSON.parse(auth));
+      } catch {
+        setUser(null);
+      }
     }
   }, []);
 
@@ -38,23 +52,38 @@ export function Header() {
     router.push("/");
   };
 
-  const getInitials = (user: { email: string; first_name?: string; last_name?: string }) => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase();
-    }
-    const name = user.email.split("@")[0];
-    return name.substring(0, 2).toUpperCase();
-  };
+  const getEmail = (u: HeaderUser) => u.email || u.user_email || "";
 
-  const getDisplayName = (user: { email: string; first_name?: string; last_name?: string }) => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`;
-    }
-    const name = user.email.split("@")[0];
+  const getDisplayName = (u: HeaderUser) => {
+    const first = (u.first_name || "").trim();
+    const last = (u.last_name || "").trim();
+    const fullName = `${first} ${last}`.trim();
+    if (fullName) return fullName;
+    if (u.name && u.name.trim()) return u.name.trim();
+    if (u.user_name && u.user_name.trim()) return u.user_name.trim();
+
+    const email = getEmail(u);
+    if (!email) return "User";
+
+    const name = email.split("@")[0];
     return name
       .split(/[._-]/)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
+  };
+
+  const getInitials = (u: HeaderUser) => {
+    const displayName = getDisplayName(u).trim();
+    const parts = displayName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
+    }
+    if (parts.length === 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    const email = getEmail(u);
+    return email ? email.substring(0, 2).toUpperCase() : "US";
   };
 
   return (

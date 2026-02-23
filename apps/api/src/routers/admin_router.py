@@ -22,6 +22,7 @@ from src.db.models import (
     UserCompanyRoleMap,
 )
 from src.security.middleware import get_db, require_admin
+from src.security.audit_context import get_client_ip
 from src.services.budget_import_service import BudgetImportService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -52,6 +53,7 @@ class ActivityItem(BaseModel):
     entity_type: Optional[str]
     entity_id: Optional[str]
     details: Optional[str]
+    ip_address: Optional[str] = "-"
 
 
 class ActivityListResponse(BaseModel):
@@ -250,8 +252,13 @@ async def _audit(
     entity_type: Optional[str],
     entity_id: Optional[str],
     details: Optional[str],
+    ip_address: Optional[str] = None,  # Can be passed explicitly or pulled from context
 ) -> None:
     try:
+        # If ip_address not provided, try to get it from audit context
+        if ip_address is None:
+            ip_address = get_client_ip()
+            
         db.add(
             AuditLog(
                 user_id=actor_user_id,
@@ -259,6 +266,7 @@ async def _audit(
                 entity_type=entity_type,
                 entity_id=entity_id,
                 details=details,
+                ip_address=ip_address,
                 created_at=_utcnow(),
             )
         )
@@ -408,6 +416,7 @@ async def get_recent_activity(
                 entity_type=log.entity_type,
                 entity_id=log.entity_id,
                 details=log.details,
+                ip_address=log.ip_address or "-",
             )
         )
 

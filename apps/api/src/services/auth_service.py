@@ -191,8 +191,8 @@ class AuthService:
         except JWTError:
             return None
 
-        tenant_id = settings.azure_tenant_id
-        client_id = settings.azure_client_id
+        tenant_id = settings.azure_ad_tenant_id
+        client_id = settings.azure_ad_client_id
 
         if not tenant_id or not client_id:
             if cls._is_dev_mode():

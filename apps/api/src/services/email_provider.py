@@ -175,9 +175,9 @@ class GraphProvider(BaseEmailProvider):
     """Microsoft Graph API provider for Mail.Send"""
     
     def __init__(self):
-        self.tenant_id = settings.azure_tenant_id
-        self.client_id = settings.azure_client_id
-        self.client_secret = settings.azure_client_secret
+        self.tenant_id = settings.azure_ad_tenant_id
+        self.client_id = settings.azure_ad_client_id
+        self.client_secret = settings.azure_ad_client_secret
         self.sender_email = settings.graph_sender_email or settings.sender_email
         self._token = None
     
@@ -334,6 +334,7 @@ def get_email_provider() -> BaseEmailProvider:
     provider_map = {
         EmailProvider.DISABLED: DisabledEmailProvider,
         EmailProvider.MAILHOG: MailHogProvider,
+        EmailProvider.MAILPIT: MailHogProvider,
         EmailProvider.RESEND: ResendProvider,
         EmailProvider.GRAPH: GraphProvider,
         EmailProvider.AZURE_EMAIL: AzureEmailProvider,

@@ -43,9 +43,9 @@ class Settings(BaseSettings):
     jwt_expiration_hours: int = 24
     
     # Microsoft Entra ID (Azure AD) - used when auth_mode=entra
-    azure_tenant_id: Optional[str] = None
-    azure_client_id: Optional[str] = None
-    azure_client_secret: Optional[str] = None
+    azure_ad_tenant_id: Optional[str] = None
+    azure_ad_client_id: Optional[str] = None
+    azure_ad_client_secret: Optional[str] = None
     
     # ============ EMAIL SETTINGS ============
     # Master switch
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     # Common email settings
     sender_email: str = "no-reply@maclarens.local"
     
-    # SMTP Settings (for MailHog)
+    # SMTP Settings (for MailHog/Mailpit)
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     smtp_use_tls: bool = False
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     
     @property
     def use_mailhog(self) -> bool:
-        return self.email_provider == EmailProvider.MAILHOG
+        return self.email_provider in (EmailProvider.MAILHOG, EmailProvider.MAILPIT)
     
     @property
     def use_graph(self) -> bool:
@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     @property
     def use_resend(self) -> bool:
         return self.email_provider == EmailProvider.RESEND
+
+    @property
+    def use_azure_email(self) -> bool:
+        return self.email_provider == EmailProvider.AZURE_EMAIL
     
     # Known insecure default secrets that must never be used in production
     _INSECURE_SECRETS: ClassVar[List[str]] = [

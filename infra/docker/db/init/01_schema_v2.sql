@@ -188,8 +188,27 @@ CREATE TABLE IF NOT EXISTS analytics.audit_logs (
   entity_type text,
   entity_id   text,
   details     text,
+  ip_address  text,
   created_at  timestamptz DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS analytics.report_export_history (
+  id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  exported_at   timestamptz NOT NULL DEFAULT now(),
+  exported_by   text NOT NULL,
+  export_format text NOT NULL,
+  file_name     text NOT NULL,
+  cluster_id    text NOT NULL,
+  cluster_name  text NOT NULL,
+  company_id    text NOT NULL,
+  company_name  text NOT NULL,
+  year          int NOT NULL,
+  month         int NOT NULL CHECK (month BETWEEN 1 AND 12),
+  period_label  text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reh_exported_at ON analytics.report_export_history(exported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reh_exported_by ON analytics.report_export_history(exported_by);
+CREATE INDEX IF NOT EXISTS idx_reh_company_period ON analytics.report_export_history(company_id, year, month);
 
 -- Helper: period code from year+month (zero-padded)
 CREATE OR REPLACE FUNCTION analytics.make_period_code(p_year int, p_month int)

@@ -9,15 +9,15 @@
  * Uses Next.js rewrites to proxy /api/* to backend.
  */
 
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 // Configuration
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 
 const API_BASE = '/api';
 
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 // Common Types
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 
 export interface ApiResponse<T> {
   data: T | null;
@@ -32,15 +32,17 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 // Auth Types
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'ceo' | 'company_director' | 'data_officer';
+  role: string | 'admin' | 'ceo' | 'company_director' | 'data_officer' | 'SYSTEM_ADMIN' | 'MD' | 'FINANCE_DIRECTOR' | 'FINANCE_OFFICER';
+  role_id?: number;
+  portal?: string;
   company_id?: string;
   cluster_id?: string;
   is_active: boolean;
@@ -57,9 +59,9 @@ export interface LoginResponse {
   user: User;
 }
 
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 // Financial Types
-// 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+// --------------------------------------------
 
 export interface FinancialMetric {
   name: string;
@@ -250,6 +252,85 @@ export interface AdminAssignment {
 export interface AdminAssignmentList {
   assignments: AdminAssignment[];
   total: number;
+}
+
+export interface ReportYearsResponse {
+  company_id: string;
+  years: number[];
+}
+
+export interface ReportMonthOption {
+  month: number;
+  month_name: string;
+}
+
+export interface ReportMonthsResponse {
+  company_id: string;
+  year: number;
+  months: ReportMonthOption[];
+}
+
+export interface ReportPreviewMatrix {
+  month_label: string;
+  ytd_label: string;
+}
+
+export interface ReportPreviewRow {
+  metric_key: string;
+  metric_label: string;
+  month_actual: number;
+  month_budget: number;
+  month_achievement: number;
+  ytd_actual: number;
+  ytd_budget: number;
+  ytd_achievement: number;
+  is_percentage: boolean;
+}
+
+export interface ReportPreviewData {
+  cluster_id: string;
+  cluster_name: string;
+  company_id: string;
+  company_name: string;
+  year: number;
+  month: number;
+  period_label: string;
+  fin_year_start_month: number;
+  matrix: ReportPreviewMatrix;
+  rows: ReportPreviewRow[];
+  month_actual_values: Record<string, number>;
+  month_budget_values: Record<string, number>;
+  ytd_actual_values: Record<string, number>;
+  ytd_budget_values: Record<string, number>;
+}
+
+export interface ReportExportDownload {
+  file_name: string;
+  blob: Blob;
+}
+
+export interface ReportExportHistoryItem {
+  id: string;
+  exported_at: string;
+  exported_by: string;
+  exported_by_email: string | null;
+  exported_by_name: string | null;
+  export_format: string;
+  file_name: string;
+  cluster_id: string;
+  cluster_name: string;
+  company_id: string;
+  company_name: string;
+  year: number;
+  month: number;
+  period_label: string;
+}
+
+export interface ReportExportHistoryResponse {
+  items: ReportExportHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 
@@ -661,6 +742,54 @@ export interface CompanyAnalyticsData {
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('mclarens_token');
+}
+
+function getFileNameFromDisposition(disposition: string | null, fallback: string): string {
+  if (!disposition) return fallback;
+  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i);
+  if (!match || !match[1]) return fallback;
+  return decodeURIComponent(match[1].replace(/\"/g, '').trim());
+}
+
+async function apiFetchBlob(
+  path: string,
+  fallbackFileName: string
+): Promise<ApiResponse<ReportExportDownload>> {
+  try {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}${path}`, { method: 'GET', headers });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      return {
+        data: null,
+        error: errorBody || `Error ${response.status}: ${response.statusText}`,
+        status: response.status,
+      };
+    }
+
+    const blob = await response.blob();
+    const fileName = getFileNameFromDisposition(
+      response.headers.get('content-disposition'),
+      fallbackFileName
+    );
+
+    return {
+      data: { file_name: fileName, blob },
+      error: null,
+      status: response.status,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Network error',
+      status: 0,
+    };
+  }
 }
 
 async function apiFetch<T>(
@@ -1102,6 +1231,73 @@ export const AdminAPI = {
     has_data: boolean;
   }>> {
     return apiFetch(`/admin/actual/entry/${companyId}/${year}/${month}`);
+  },
+
+  async getReportYears(companyId: string): Promise<ApiResponse<ReportYearsResponse>> {
+    return apiFetch(`/admin/reports/years?company_id=${encodeURIComponent(companyId)}`);
+  },
+
+  async getReportMonths(companyId: string, year: number): Promise<ApiResponse<ReportMonthsResponse>> {
+    const params = new URLSearchParams({
+      company_id: companyId,
+      year: String(year),
+    });
+    return apiFetch(`/admin/reports/months?${params}`);
+  },
+
+  async getReportPreview(filters: {
+    cluster_id: string;
+    company_id: string;
+    year: number;
+    month: number;
+  }): Promise<ApiResponse<ReportPreviewData>> {
+    const params = new URLSearchParams({
+      cluster_id: filters.cluster_id,
+      company_id: filters.company_id,
+      year: String(filters.year),
+      month: String(filters.month),
+    });
+    return apiFetch<ReportPreviewData>(`/admin/reports/preview?${params}`);
+  },
+
+  async exportReportPdf(filters: {
+    cluster_id: string;
+    company_id: string;
+    year: number;
+    month: number;
+  }): Promise<ApiResponse<ReportExportDownload>> {
+    const params = new URLSearchParams({
+      cluster_id: filters.cluster_id,
+      company_id: filters.company_id,
+      year: String(filters.year),
+      month: String(filters.month),
+    });
+    const fallback = `Financial_Report_${filters.company_id}_${filters.year}_${String(filters.month).padStart(2, '0')}.pdf`;
+    return apiFetchBlob(`/admin/reports/export/pdf?${params}`, fallback);
+  },
+
+  async exportReportExcel(filters: {
+    cluster_id: string;
+    company_id: string;
+    year: number;
+    month: number;
+  }): Promise<ApiResponse<ReportExportDownload>> {
+    const params = new URLSearchParams({
+      cluster_id: filters.cluster_id,
+      company_id: filters.company_id,
+      year: String(filters.year),
+      month: String(filters.month),
+    });
+    const fallback = `Financial_Report_${filters.company_id}_${filters.year}_${String(filters.month).padStart(2, '0')}.xlsx`;
+    return apiFetchBlob(`/admin/reports/export/excel?${params}`, fallback);
+  },
+
+  async getReportExportHistory(limit: number = 20, offset: number = 0): Promise<ApiResponse<ReportExportHistoryResponse>> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return apiFetch<ReportExportHistoryResponse>(`/admin/reports/history?${params}`);
   },
 };
 

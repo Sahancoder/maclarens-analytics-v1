@@ -188,8 +188,9 @@ export default function AuditPage() {
         </div>
 
         {/* Audit Logs Table */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden min-h-[400px]">
-          {loading ? (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="max-h-[600px] overflow-y-auto">
+            {loading ? (
              <div className="flex flex-col items-center justify-center h-64">
                <Loader2 className="h-8 w-8 text-slate-400 animate-spin mb-2" />
                <p className="text-slate-500">Loading audit logs...</p>
@@ -261,6 +262,7 @@ export default function AuditPage() {
             </table>
           </div>
           )}
+          </div>
           
           {/* Pagination Controls - Visual Only for now as we load all logs up to limit */}
           {!loading && !error && filteredLogs.length > 0 && (
