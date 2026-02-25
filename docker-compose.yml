@@ -1,14 +1,14 @@
 # ============================================================
-# McLarens Analytics - Full Docker Development Environment
+# McLarens Analytics - Full Stack Development Environment
 # ============================================================
-# All services run in Docker with hot reload enabled.
+# Start everything:  docker compose up --build
+# Stop everything:   docker compose down
+# Reset database:    docker compose down -v && docker compose up --build
 #
-# Usage: docker compose -f docker-compose.dev.yml up --build
-# 
 # Service URLs:
 #   Frontend:     http://localhost:3000
 #   Backend API:  http://localhost:8000
-#   Backend Docs: http://localhost:8000/docs
+#   API Docs:     http://localhost:8000/docs
 #   GraphQL:      http://localhost:8000/graphql
 #   Mailpit UI:   http://localhost:8025
 #   PostgreSQL:   localhost:5433
@@ -23,15 +23,15 @@ services:
     image: postgres:16-alpine
     container_name: maclarens-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: maclarens_analytics
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-maclarens_analytics}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
-      - ./db/seed:/docker-entrypoint-initdb.d/seed:ro
+      - ./infra/docker/db/init:/docker-entrypoint-initdb.d
+      - ./infra/docker/db/seed:/docker-entrypoint-initdb.d/seed:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d maclarens_analytics"]
       interval: 5s
@@ -60,14 +60,14 @@ services:
       - maclarens-network
 
   # ──────────────────────────────────────────────────────────
-  # EMAIL: Mailpit (Modern email testing - replaces MailHog)
-  # SMTP: localhost:1025 | Web UI: http://localhost:8025
+  # EMAIL: Mailpit (dev email testing)
+  # Web UI: http://localhost:8025
   # ──────────────────────────────────────────────────────────
   mailpit:
     image: axllent/mailpit:latest
     container_name: maclarens-mailpit
     ports:
-      - "2025:1025"   # SMTP server (host 2025 -> container 1025, avoids Windows reserved range)
+      - "2025:1025"   # SMTP (host 2025 -> container 1025, avoids Windows reserved range)
       - "8025:8025"   # Web UI
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
@@ -82,43 +82,31 @@ services:
       start_period: 5s
 
   # ──────────────────────────────────────────────────────────
-  # BACKEND: FastAPI (Python)
-  # Hot reload via uvicorn --reload + volume mounts
+  # BACKEND: FastAPI (Python) - hot reload enabled
   # ──────────────────────────────────────────────────────────
   backend:
     build:
-      context: ../../apps/api
+      context: ./apps/api
       dockerfile: Dockerfile.dev
     container_name: maclarens-backend
     environment:
-      # ─── Database ───
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/maclarens_analytics
       REDIS_URL: redis://redis:6379
-
-      # ─── App Settings ───
       PYTHON_ENV: development
       DEBUG: "true"
       ENVIRONMENT: development
       APP_URL: http://localhost:3000
-
-      # ─── Auth Mode (dev = no Microsoft login required) ───
       AUTH_MODE: ${AUTH_MODE:-dev}
       JWT_SECRET: ${JWT_SECRET:-maclarens-dev-secret-change-in-production}
-
-      # ─── Microsoft Entra ID (Azure AD) ───
-      AZURE_CLIENT_ID: ${AZURE_AD_CLIENT_ID}
-      AZURE_TENANT_ID: ${AZURE_AD_TENANT_ID}
-      AZURE_CLIENT_SECRET: ${AZURE_AD_CLIENT_SECRET}
-
-      # ─── Email Settings - Mailpit ───
+      AZURE_CLIENT_ID: ${AZURE_AD_CLIENT_ID:-}
+      AZURE_TENANT_ID: ${AZURE_AD_TENANT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_AD_CLIENT_SECRET:-}
       EMAIL_ENABLED: "true"
       EMAIL_PROVIDER: mailpit
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_USE_TLS: "false"
       SENDER_EMAIL: no-reply@maclarens.local
-
-      # ─── CORS ───
       CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000"]'
     ports:
       - "8000:8000"
@@ -130,54 +118,40 @@ services:
       mailpit:
         condition: service_healthy
     volumes:
-      # Hot reload: mount ALL source code directories
-      - ../../apps/api/src:/app/src
-      - ../../apps/api/alembic:/app/alembic
-      - ../../apps/api/alembic.ini:/app/alembic.ini
-      - ../../apps/api/seed_standalone.py:/app/seed_standalone.py
-      - ../../apps/api/seed_real_data.py:/app/seed_real_data.py
-      - ../../apps/api/seed_production.py:/app/seed_production.py
-      - ../../apps/api/seed_csv.py:/app/seed_csv.py
-      - ../../apps/api/seed_companies.py:/app/seed_companies.py
-      - ../../apps/api/seed_manual.py:/app/seed_manual.py
-      # Mount seed CSV files
-      - ./db/seed:/app/seed_data:ro
+      - ./apps/api/src:/app/src
+      - ./apps/api/alembic:/app/alembic
+      - ./apps/api/alembic.ini:/app/alembic.ini
+      - ./apps/api/seed_standalone.py:/app/seed_standalone.py
+      - ./apps/api/seed_real_data.py:/app/seed_real_data.py
+      - ./apps/api/seed_production.py:/app/seed_production.py
+      - ./apps/api/seed_csv.py:/app/seed_csv.py
+      - ./apps/api/seed_companies.py:/app/seed_companies.py
+      - ./apps/api/seed_manual.py:/app/seed_manual.py
+      - ./infra/docker/db/seed:/app/seed_data:ro
     networks:
       - maclarens-network
     restart: unless-stopped
 
   # ──────────────────────────────────────────────────────────
-  # FRONTEND: Next.js 14
-  # Hot reload via volume mounts + WATCHPACK_POLLING
-  # API proxy: /api/* → http://backend:8000/*
+  # FRONTEND: Next.js 14 - hot reload enabled
   # ──────────────────────────────────────────────────────────
   frontend:
     build:
-      context: ../../apps/frontend
+      context: ./apps/frontend
       dockerfile: Dockerfile.dev
     container_name: maclarens-frontend
     environment:
       NODE_ENV: development
-      # Client-side GraphQL URL (browser uses this)
       NEXT_PUBLIC_API_URL: http://localhost:8000/graphql
-      # Server-side rewrite target (Next.js internals use this)
       BACKEND_URL: http://backend:8000
-      
-      # ─── NextAuth & Azure AD ───
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-maclarens-dev-secret-change-in-production}
-      DIRECTOR_PASSWORD: ${DIRECTOR_PASSWORD}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      
-      # Azure AD Provider
-      AZURE_AD_CLIENT_ID: ${AZURE_AD_CLIENT_ID}
-      AZURE_AD_CLIENT_SECRET: ${AZURE_AD_CLIENT_SECRET}
-      AZURE_AD_TENANT_ID: ${AZURE_AD_TENANT_ID}
-      
-      # Auth Mode
+      DIRECTOR_PASSWORD: ${DIRECTOR_PASSWORD:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      AZURE_AD_CLIENT_ID: ${AZURE_AD_CLIENT_ID:-}
+      AZURE_AD_CLIENT_SECRET: ${AZURE_AD_CLIENT_SECRET:-}
+      AZURE_AD_TENANT_ID: ${AZURE_AD_TENANT_ID:-}
       NEXT_PUBLIC_AUTH_MODE: ${AUTH_MODE:-dev}
-
-      # ─── Hot Reload (polling for cross-platform file watching) ───
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:
@@ -185,21 +159,18 @@ services:
     depends_on:
       - backend
     volumes:
-      # Hot reload: mount source directories (but NOT node_modules or .next)
-      - ../../apps/frontend/app:/app/app
-      - ../../apps/frontend/components:/app/components
-      - ../../apps/frontend/hooks:/app/hooks
-      - ../../apps/frontend/lib:/app/lib
-      - ../../apps/frontend/styles:/app/styles
-      - ../../apps/frontend/types:/app/types
-      - ../../apps/frontend/public:/app/public
-      - ../../apps/frontend/graphql:/app/graphql
-      # Mount config files for hot reload of settings
-      - ../../apps/frontend/next.config.js:/app/next.config.js
-      - ../../apps/frontend/tsconfig.json:/app/tsconfig.json
-      - ../../apps/frontend/tailwind.config.ts:/app/tailwind.config.ts
-      - ../../apps/frontend/postcss.config.js:/app/postcss.config.js
-      # Prevent host node_modules & .next from overriding container's
+      - ./apps/frontend/app:/app/app
+      - ./apps/frontend/components:/app/components
+      - ./apps/frontend/hooks:/app/hooks
+      - ./apps/frontend/lib:/app/lib
+      - ./apps/frontend/styles:/app/styles
+      - ./apps/frontend/types:/app/types
+      - ./apps/frontend/public:/app/public
+      - ./apps/frontend/graphql:/app/graphql
+      - ./apps/frontend/next.config.js:/app/next.config.js
+      - ./apps/frontend/tsconfig.json:/app/tsconfig.json
+      - ./apps/frontend/tailwind.config.ts:/app/tailwind.config.ts
+      - ./apps/frontend/postcss.config.js:/app/postcss.config.js
       - frontend_node_modules:/app/node_modules
       - frontend_next:/app/.next
     networks:
@@ -207,7 +178,7 @@ services:
     restart: unless-stopped
 
 # ──────────────────────────────────────────────────────────
-# VOLUMES: Persistent data storage
+# VOLUMES
 # ──────────────────────────────────────────────────────────
 volumes:
   postgres_data:
@@ -216,7 +187,7 @@ volumes:
   frontend_next:
 
 # ──────────────────────────────────────────────────────────
-# NETWORKS: Internal service communication
+# NETWORKS
 # ──────────────────────────────────────────────────────────
 networks:
   maclarens-network:
